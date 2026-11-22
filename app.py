@@ -60,14 +60,10 @@ def _runtime_configuration(test_config=None):
     if _is_production() and not database_url:
         raise RuntimeError("DATABASE_URL must be configured before starting in production.")
 
-    return secret_key or "local-development-only-change-me", database_url or "sqlite:///local.db"
-
-
-def _database_url():
-    value = os.getenv("DATABASE_URL", "sqlite:///local.db")
-    if value.startswith("postgres://"):
-        value = value.replace("postgres://", "postgresql://", 1)
-    return value
+    database_url = database_url or "sqlite:///local.db"
+    if database_url.startswith("postgres://"):
+        database_url = database_url.replace("postgres://", "postgresql://", 1)
+    return secret_key or "local-development-only-change-me", database_url
 
 
 def _estimate(area):
