@@ -276,12 +276,7 @@ def create_provisioning_app(test_config=None):
     @app.post("/execute")
     @developer_required
     def execute_provisioning():
-        form_values = {
-            "business_name": request.form.get("business_name", ""),
-            "slug": request.form.get("slug", ""),
-            "category": request.form.get("category", "services"),
-            "modules": request.form.getlist("modules"),
-        }
+        form_values = _read_form_values(request.form)
         plan = None
         result = None
         error = None
