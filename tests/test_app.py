@@ -98,3 +98,38 @@ def test_health_check_is_exempt_from_global_rate_limits(tmp_path):
     with app.test_client() as test_client:
         responses = [test_client.get("/health") for _ in range(55)]
     assert all(response.status_code == 200 for response in responses)
+
+
+def test_admin_search_filters_leads(client):
+    from app import Lead
+    with client.application.app_context():
+        db.session.add_all([
+            Lead(name="ישראל כהן", phone="050-1111111", service="פרגולה",
+                 city="בית שמש", details="פרגולה בחצר", status="חדש"),
+            Lead(name="דוד לוי", phone="050-2222222", service="דק",
+                 city="ירושלים", details="דק במרפסת", status="בטיפול"),
+        ])
+        db.session.commit()
+    client.post("/admin/login", data={"password": "test-admin-password"})
+    response = client.get("/admin?q=פרגולה")
+    html = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "ישראל כהן" in html
+    assert "דוד לוי" not in html
+    assert "ייצוא תוצאות" in html
+
+
+def test_admin_csv_export_requires_login_and_exports_filtered_data(client):
+    from app import Lead
+    denied = client.get("/admin/export.csv")
+    assert denied.status_code == 302
+    with client.application.app_context():
+        db.session.add(Lead(name="לקוח לבדיקה", phone="050-1234567",
+                            service="דק", status="חדש"))
+        db.session.commit()
+    client.post("/admin/login", data={"password": "test-admin-password"})
+    response = client.get("/admin/export.csv?status=חדש")
+    assert response.status_code == 200
+    assert "text/csv" in response.content_type
+    assert "לקוח לבדיקה" in response.get_data(as_text=True)
+    assert "050-1234567" in response.get_data(as_text=True)
