@@ -112,7 +112,7 @@ def test_render_creates_only_free_service_with_ci_gated_autodeploy():
     opener = FakeOpener([
         [],
         {"service": {"id": "srv-1", "name": "app", "repo": "https://github.com/a/b",
-                     "type": "web_service", "serviceDetails": {"plan": "free"}}},
+                     "type": "web_service", "branch": "main", "autoDeployTrigger": "checksPass", "serviceDetails": {"plan": "free", "region": "frankfurt"}}},
     ])
     provider = RenderProvider("token", workspace_id="tea-1", opener=opener)
     result = provider.ensure_web_service(
@@ -130,7 +130,7 @@ def test_render_creates_only_free_service_with_ci_gated_autodeploy():
 def test_render_reuses_existing_service_without_post():
     opener = FakeOpener([[
         {"service": {"id": "srv-1", "name": "app", "repo": "https://github.com/a/b",
-                     "type": "web_service", "serviceDetails": {"plan": "free"}}}
+                     "type": "web_service", "branch": "main", "autoDeployTrigger": "checksPass", "serviceDetails": {"plan": "free", "region": "frankfurt"}}}
     ]])
     result = RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
         name="app", repository_url="https://github.com/a/b"
@@ -215,7 +215,7 @@ def test_github_organization_repo_uses_organization_endpoint():
 def test_render_refuses_existing_paid_service_without_mutation():
     opener = FakeOpener([[
         {"service": {"id": "srv-paid", "name": "app", "repo": "https://github.com/a/b",
-                     "type": "web_service", "serviceDetails": {"plan": "starter"}}}]
+                     "type": "web_service", "branch": "main", "autoDeployTrigger": "checksPass", "serviceDetails": {"plan": "starter", "region": "frankfurt"}}}]
     ])
     with pytest.raises(Exception, match="not on the Free plan"):
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
@@ -227,7 +227,7 @@ def test_render_refuses_existing_service_on_wrong_branch():
     opener = FakeOpener([[
         {"service": {"id": "srv-1", "name": "app", "repo": "https://github.com/a/b",
                      "type": "web_service", "branch": "staging",
-                     "serviceDetails": {"plan": "free", "region": "frankfurt"}}}]
+                     "autoDeployTrigger": "checksPass", "serviceDetails": {"plan": "free", "region": "frankfurt"}}}]
     ])
     with pytest.raises(Exception, match="different Git branch"):
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
