@@ -25,7 +25,10 @@ python -m flask --app wsgi run
 - `DATABASE_URL`: כתובת החיבור ל-Neon, לשמור כ-Secret.
 - `SECRET_KEY`: מפתח אקראי ארוך.
 - `ADMIN_PASSWORD`: סיסמת מנהל חזקה, או `ADMIN_PASSWORD_HASH` עם hash של Werkzeug.
-- `ESTIMATE_BASE_RATE` ו-`ESTIMATE_RATE_PER_SQM`: להשאיר 0 עד לקבלת תעריפים אמיתיים ואישור בעל העסק.\n- `LEAD_WEBHOOK_URL` (אופציונלי): כתובת Web App של Google Apps Script או Webhook תואם לקבלת פניות חדשות כ-JSON.\n- `LEAD_WEBHOOK_SECRET` (חובה כאשר מוגדר URL): סוד משותף הנשלח בגוף הבקשה. אין לשמור אותו ב-GitHub; יש להגדיר אותו ב-Render וב-Script Properties. כשל בשליחה אינו מונע שמירת פנייה.\n- מדריך חיבור חינמי ל-Google Sheets: `integrations/google-apps-script/SETUP.md`.
+- `ESTIMATE_BASE_RATE` ו-`ESTIMATE_RATE_PER_SQM`: להשאיר 0 עד לקבלת תעריפים אמיתיים ואישור בעל העסק.
+- `LEAD_WEBHOOK_URL` (אופציונלי): כתובת Web App של Google Apps Script או Webhook תואם לקבלת פניות חדשות כ-JSON.
+- `LEAD_WEBHOOK_SECRET` (חובה כאשר מוגדר URL): סוד משותף הנשלח בגוף הבקשה. אין לשמור אותו ב-GitHub; יש להגדיר אותו ב-Render וב-Script Properties. כשל בשליחה אינו מונע שמירת פנייה.
+- מדריך חיבור חינמי ל-Google Sheets: `integrations/google-apps-script/SETUP.md`.
 
 ## פריסה
 `render.yaml` מגדיר Web Service בתוכנית Free. יש לחבר את המאגר ל-Render ולהגדיר את `DATABASE_URL` ואת סיסמת המנהל לפני הפעלה ציבורית. אין להכניס סודות ל-Git.
