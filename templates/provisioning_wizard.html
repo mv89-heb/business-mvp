@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="he" dir="rtl" data-theme="system">
+<html lang="he" dir="rtl">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -30,7 +30,10 @@
       </div>
     </header>
 
+    <div id="toastContainer" class="toast-container"></div>
+
     {% if not session.get('developer') %}
+    <!-- LOGIN VIEW -->
     <main class="login-main">
       <div class="login-card">
         <div class="card-accent"></div>
@@ -66,7 +69,7 @@
                 required
                 autocomplete="current-password"
                 placeholder="הזן סיסמת מפתח"
-                class="field-input"
+                class="field-input has-icon"
               />
               <button id="togglePwdBtn" type="button" aria-label="הצג או הסתר סיסמה" class="pwd-toggle">
                 <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
@@ -77,7 +80,7 @@
             </div>
           </div>
 
-          <button type="submit" class="btn-primary">
+          <button type="submit" class="btn-primary full-width">
             <span>כניסה לאשף</span>
             <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
@@ -93,6 +96,7 @@
     </main>
 
     {% else %}
+    <!-- WIZARD VIEW -->
     <main class="wizard-main">
       <section class="wizard-banner">
         <div>
@@ -104,14 +108,212 @@
             הקמה מבודדת של פרויקט עסקי חדש: מאגר GitHub, מסד נתונים Neon ושירות Render נפרדים לכל לקוח.
           </p>
         </div>
-        <form method="POST" action="/logout">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-          <button type="submit" class="btn-secondary">התנתקות</button>
-        </form>
+        <div class="banner-actions">
+          <div class="session-box">
+            <div class="session-label">סשן פעיל</div>
+            <div id="sessionTimer" class="session-timer">20:00</div>
+          </div>
+          <form method="POST" action="/logout">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button type="submit" class="btn-secondary">התנתקות</button>
+          </form>
+        </div>
       </section>
 
-      <section class="wizard-content-card">
-        {% block wizard_content %}{% endblock %}
+      <!-- Stepper Navigation -->
+      <nav aria-label="שלבי האשף" class="stepper-grid">
+        <button type="button" data-step="1" class="step-tab"></button>
+        <button type="button" data-step="2" class="step-tab"></button>
+        <button type="button" data-step="3" class="step-tab"></button>
+        <button type="button" data-step="4" class="step-tab"></button>
+      </nav>
+
+      <!-- STEP 1: PROJECT SETUP -->
+      <section id="stepPanel1" class="step-panel step1-layout">
+        <div class="card panel-main">
+          <div class="panel-header">
+            <h2 class="panel-title">1. הגדרת פרויקט הלקוח</h2>
+            <span class="muted-note">בידוד מלא לכל לקוח</span>
+          </div>
+
+          <div class="form-grid">
+            <div>
+              <label for="clientName" class="field-label">שם העסק / הלקוח</label>
+              <input id="clientName" type="text" value="קליניקת אוריון" class="field-input" />
+            </div>
+            <div>
+              <label for="projectSlug" class="field-label">מזהה פרויקט (Slug)</label>
+              <input id="projectSlug" type="text" value="orion-clinic-leads" class="field-input ltr-input mono-accent" />
+            </div>
+            <div>
+              <label for="githubOrg" class="field-label">ארגון / משתמש GitHub</label>
+              <input id="githubOrg" type="text" value="mv89-heb" class="field-input ltr-input mono-text" />
+            </div>
+            <div>
+              <label for="renderRegion" class="field-label">אזור פריסה (Render Region)</label>
+              <select id="renderRegion" class="field-input">
+                <option value="frankfurt">Frankfurt (EU Central)</option>
+                <option value="oregon">Oregon (US West)</option>
+                <option value="ohio">Ohio (US East)</option>
+              </select>
+            </div>
+          </div>
+
+          <div>
+            <div class="field-label">מודולים ואינטגרציות לפרויקט</div>
+            <div class="modules-grid">
+              <label class="module-card">
+                <input id="modWhatsapp" type="checkbox" checked />
+                <div>
+                  <div class="module-title">WhatsApp Cloud API</div>
+                  <div class="module-desc">קליטת לידים ישירות מהוואטסאפ</div>
+                </div>
+              </label>
+              <label class="module-card">
+                <input id="modGemini" type="checkbox" checked />
+                <div>
+                  <div class="module-title">עיבוד Gemini AI</div>
+                  <div class="module-desc">סיווג ותקצור פניות נכנסות</div>
+                </div>
+              </label>
+              <label class="module-card">
+                <input id="modAutomation" type="checkbox" />
+                <div>
+                  <div class="module-title">Make / n8n Webhook</div>
+                  <div class="module-desc">טריגר אוטומטי ללידים מאושרים</div>
+                </div>
+              </label>
+            </div>
+          </div>
+
+          <div class="panel-actions end">
+            <button type="button" id="btnToStep2" class="btn-primary">המשך לבדיקות Preflight ←</button>
+          </div>
+        </div>
+
+        <aside class="card panel-side">
+          <h3 class="side-title">תצוגת תוצרים צפויה</h3>
+          <div class="preview-list">
+            <div class="preview-item">
+              <div class="preview-label">מאגר GitHub חדש</div>
+              <div id="previewRepo" class="preview-val ltr-input mono-accent">mv89-heb/orion-clinic-leads</div>
+            </div>
+            <div class="preview-item">
+              <div class="preview-label">מסד נתונים Neon</div>
+              <div id="previewNeon" class="preview-val ltr-input mono-ok">neon-db-orion-clinic-leads</div>
+            </div>
+            <div class="preview-item">
+              <div class="preview-label">שירות Render</div>
+              <div id="previewRender" class="preview-val ltr-input mono-cyan">https://orion-clinic-leads.onrender.com</div>
+            </div>
+            <div class="preview-item">
+              <div class="preview-label">מודולים פעילים</div>
+              <div id="previewModules" class="preview-val">WhatsApp Cloud API, Gemini AI</div>
+            </div>
+          </div>
+        </aside>
+      </section>
+
+      <!-- STEP 2: PREFLIGHT -->
+      <section id="stepPanel2" class="step-panel card hidden">
+        <div class="panel-header-wrap">
+          <div>
+            <h2 class="panel-title">2. בדיקות Preflight (קריאה בלבד)</h2>
+            <p class="panel-subtitle">אימות חיבורים, טוקנים והרשאות מול המתאמים לפני יצירת משאבים.</p>
+          </div>
+          <button id="btnRunPreflight" type="button" class="btn-emerald">הרץ בדיקות Preflight</button>
+        </div>
+
+        <div id="preflightGrid" class="preflight-grid"></div>
+
+        <div class="panel-actions between">
+          <button type="button" data-goto="1" class="nav-back btn-secondary">→ חזרה להגדרות</button>
+          <button id="btnToStep3" type="button" class="btn-primary">המשך לתוכנית Dry Run ←</button>
+        </div>
+      </section>
+
+      <!-- STEP 3: DRY RUN -->
+      <section id="stepPanel3" class="step-panel card hidden">
+        <div class="panel-header-wrap">
+          <div>
+            <h2 class="panel-title">3. תוכנית הקמה (Dry Run)</h2>
+            <p class="panel-subtitle">סקירה מלאה של המשאבים ומשתני הסביבה שיוגדרו לפני ביצוע בפועל.</p>
+          </div>
+          <button id="btnGenerateDryRun" type="button" class="btn-primary">רענן תוכנית Dry Run</button>
+        </div>
+
+        <div class="dryrun-grid">
+          <div class="subcard">
+            <div class="subcard-title">פעולות מתוכננות</div>
+            <ul id="dryRunActions" class="dryrun-list"></ul>
+          </div>
+          <div class="subcard">
+            <div class="subcard-header">
+              <div class="subcard-title">משתני סביבה נדרשים לשירות</div>
+              <button id="btnCopyEnv" type="button" class="link-btn">העתק תבנית ENV</button>
+            </div>
+            <pre id="dryRunEnvBlock" class="env-pre ltr-input"></pre>
+          </div>
+        </div>
+
+        <div class="panel-actions between">
+          <button type="button" data-goto="2" class="nav-back btn-secondary">→ חזרה ל-Preflight</button>
+          <button id="btnToStep4" type="button" class="btn-primary">המשך להקמה ויומן Audit ←</button>
+        </div>
+      </section>
+
+      <!-- STEP 4: PROVISIONING & AUDIT -->
+      <section id="stepPanel4" class="step-panel hidden stack-gap">
+        <div class="card">
+          <div class="panel-header-wrap">
+            <div>
+              <h2 class="panel-title">4. הקמה מבוקרת (Provisioning)</h2>
+              <p class="panel-subtitle">הרצת שלבי ההקמה באופן מבוקר ושמירת לוג פעילות מקומי.</p>
+            </div>
+            <button id="btnRunProvision" type="button" class="btn-emerald">הפעל הקמה</button>
+          </div>
+
+          <div class="progress-wrap">
+            <div class="progress-meta">
+              <span id="provisionStatusText">ממתין להפעלה</span>
+              <span id="provisionPercent" class="mono-text">0%</span>
+            </div>
+            <div class="progress-track">
+              <div id="provisionBar" class="progress-fill"></div>
+            </div>
+          </div>
+
+          <div id="provisionStepsList" class="provision-grid"></div>
+        </div>
+
+        <div class="card">
+          <div class="panel-header-wrap">
+            <h3 class="subcard-title">יומן Audit מקומי</h3>
+            <select id="auditFilter" class="filter-select">
+              <option value="all">כל האירועים</option>
+              <option value="auth">אימות והתחברות</option>
+              <option value="preflight">בדיקות Preflight</option>
+              <option value="provision">הקמה ו-Dry Run</option>
+            </select>
+          </div>
+          <div class="table-wrap">
+            <table class="audit-table">
+              <thead>
+                <tr>
+                  <th>שעה</th>
+                  <th>אירוע</th>
+                  <th>פירוט</th>
+                  <th>סטטוס</th>
+                </tr>
+              </thead>
+              <tbody id="auditTableBody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel-actions start">
+          <button type="button" data-goto="3" class="nav-back btn-secondary">→ חזרה ל-Dry Run</button>
+        </div>
       </section>
     </main>
     {% endif %}
