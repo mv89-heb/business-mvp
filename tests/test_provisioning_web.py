@@ -83,6 +83,45 @@ def test_connection_check_reports_missing_credentials_without_exposing_secrets(m
     assert "developer-test-password" not in page
 
 
+
+
+def test_preflight_route_requires_developer_login():
+    client = make_client()
+    response = client.post("/preflight")
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/login")
+
+
+def test_preflight_route_runs_read_only_and_unlocks_execution(monkeypatch):
+    import business_app.provisioning_web as provisioning_web
+
+    class FakeWorkflow:
+        def preflight(self, plan, *, github_owner):
+            assert github_owner == "developer"
+            return {
+                "mode": "read_only_preflight",
+                "read_only": True,
+                "writes_performed": False,
+            }
+
+    monkeypatch.setattr(provisioning_web, "ProvisioningWorkflow", FakeWorkflow)
+    monkeypatch.setenv("GITHUB_OWNER", "developer")
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.post("/preflight", data={
+        "business_name": "עסק בדיקה",
+        "slug": "test-business",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+    })
+    page = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "PREFLIGHT" in page
+    assert '"writes_performed": false' in page
+    with client.session_transaction() as session:
+        assert session["preflight_plan_id"]
+
+
 def test_execution_route_requires_developer_login():
     client = make_client()
     response = client.post("/execute", data={})
@@ -100,6 +139,13 @@ def test_execution_route_requires_explicit_zero_cost_confirmation(monkeypatch):
     monkeypatch.setattr(provisioning_web, "ProvisioningWorkflow", NeverRunWorkflow)
     client = make_client()
     client.post("/login", data={"password": "developer-test-password"})
+    from business_app.provisioning import build_provisioning_plan
+    plan = build_provisioning_plan(
+        business_name="עסק בדיקה", slug="test-business", category="services",
+        modules=["lead_capture", "lead_management"],
+    )
+    with client.session_transaction() as session:
+        session["preflight_plan_id"] = plan["plan_id"]
     response = client.post("/execute", data={
         "business_name": "עסק בדיקה",
         "slug": "test-business",
@@ -133,6 +179,13 @@ def test_execution_route_runs_workflow_only_after_explicit_approval(monkeypatch)
     monkeypatch.setenv("GITHUB_OWNER", "developer")
     client = make_client()
     client.post("/login", data={"password": "developer-test-password"})
+    from business_app.provisioning import build_provisioning_plan
+    plan = build_provisioning_plan(
+        business_name="עסק בדיקה", slug="test-business", category="services",
+        modules=["lead_capture", "lead_management"],
+    )
+    with client.session_transaction() as session:
+        session["preflight_plan_id"] = plan["plan_id"]
     response = client.post("/execute", data={
         "business_name": "עסק בדיקה",
         "slug": "test-business",
