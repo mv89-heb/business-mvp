@@ -146,6 +146,10 @@
             <input type="hidden" name="business_name" value="{{ form_values.business_name }}">
             <input type="hidden" name="slug" value="{{ form_values.slug }}">
             <input type="hidden" name="category" value="{{ form_values.category }}">
+            {% for field in ['tagline','phone','whatsapp_number','address','service_area','primary_color','accent_color','font_family'] %}
+              <input type="hidden" name="{{ field }}" value="{{ form_values[field] }}">
+            {% endfor %}
+            <input type="hidden" name="services" value="{{ form_values.services|join(', ') }}">
             {% for selected_module in form_values.modules %}
               <input type="hidden" name="modules" value="{{ selected_module }}">
             {% endfor %}
