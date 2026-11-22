@@ -224,7 +224,8 @@ def create_provisioning_app(test_config=None):
         return redirect(url_for("wizard"))
 
     @app.route("/login", methods=["GET", "POST"])
-    @limiter.limit(["5 per minute", "20 per hour"], methods=["POST"])
+    @limiter.limit("5 per minute", methods=["POST"])
+    @limiter.limit("20 per hour", methods=["POST"])
     def login():
         if request.method == "POST":
             supplied = request.form.get("password", "")
