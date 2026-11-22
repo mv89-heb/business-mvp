@@ -32,15 +32,9 @@ document.addEventListener("DOMContentLoaded", () => {
   const serviceSelect = document.getElementById("service-select");
   const details = document.getElementById("project-details");
   if (serviceSelect && details) {
-    const prompts = {
-      "דק": "איפה מתוכנן הדק? מה המידות המשוערות, ומה סוג העץ או הגימור המועדף?",
-      "פרגולה": "איפה תוקם הפרגולה? מה המידות, והאם יש העדפה לסוג עץ או לסגנון מסוים?",
-      "חיפוי עץ": "איזה משטח מיועד לחיפוי, מה המידות, והאם יש דוגמה לסגנון הרצוי?",
-      "תיקונים וחידוש": "מה צריך לתקן או לחדש, מה מצב העבודה הקיימת, והיכן היא נמצאת?",
-      "עבודת עץ אחרת": "תארו בקצרה את העבודה, המידות והמיקום."
-    };
     const updatePrompt = () => {
-      details.placeholder = prompts[serviceSelect.value] || "ספרו לנו על הפרויקט...";
+      const selected = serviceSelect.options[serviceSelect.selectedIndex];
+      details.placeholder = selected?.dataset.prompt || "ספרו לנו על השירות או הפרויקט...";
     };
     serviceSelect.addEventListener("change", updatePrompt);
     updatePrompt();

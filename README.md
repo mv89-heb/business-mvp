@@ -47,4 +47,4 @@ This repository is structured as a reusable **single-customer** application star
 - Initialize a clean project: `python -m business_app.bootstrap --target . --business-name "New Business" --slug "new-business"`
 - Validate required environment variables: `python -m business_app.bootstrap --check-env`
 
-The existing Google Apps Script webhook contract and current deployment configuration are retained. WhatsApp is disabled and sending is deliberately blocked pending explicit business-owner approval and official API setup.
+The live source repository contains customer-specific configuration and must not be marked as a GitHub template. Export a clean project with `business_app.export_starter`; only the exported project may become a template after a clean clone, CI and deployment review. The Google Apps Script webhook contract is retained. WhatsApp is disabled and sending is deliberately blocked pending explicit business-owner approval and official API setup.

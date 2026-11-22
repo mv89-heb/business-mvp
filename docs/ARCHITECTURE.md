@@ -8,7 +8,7 @@ This repository is a **single-business, single-installation** application. It is
 - Presentation: Jinja templates receive a `business` configuration object. Shared page shell and customer content are separate.
 - Integrations: adapters live in `business_app/integrations`. Google Sheets retains the existing Apps Script payload contract. WhatsApp is disabled and refuses to send. Email is a disabled extension point.
 - Secrets: all credentials stay in hosting environment variables, never in business JSON or source control.
-- Bootstrap: `python -m business_app.bootstrap --target <folder> --business-name "New Business" --slug "new-business"` creates clean configuration only; it never copies database records.
+- Export: `python -m business_app.export_starter --target <folder> --business-name "New Business" --slug "new-business"` creates a full allowlisted, customer-neutral project outside the source repository. It excludes the live business configuration, live Render manifest, Git metadata, environment files, databases, uploads, logs and customer records.
 
 ## Feature flags
 The `modules` object controls lead capture, lead management and estimate calculator. Integration enablement is separate and requires credentials as well.

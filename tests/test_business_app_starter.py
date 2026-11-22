@@ -5,8 +5,9 @@ from business_app.config import BusinessConfigError, load_business_config, valid
 
 def test_current_business_configuration_and_integration_safety():
     config = load_business_config()
-    assert config["id"] == "eli-cohen-wood-construction"
-    assert config["integrations"]["google_sheets_webhook"]["enabled"] is True
+    assert config["id"]
+    assert isinstance(config["name"], str) and config["name"]
+    assert isinstance(config["integrations"]["google_sheets_webhook"]["enabled"], bool)
     assert config["integrations"]["whatsapp_cloud_api"]["enabled"] is False
 
 def test_configuration_override(tmp_path):
@@ -43,3 +44,40 @@ def test_whatsapp_sender_is_not_available():
     from business_app.integrations.whatsapp_cloud import send_message
     with pytest.raises(RuntimeError):
         send_message("+972500000000", "template")
+
+def test_clean_export_excludes_live_customer_configuration(tmp_path):
+    from business_app.export_starter import export_starter
+
+    target = tmp_path / "clean-starter"
+    exported = export_starter(target, "עסק בדיקה", "test-business")
+    config_path = exported / "config" / "business.json"
+    config = json.loads(config_path.read_text(encoding="utf-8"))
+
+    assert config["id"] == "test-business"
+    assert config["name"] == "עסק בדיקה"
+    assert config["integrations"]["google_sheets_webhook"]["enabled"] is False
+    assert (exported / "render.yaml").is_file()
+    assert "replace-with-customer-service-name" in (exported / "render.yaml").read_text(encoding="utf-8")
+    assert not (exported / ".git").exists()
+    assert "050-720-8386" not in config_path.read_text(encoding="utf-8")
+    assert "eli-cohen-wood-construction" not in config_path.read_text(encoding="utf-8")
+    assert "eli-cohen-business-mvp-iqem" not in (exported / "render.yaml").read_text(encoding="utf-8")
+
+
+def test_clean_export_refuses_nonempty_destination(tmp_path):
+    from business_app.export_starter import export_starter
+
+    target = tmp_path / "not-empty"
+    target.mkdir()
+    (target / "keep.txt").write_text("keep", encoding="utf-8")
+    with pytest.raises(FileExistsError):
+        export_starter(target, "עסק בדיקה", "test-business")
+    assert (target / "keep.txt").read_text(encoding="utf-8") == "keep"
+
+
+def test_clean_export_refuses_destination_inside_source_repository(tmp_path):
+    from business_app.export_starter import export_starter
+    from business_app.export_starter import ROOT
+
+    with pytest.raises(ValueError):
+        export_starter(ROOT / "unsafe-export", "עסק בדיקה", "test-business")
