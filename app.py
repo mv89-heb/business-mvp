@@ -238,6 +238,6 @@ def create_app(test_config=None):
         lead.status = status
         db.session.commit()
         flash("הסטטוס עודכן.", "success")
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_dashboard", status=request.form.get("return_status", ""), q=request.form.get("q", "")))
 
     return app
