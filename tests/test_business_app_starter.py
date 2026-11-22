@@ -62,6 +62,9 @@ def test_clean_export_excludes_live_customer_configuration(tmp_path):
     assert "050-720-8386" not in config_path.read_text(encoding="utf-8")
     assert "eli-cohen-wood-construction" not in config_path.read_text(encoding="utf-8")
     assert "eli-cohen-business-mvp-iqem" not in (exported / "render.yaml").read_text(encoding="utf-8")
+    render_template = (exported / "render.yaml").read_text(encoding="utf-8")
+    assert "ADMIN_PASSWORD_HASH" in render_template
+    assert "key: ADMIN_PASSWORD\n" not in render_template
 
 
 def test_clean_export_refuses_nonempty_destination(tmp_path):
