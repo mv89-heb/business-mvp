@@ -543,7 +543,7 @@ def execute_github_command(active_store, command_type, payload):
         for title, description in missing:
             active_store.create_task(title, description, proposal_id=proposal["id"], priority="HIGH")
         return {
-            "proposalId": proposal["id"], "status": "PENDING_APPROVAL",
+            "proposalId": proposal["id"], "proposalStatus": "PENDING_APPROVAL",
             "name": normalized["name"], "slug": normalized["slug"],
             "industry": normalized["industry"], "sourceBusinessId": source_id,
             "createdTasks": len(missing),
@@ -556,7 +556,7 @@ def execute_github_command(active_store, command_type, payload):
         if not title or priority not in {"LOW", "NORMAL", "HIGH"}:
             raise ValueError("Invalid task payload.")
         task = active_store.create_task(title, description, proposal_id, priority)
-        return {"taskId": task["id"], "title": task["title"], "status": task["status"]}
+        return {"taskId": task["id"], "title": task["title"], "taskStatus": task["status"]}
     raise ValueError("Unsupported command type.")
 
 

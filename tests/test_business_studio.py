@@ -110,7 +110,7 @@ def test_github_command_allowlist_creates_pending_proposal_without_approval():
     result=execute_github_command(store,"create_business_proposal",{
         "name":"דני מיזוג אוויר","slug":"dani-ac","industry":"מיזוג אוויר"
     })
-    assert result["status"]=="PENDING_APPROVAL"
+    assert result["proposalStatus"]=="PENDING_APPROVAL"
     assert result["createdTasks"]==2
     assert store.approved==[]
 
@@ -180,6 +180,7 @@ def test_github_command_ingest_requires_oidc_and_creates_only_pending_proposal(m
     assert response.status_code==200
     assert response.json["accepted"] is True
     assert response.json["encryptedResult"]["result"]["status"]=="COMPLETED"
+    assert response.json["encryptedResult"]["result"]["proposalStatus"]=="PENDING_APPROVAL"
     assert store.approved==[]
     assert store.command_result["status"]=="COMPLETED"
 
