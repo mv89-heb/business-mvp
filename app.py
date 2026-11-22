@@ -5,6 +5,7 @@ from functools import wraps
 
 from flask import Flask, abort, flash, jsonify, redirect, render_template, request, session, url_for
 from flask_limiter import Limiter
+from flask_wtf.csrf import CSRFProtect
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import desc, func
@@ -12,6 +13,7 @@ from werkzeug.security import check_password_hash
 
 db = SQLAlchemy()
 limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
+csrf = CSRFProtect()
 
 
 class Lead(db.Model):
@@ -76,6 +78,7 @@ def create_app(test_config=None):
         app.config.update(test_config)
     db.init_app(app)
     limiter.init_app(app)
+    csrf.init_app(app)
 
     with app.app_context():
         db.create_all()
@@ -94,6 +97,7 @@ def create_app(test_config=None):
         return render_template("index.html", preset=request.args.get("preset", "contractor"))
 
     @app.post("/estimate")
+    @csrf.exempt  # Public read-only calculation; no state change.
     @limiter.limit("20 per hour")
     def estimate():
         try:
