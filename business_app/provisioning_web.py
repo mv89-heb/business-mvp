@@ -139,6 +139,41 @@ def create_provisioning_app(test_config=None):
         )
 
 
+    @app.post("/preflight")
+    @developer_required
+    def preflight_provisioning():
+        form_values = {
+            "business_name": request.form.get("business_name", ""),
+            "slug": request.form.get("slug", ""),
+            "category": request.form.get("category", "services"),
+            "modules": request.form.getlist("modules"),
+        }
+        plan = None
+        report = None
+        error = None
+        try:
+            plan = build_provisioning_plan(**form_values)
+            owner = os.getenv("GITHUB_OWNER", "").strip()
+            report = ProvisioningWorkflow().preflight(plan, github_owner=owner)
+            session["preflight_plan_id"] = plan["plan_id"]
+        except (ProvisioningInputError, ProviderError) as exc:
+            session.pop("preflight_plan_id", None)
+            error = str(exc)
+        except Exception:
+            session.pop("preflight_plan_id", None)
+            error = "בדיקת ההיתכנות נכשלה. פרטי שגיאה ונתוני אימות לא נחשפו."
+        return render_template(
+            "provisioning_wizard.html",
+            login_required=False,
+            categories=BUSINESS_CATEGORIES,
+            modules=SUPPORTED_MODULES,
+            form_values=form_values,
+            plan=plan,
+            preflight_report=report,
+            error=error,
+            connection_results=None,
+        )
+
     @app.post("/execute")
     @developer_required
     def execute_provisioning():
@@ -153,6 +188,8 @@ def create_provisioning_app(test_config=None):
         error = None
         try:
             plan = build_provisioning_plan(**form_values)
+            if session.get("preflight_plan_id") != plan["plan_id"]:
+                raise ProviderError("יש להריץ Preflight מוצלח לתוכנית הנוכחית לפני ביצוע.")
             if request.form.get("confirm_zero_cost") != "yes":
                 raise ProviderError("לא התקבל אישור מפורש לכך שעלות Neon תהיה אפס.")
             result = ProvisioningWorkflow().run(
@@ -190,6 +227,7 @@ def create_provisioning_app(test_config=None):
             "modules": ["lead_capture", "lead_management"],
         }
         if request.method == "POST":
+            session.pop("preflight_plan_id", None)
             form_values = {
                 "business_name": request.form.get("business_name", ""),
                 "slug": request.form.get("slug", ""),
