@@ -43,6 +43,16 @@ Canva מנוהלת דרך חיבור Canva המאומת ב-ChatGPT (Canva MCP) �
     print(NeonProvider().check_connection())
     print(RenderProvider().check_connection())
 
-## מגבלת שלב נוכחי
+## שכבת Orchestration
 
-הוספת המתאמים מאפשרת בדיקת חיבור ופעולות יצירה מבוקרות ברמת ספק, אך עדיין אינה workflow מלא שמבצע את כל השלבים ברצף. אין לסמן התקנה כ"הושלמה" עד להוספת שכבת orchestration, publishing של קוד ה-Starter, טיפול בהתאוששות, הזנת סודות ל-Render ובדיקת health של הפריסה.
+הקובץ `business_app/provisioning/workflow.py` מחבר את המתאמים לזרימת הקמה אחת:
+- Preflight לפני כל יצירת משאב.
+- ייצוא Starter נקי ופרסום GitHub דרך Git Data API.
+- יצירה/איתור של Neon והעברת connection URI ל־Render בזיכרון בלבד.
+- יצירה/איתור של Render Free בפרנקפורט והמתנה ל־`/health`.
+- מצב workflow מקומי אטומי, ללא סודות, ועדכון התקדמות בכל שלב.
+- עצירה בטוחה בכשל; אין מחיקה אוטומטית של משאבים שנוצרו.
+
+להפעלה, שמירת תוכנית Dry Run תחילה ואז הרצת `py -m business_app.provisioning.execute --plan <path>`. ההפעלה דורשת הקלדה מפורשת של `CREATE`, אישור `ZERO-COST` והזנת סיסמת מנהל ללקוח. כל הבדיקות משתמשות ב־mocks בלבד.
+
+ה־workflow אינו מבצע OAuth עצמאי ל־Canva. יצירת נכסי עיצוב נעשית דרך חיבור Canva המאומת ב־ChatGPT; שילוב עצמאי באשף דורש הרשאת API/OAuth נפרדת.
