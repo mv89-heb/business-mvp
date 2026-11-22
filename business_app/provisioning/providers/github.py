@@ -254,15 +254,19 @@ class GitHubProvider:
             and item.get("conclusion") not in {"success", "neutral", "skipped"}
         ]
         combined_state = status.get("state", "pending")
-        if pending or combined_state == "pending":
+        status_count = status.get("total_count", len(status.get("statuses") or []))
+        if pending or (status_count > 0 and combined_state == "pending"):
             reason = "checks_running"
             ready = False
-        elif failed or combined_state not in {"success", "pending"}:
+        elif failed or (status_count > 0 and combined_state not in {"success", "pending"}):
             reason = "checks_failed"
             ready = False
         else:
+            # GitHub's legacy combined-status API can report "pending" when
+            # there are no status contexts at all. In that case the completed
+            # Check Runs API is the authoritative CI signal.
             reason = "checks_passed"
-            ready = bool(runs) and combined_state == "success"
+            ready = bool(runs) and (status_count == 0 or combined_state == "success")
         return {
             "ready": ready,
             "head_sha": head_sha,
