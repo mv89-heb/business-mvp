@@ -368,7 +368,7 @@ def test_render_refuses_existing_service_when_region_is_unverified():
     ]])
     with pytest.raises(Exception, match="different region"):
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-            name="app", repository_url="https://github.com/a/b"
+            name="app", repository_url="https://github.com/a/b", expected_service_id="srv-1"
         )
 
 
