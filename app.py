@@ -17,14 +17,14 @@ csrf = CSRFProtect()
 
 
 class Lead(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
+    id = db.Column(db.BigInteger, primary_key=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     name = db.Column(db.String(120), nullable=False)
     phone = db.Column(db.String(30), nullable=False)
     email = db.Column(db.String(254))
     city = db.Column(db.String(100))
     service = db.Column(db.String(40), nullable=False)
-    area = db.Column(db.Integer)
+    area = db.Column(db.Float)
     budget = db.Column(db.String(60))
     details = db.Column(db.Text)
     estimate_min = db.Column(db.Integer)
@@ -35,7 +35,7 @@ class Lead(db.Model):
 
 class Setting(db.Model):
     key = db.Column(db.String(80), primary_key=True)
-    value = db.Column(db.String(500), nullable=False)
+    value = db.Column(db.Text, nullable=False)
 
 
 def _database_url():
