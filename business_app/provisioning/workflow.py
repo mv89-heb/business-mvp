@@ -148,6 +148,14 @@ class ProvisioningWorkflow:
             "neon": self.neon.check_connection(),
             "render": self.render.check_connection(),
         }
+        # A successful HTTP response is not enough: every provider must explicitly
+        # confirm authenticated access. Render must also confirm the exact selected
+        # workspace, not merely that some workspace is visible.
+        for provider_name, result in connections.items():
+            if not isinstance(result, dict) or result.get("connected") is not True:
+                raise ProviderError(f"{provider_name.title()} connection could not be verified")
+        if connections["render"].get("workspace_selected") is not True:
+            raise ProviderError("Render did not verify access to the selected workspace")
 
         repository = self.github.get_repository(github_owner, slug)
         if repository and repository.get("private") is not True:

@@ -370,3 +370,38 @@ def test_preflight_does_not_create_local_workflow_state_directory(tmp_path, monk
 
     assert report["writes_performed"] is False
     assert not (tmp_path / ".business-app-provisioner" / "runs").exists()
+
+
+@pytest.mark.parametrize(
+    ("provider_name", "connection_result"),
+    [
+        ("github", {"provider": "github", "connected": False}),
+        ("neon", {"provider": "neon", "connected": False}),
+        ("render", {"provider": "render", "connected": False, "workspace_selected": True}),
+    ],
+)
+def test_preflight_fails_closed_when_any_provider_is_not_connected(
+    tmp_path, monkeypatch, provider_name, connection_result
+):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    provider = getattr(workflow, provider_name)
+    provider.check_connection = lambda: connection_result
+
+    with pytest.raises(ProviderError, match=f"{provider_name.title()} connection could not be verified"):
+        workflow.preflight(make_plan(), github_owner="developer")
+
+    assert github.published is False
+    assert github.ensure_calls == 0
+
+
+def test_preflight_requires_render_to_confirm_the_selected_workspace(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    workflow.render.check_connection = lambda: {
+        "provider": "render", "connected": True, "workspace_selected": False,
+    }
+
+    with pytest.raises(ProviderError, match="selected workspace"):
+        workflow.preflight(make_plan(), github_owner="developer")
+
+    assert github.published is False
+    assert github.ensure_calls == 0
