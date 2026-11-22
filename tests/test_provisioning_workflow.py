@@ -11,6 +11,7 @@ from business_app.provisioning.providers.http import ProviderError
 class FakeGitHub:
     def __init__(self):
         self.published = False
+        self.ensure_calls = 0
 
     def check_connection(self):
         return {"provider": "github", "connected": True, "account": "developer"}
@@ -19,6 +20,7 @@ class FakeGitHub:
         return None
 
     def ensure_private_repository(self, owner, name):
+        self.ensure_calls += 1
         return {"created": True, "repository": {
             "id": 1, "private": True, "full_name": f"{owner}/{name}",
             "html_url": f"https://github.com/{owner}/{name}",
@@ -326,3 +328,31 @@ def test_preflight_rejects_render_service_with_paid_plan(tmp_path, monkeypatch):
 
     with pytest.raises(ProviderError, match="Free Frankfurt"):
         workflow.preflight(make_plan(), github_owner="developer")
+
+
+def test_workflow_rechecks_read_only_preflight_before_any_write(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    workflow.github.get_repository = lambda owner, name: {
+        "private": False, "full_name": f"{owner}/{name}",
+    }
+
+    with pytest.raises(ProviderError, match="not private"):
+        workflow.run(
+            make_plan(),
+            github_owner="developer",
+            admin_password="a-very-long-test-password",
+            approval="CREATE",
+            neon_free_tier_verified=True,
+        )
+
+    assert github.ensure_calls == 0
+    assert github.published is False
+
+
+def test_preflight_rejects_unsupported_region(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    plan = make_plan()
+    plan["infrastructure"] = {"region": "oregon"}
+
+    with pytest.raises(ProviderError, match="region is not supported"):
+        workflow.preflight(plan, github_owner="developer")
