@@ -139,7 +139,7 @@ def create_provisioning_app(test_config=None):
     if remote_access and not allowed_hosts:
         raise RuntimeError("PROVISIONING_ALLOWED_HOSTS must list the exact public host.")
 
-    app = Flask(__name__, template_folder="../templates")
+    app = Flask(__name__, template_folder="../templates", static_folder="../static")
     app.config.update(
         SECRET_KEY=session_secret,
         PROVISIONING_PASSWORD=access_password,
