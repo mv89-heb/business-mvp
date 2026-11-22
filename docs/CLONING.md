@@ -11,7 +11,11 @@ python -m business_app.export_starter --target ..\new-business-app --business-na
 Set-Location ..\new-business-app
 ```
 
-The exporter uses an explicit allowlist of application source folders and safe example files. It intentionally excludes the live `config/business.json`, live `render.yaml`, Git metadata, environment files, local databases, uploads, logs and customer records. It creates a new business configuration from `config/business.template.json` and uses the neutral Render template.
+The exporter copies the customer application through an explicit directory list and excludes developer-only tooling. It intentionally omits the live `config/business.json`, live `render.yaml`, Git metadata, environment files, local databases, uploads, logs, customer records, the developer provisioning wizard, provider provisioning adapters, and their private documentation/tests. It creates a new business configuration from `config/business.template.json` and uses the neutral Render template.
+
+## Developer-only boundary
+
+The provisioning wizard is a local developer tool, not a customer feature. A customer export must not contain `business_app/provisioning/`, `business_app/provisioning_web.py`, `templates/provisioning_wizard.html`, developer/provider integration guides, or tests for those modules. The source repository retains these tools so the developer can continue provisioning future independent applications.
 
 ## Configure and validate
 
