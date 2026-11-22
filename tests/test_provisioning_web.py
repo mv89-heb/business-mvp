@@ -130,7 +130,7 @@ def test_execution_route_requires_developer_login():
 
 
 
-def test_execution_route_cannot_bypass_preflight_or_reuse_it_for_changed_modules(monkeypatch):
+def test_execution_route_cannot_bypass_preflight_or_reuse_it_for_changed_plan(monkeypatch):
     import business_app.provisioning_web as provisioning_web
 
     class NeverRunWorkflow:
@@ -164,6 +164,11 @@ def test_execution_route_cannot_bypass_preflight_or_reuse_it_for_changed_modules
 
     changed = dict(base_data)
     changed["business_name"] = "שם עסק שונה"
+    response = client.post("/execute", data=changed)
+    assert "Preflight מוצלח" in response.get_data(as_text=True)
+
+    changed = dict(base_data)
+    changed["modules"] = ["lead_capture"]
     response = client.post("/execute", data=changed)
     assert "Preflight מוצלח" in response.get_data(as_text=True)
 
@@ -245,6 +250,17 @@ def test_execution_route_runs_workflow_only_after_explicit_approval(monkeypatch)
     assert captured["admin_password"] == "a-very-long-test-password"
     assert captured["plan"]["business"]["slug"] == "test-business"
     assert "a-very-long-test-password" not in page
+
+    replay = client.post("/execute", data={
+        "business_name": "עסק בדיקה",
+        "slug": "test-business",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "approval": "CREATE",
+        "confirm_zero_cost": "yes",
+        "admin_password": "a-very-long-test-password",
+    })
+    assert "Preflight מוצלח" in replay.get_data(as_text=True)
 
 
 
