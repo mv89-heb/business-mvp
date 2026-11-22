@@ -9,6 +9,37 @@ ROOT = Path(__file__).resolve().parent.parent
 FILES = (".env.example", ".gitignore", "app.py", "wsgi.py", "requirements.txt", "pytest.ini")
 DIRECTORIES = ("business_app", "integrations", "static", "templates", "tests", ".github", "docs")
 
+# Developer-only provisioning must never enter a customer application.
+EXCLUDED_EXPORT_PATHS = (
+    "provisioning",
+    "provisioning_web.py",
+    "provisioning_wizard.html",
+    "DEVELOPER_PROVISIONING_WIZARD_HE.md",
+    "PROVIDER_INTEGRATIONS_HE.md",
+    "test_provisioning*.py",
+    "test_provider_adapters.py",
+)
+
+
+def _ignore_export_artifacts(directory, names):
+    """Exclude developer tooling and local artifacts at every copied directory level."""
+    ignored = set()
+    for name in names:
+        if name in {"__pycache__", ".pytest_cache", ".git", ".venv", "venv", "node_modules"}:
+            ignored.add(name)
+        elif name.endswith((".pyc", ".pyo", ".log", ".sqlite", ".db")):
+            ignored.add(name)
+        elif name in EXCLUDED_EXPORT_PATHS:
+            ignored.add(name)
+        elif any(
+            pattern.endswith("*") and name.startswith(pattern[:-1])
+            for pattern in EXCLUDED_EXPORT_PATHS
+        ):
+            ignored.add(name)
+        elif name == ".env":
+            ignored.add(name)
+    return ignored
+
 
 def export_starter(target, business_name, slug):
     if not isinstance(business_name, str) or not business_name.strip():
@@ -24,7 +55,7 @@ def export_starter(target, business_name, slug):
     destination.mkdir(parents=True, exist_ok=True)
     for filename in FILES:
         source = ROOT / filename
-        if source.is_file():
+        if source.is_file() and filename != ".env":
             shutil.copy2(source, destination / filename)
 
     for directory in DIRECTORIES:
@@ -34,7 +65,7 @@ def export_starter(target, business_name, slug):
                 source,
                 destination / directory,
                 dirs_exist_ok=True,
-                ignore=shutil.ignore_patterns("__pycache__", ".pytest_cache", "*.pyc", ".DS_Store"),
+                ignore=_ignore_export_artifacts,
             )
 
     config_dir = destination / "config"
@@ -61,7 +92,7 @@ def main(argv=None):
         print(str(exc), file=sys.stderr)
         return 1
     print(f"Clean starter exported to: {destination}")
-    print("Customer database, live business configuration, secrets and deployment settings were not copied.")
+    print("Customer database, live business configuration, secrets and developer provisioning tools were not copied.")
     print("Review render.yaml and configure new hosting, database and credentials before deployment.")
     return 0
 
