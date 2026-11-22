@@ -555,3 +555,26 @@ def test_developer_studio_layout_and_stylesheet_render_for_authenticated_user():
     assert ".workspace" in css
     assert "@media(max-width:760px)" in css
     assert ".status-chip" in css
+
+
+
+def test_provisioning_wizard_has_four_validated_steps_and_serves_navigation_script():
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.get("/wizard")
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    for step in range(4):
+        assert f'data-wizard-step="{step}"' in page
+        assert f'data-step-label="{step}"' in page
+    assert 'data-wizard-prev' in page
+    assert 'data-wizard-next' in page
+    assert 'data-wizard-submit' in page
+
+    script = client.get("/static/js/provisioning.js")
+    assert script.status_code == 200
+    script_text = script.get_data(as_text=True)
+    assert "validateCurrent" in script_text
+    assert "reportValidity" in script_text
+    assert "data-wizard-step" in script_text
