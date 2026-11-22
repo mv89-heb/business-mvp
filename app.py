@@ -1,5 +1,7 @@
 import os
 import re
+import csv
+import io
 from datetime import datetime, timezone
 from functools import wraps
 
@@ -8,7 +10,7 @@ from flask_limiter import Limiter
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_
 from werkzeug.security import check_password_hash
 
 db = SQLAlchemy()
@@ -178,17 +180,53 @@ def create_app(test_config=None):
         session.clear()
         return redirect(url_for("admin_login"))
 
+    def _filtered_leads_query():
+        status = request.args.get("status", "").strip()
+        search = request.args.get("q", "").strip()[:120]
+        query = db.select(Lead)
+        if status in {"חדש", "בטיפול", "נשלחה הצעה", "נסגר", "לא רלוונטי"}:
+            query = query.where(Lead.status == status)
+        if search:
+            pattern = f"%{search}%"
+            query = query.where(
+                or_(Lead.name.ilike(pattern), Lead.phone.ilike(pattern),
+                       Lead.city.ilike(pattern), Lead.service.ilike(pattern),
+                       Lead.details.ilike(pattern))
+            )
+        return query.order_by(desc(Lead.created_at))
+
     @app.get("/admin")
     @admin_required
     def admin_dashboard():
         status = request.args.get("status", "").strip()
-        query = db.select(Lead).order_by(desc(Lead.created_at))
-        if status:
-            query = query.where(Lead.status == status)
-        leads = db.session.execute(query.limit(300)).scalars().all()
+        search = request.args.get("q", "").strip()[:120]
+        leads = db.session.execute(_filtered_leads_query().limit(300)).scalars().all()
         total = db.session.scalar(db.select(func.count(Lead.id))) or 0
         new_count = db.session.scalar(db.select(func.count(Lead.id)).where(Lead.status == "חדש")) or 0
-        return render_template("admin.html", leads=leads, total=total, new_count=new_count, selected=status)
+        return render_template("admin.html", leads=leads, total=total, new_count=new_count,
+                               selected=status, search=search)
+
+    @app.get("/admin/export.csv")
+    @admin_required
+    def export_leads():
+        leads = db.session.execute(_filtered_leads_query().limit(5000)).scalars().all()
+        output = io.StringIO()
+        writer = csv.writer(output)
+        writer.writerow(["תאריך", "שם", "טלפון", "דוא״ל", "יישוב", "סוג עבודה",
+                         "שטח במ״ר", "תקציב", "פרטים", "סטטוס"])
+        for lead in leads:
+            writer.writerow([
+                lead.created_at.strftime("%Y-%m-%d %H:%M") if lead.created_at else "",
+                lead.name, lead.phone, lead.email or "", lead.city or "", lead.service,
+                lead.area if lead.area is not None else "", lead.budget or "",
+                lead.details or "", lead.status
+            ])
+        response = app.response_class(
+            output.getvalue(), mimetype="text/csv; charset=utf-8",
+            headers={"Content-Disposition": "attachment; filename=eli-cohen-leads.csv"}
+        )
+        response.set_data("\ufeff" + response.get_data(as_text=True))
+        return response
 
     @app.post("/admin/leads/<int:lead_id>/status")
     @admin_required
@@ -200,6 +238,6 @@ def create_app(test_config=None):
         lead.status = status
         db.session.commit()
         flash("הסטטוס עודכן.", "success")
-        return redirect(url_for("admin_dashboard"))
+        return redirect(url_for("admin_dashboard", status=request.form.get("return_status", ""), q=request.form.get("q", "")))
 
     return app
