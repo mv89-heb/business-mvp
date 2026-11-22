@@ -44,7 +44,8 @@ class NeonProvider:
         projects = self.list_projects()
         return {"provider": "neon", "connected": True, "visible_projects": len(projects)}
 
-    def ensure_project(self, name, *, region_id="aws-eu-central-1", pg_version=17):
+    def ensure_project(self, name, *, region_id="aws-eu-central-1", pg_version=17,
+                       free_tier_verified=False):
         matches = [item for item in self.list_projects() if item.get("name", "").casefold() == name.casefold()]
         if len(matches) > 1:
             raise ProviderError("Multiple Neon projects have this name; choose the intended project explicitly")
@@ -53,6 +54,9 @@ class NeonProvider:
             if project.get("region_id") != region_id:
                 raise ProviderError("A Neon project with this name exists in a different region")
             return {"created": False, "project": project}
+
+        if free_tier_verified is not True:
+            raise ProviderError("Verify Neon free-tier eligibility and zero-cost terms before creating a project")
 
         project_config = {
             "name": name, "region_id": region_id, "pg_version": pg_version,
