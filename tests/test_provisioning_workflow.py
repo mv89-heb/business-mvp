@@ -331,7 +331,7 @@ def test_preflight_rejects_render_service_with_paid_plan(tmp_path, monkeypatch):
         "serviceDetails": {"plan": "starter", "region": "frankfurt"},
     }]
 
-    with pytest.raises(ProviderError, match="not registered to this provisioning workflow"):
+    with pytest.raises(ProviderError, match="Free Frankfurt"):
         workflow.preflight(
             make_plan(), github_owner="developer",
             known_resources={"render": {"service_id": "srv-existing"}},
