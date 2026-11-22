@@ -19,6 +19,32 @@ py -m business_app.provisioning --output .\work\new-business-plan.json
 
 האשף מבקש שם עסק, slug, קטגוריה ומודולים. קובץ התוכנית נוצר רק אם נתיב הפלט אינו קיים; אין דריסה שקטה של תוכנית קודמת.
 
+## הפעלת ממשק האשף הגרפי
+
+לנוחות העבודה אפשר להפעיל ממשק מקומי בעברית, המיועד למפתח בלבד. ב־PowerShell, מתוך תיקיית המאגר:
+
+```powershell
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$bytes = New-Object byte[] 48
+$rng.GetBytes($bytes)
+$env:PROVISIONING_SESSION_SECRET = [Convert]::ToBase64String($bytes)
+$rng.Dispose()
+$secure = Read-Host "בחר סיסמת כניסה לאשף" -AsSecureString
+$ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+try {
+    $env:PROVISIONING_PASSWORD = [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr)
+} finally {
+    [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+}
+py -m business_app.provisioning_web
+```
+
+פתח בדפדפן: `http://127.0.0.1:8765`. השרת מאזין ל־localhost בלבד; אין לשנות את ה־host ל־`0.0.0.0` ואין לחשוף את האשף לרשת או ללקוחות.
+
+כדי לבדוק חיבורי ספקים ולהפעיל הקמה מתוך הממשק, הגדר באותה חלונית PowerShell גם את משתני הסביבה `GITHUB_TOKEN`, `GITHUB_OWNER`, `NEON_API_KEY`, `RENDER_API_KEY`, `RENDER_WORKSPACE_ID` (ו־`NEON_ORG_ID` אם נדרש). אין להקליד מפתחות API בשדות הטופס או לשמור אותם בקובצי הפרויקט.
+
+טופס ההקמה מציג Dry Run תחילה. רק לאחר בדיקת התוכנית ניתן להזין אישור `CREATE`, לסמן אישור ידני לעלות אפס ב־Neon ולהזין סיסמת מנהל ללקוח. בקשת הביצוע נשארת פתוחה בזמן יצירת המשאבים והמתנה ל־`/health`, ולכן ייתכן שיידרשו כמה דקות. סיסמת מנהל הלקוח אינה מוצגת שוב ואינה נשמרת במצב התהליך.
+
 ## מה קיים בשלב זה
 
 - תכנון התקנה נפרדת ל־GitHub, Neon ו־Render.
