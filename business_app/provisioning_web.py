@@ -224,10 +224,18 @@ def create_provisioning_app(test_config=None):
     def enforce_access_boundary():
         host = (urlsplit(f"//{request.host}").hostname or "").lower()
         if app.config["PROVISIONING_PUBLIC_ACCESS"]:
+            try:
+                peer = ipaddress.ip_address(request.remote_addr or "")
+            except ValueError:
+                peer = None
+            if request.method == "HEAD" and request.path == "/" and peer and peer.is_loopback:
+                return
+            if request.endpoint == "healthz":
+                if not request.is_secure and not (peer and peer.is_loopback):
+                    abort(404)
+                return
             if host not in set(app.config["PROVISIONING_ALLOWED_HOSTS"]):
                 abort(404)
-            if request.endpoint == "healthz":
-                return
             if not request.is_secure:
                 abort(404)
             return
@@ -249,6 +257,10 @@ def create_provisioning_app(test_config=None):
 
     @app.get("/")
     def index():
+        # Render's internal startup probe uses HEAD /. It must not be sent to
+        # the login redirect or blocked by the public-host allowlist.
+        if request.method == "HEAD":
+            return "", 200
         if not session.get("developer"):
             return redirect(url_for("login"))
         return redirect(url_for("wizard"))
