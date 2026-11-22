@@ -47,7 +47,7 @@ FUTURE_MODULES = {
 }
 
 SUPPORTED_REGIONS = {
-    "frankfurt": {"render": "frankfurt", "neon": "eu-central-1", "label": "פרנקפורט / אירופה"},
+    "frankfurt": {"render": "frankfurt", "neon": "aws-eu-central-1", "label": "פרנקפורט / אירופה"},
 }
 
 SLUG_RE = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
@@ -152,9 +152,9 @@ def build_provisioning_plan(
             "resources": resources,
         },
         "provider_readiness": {
-            "github": "credentials_and_repository_creation_adapter_required",
-            "neon": "credentials_and_project_creation_adapter_required",
-            "render": "credentials_and_service_creation_adapter_required",
+            "github": "adapter_available_credentials_required",
+            "neon": "adapter_available_credentials_required",
+            "render": "adapter_available_credentials_required",
         },
         "cost_policy": {
             "requested_render_plan": "free",

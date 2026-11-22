@@ -43,6 +43,26 @@
         <div><div class="eyebrow">DEVELOPER WORKSPACE · LOCAL ONLY</div><h1 class="title">אשף הקמת עסק חדש</h1><p class="subtitle">תכנון תשתית מבודדת וקביעת מודולים לפני הקמה</p></div>
         <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button secondary" type="submit">יציאה</button></form>
       </header>
+      <section class="panel">
+        <div class="eyebrow">PROVIDER CONNECTIONS</div><h2>חיבור לשירותים</h2>
+        <p class="hint">האשף בודק חיבורים באמצעות מפתחות שמוגדרים בסביבת המפתח בלבד. ערכי מפתחות וסודות אינם מוצגים.</p>
+        <form method="post" action="{{ url_for('check_connections') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <button class="button secondary" type="submit">בדוק חיבורי GitHub, Neon ו-Render</button>
+        </form>
+        <p class="hint">Canva מופעלת דרך חיבור Canva המאומת ב-ChatGPT לצורך מיתוג ועיצוב; היא אינה נבדקת באמצעות מפתח מקומי באשף.</p>
+        {% if connection_results %}
+          <div class="grid" style="margin-top:16px">
+            {% for key, result in connection_results.items() %}
+              <div class="notice {% if not result.connected %}error{% endif %}">
+                <strong>{{ key|upper }}</strong><br>
+                {{ result.message }}
+                {% if result.details %}<small>{{ result.details }}</small>{% endif %}
+              </div>
+            {% endfor %}
+          </div>
+        {% endif %}
+      </section>
       <div class="notice">שלב זה מפיק תוכנית Dry Run בלבד. לא נוצרים כרגע מאגר GitHub, פרויקט Neon או שירות Render.</div>
       {% with messages = get_flashed_messages(with_categories=true) %}
         {% for category, message in messages %}<div class="notice error">{{ message }}</div>{% endfor %}
@@ -71,7 +91,7 @@
           <div class="eyebrow">03 · INFRASTRUCTURE</div><h2>תשתית מוצעת</h2>
           <div class="grid">
             <div class="field"><label>GitHub</label><input value="Repository פרטי ונפרד" disabled></div>
-            <div class="field"><label>Neon</label><input value="PostgreSQL נפרד · eu-central-1" disabled></div>
+            <div class="field"><label>Neon</label><input value="PostgreSQL נפרד · aws-eu-central-1" disabled></div>
             <div class="field"><label>Render</label><input value="Web Service · Frankfurt · Free" disabled></div>
             <div class="field"><label>מדיניות עלויות</label><input value="ללא משאבים בתשלום" disabled></div>
           </div>

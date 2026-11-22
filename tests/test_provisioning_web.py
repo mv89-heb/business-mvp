@@ -62,3 +62,22 @@ def test_logout_removes_developer_session():
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/login")
     assert client.get("/wizard").status_code == 302
+
+def test_connection_check_is_developer_only():
+    client = make_client()
+    response = client.post("/connections/check")
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/login")
+
+
+def test_connection_check_reports_missing_credentials_without_exposing_secrets(monkeypatch):
+    for key in ("GITHUB_TOKEN", "NEON_API_KEY", "RENDER_API_KEY"):
+        monkeypatch.delenv(key, raising=False)
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.post("/connections/check")
+    page = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert "GITHUB" in page and "NEON" in page and "RENDER" in page
+    assert "credential is not configured" in page
+    assert "developer-test-password" not in page

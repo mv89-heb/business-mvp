@@ -10,6 +10,9 @@ from functools import wraps
 from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 from flask_wtf.csrf import CSRFProtect
 
+from business_app.provisioning.providers import GitHubProvider, NeonProvider, RenderProvider
+from business_app.provisioning.providers.http import ProviderError
+
 from business_app.provisioning import (
     BUSINESS_CATEGORIES,
     SUPPORTED_MODULES,
@@ -76,6 +79,44 @@ def create_provisioning_app(test_config=None):
         session.clear()
         return redirect(url_for("login"))
 
+    @app.post("/connections/check")
+    @developer_required
+    def check_connections():
+        results = {}
+        providers = {
+            "github": GitHubProvider,
+            "neon": NeonProvider,
+            "render": RenderProvider,
+        }
+        for provider_name, provider_class in providers.items():
+            try:
+                result = provider_class().check_connection()
+                results[provider_name] = {
+                    "connected": True,
+                    "message": "החיבור אומת בהצלחה.",
+                    "details": {key: value for key, value in result.items() if key != "provider"},
+                }
+            except ProviderError as exc:
+                results[provider_name] = {"connected": False, "message": str(exc)}
+            except Exception:
+                results[provider_name] = {
+                    "connected": False,
+                    "message": "בדיקת החיבור נכשלה. פרטי שגיאה ונתוני אימות לא נחשפו.",
+                }
+        return render_template(
+            "provisioning_wizard.html",
+            login_required=False,
+            categories=BUSINESS_CATEGORIES,
+            modules=SUPPORTED_MODULES,
+            form_values={
+                "business_name": "",
+                "slug": "",
+                "category": "services",
+                "modules": ["lead_capture", "lead_management"],
+            },
+            connection_results=results,
+        )
+
     @app.route("/wizard", methods=["GET", "POST"])
     @developer_required
     def wizard():
@@ -108,6 +149,7 @@ def create_provisioning_app(test_config=None):
             form_values=form_values,
             plan=plan,
             error=error,
+            connection_results=None,
         )
 
     return app
