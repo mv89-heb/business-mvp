@@ -1,6 +1,7 @@
 """Centralized, validated business configuration."""
 import json
 import os
+import re
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -29,6 +30,13 @@ def load_business_config(path=None):
             raise BusinessConfigError(f"Configuration field '{key}' must be {expected.__name__}")
     if not data["id"].strip() or not data["name"].strip():
         raise BusinessConfigError("Business id and name must not be empty")
+    allowed_fonts = {"Heebo", "Assistant", "Rubik", "Arial"}
+    for color_key in ("theme_color", "primary_color", "accent_color"):
+        color_value = data["branding"].get(color_key)
+        if not isinstance(color_value, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", color_value):
+            raise BusinessConfigError(f"branding.{color_key} must be a six-digit hexadecimal color")
+    if data["branding"].get("font_family") not in allowed_fonts:
+        raise BusinessConfigError("branding.font_family is not supported")
     for key in ("language", "direction"):
         if not isinstance(data["locale"].get(key), str) or not data["locale"][key].strip():
             raise BusinessConfigError(f"locale.{key} is required")
