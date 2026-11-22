@@ -162,7 +162,7 @@ def test_neon_project_lookup_walks_all_pages_before_creating():
         {"projects": [{"id": "first", "name": "other", "region_id": "aws-eu-central-1"}], "pagination": {"cursor": "next-page"}},
         {"projects": [{"id": "found", "name": "app", "region_id": "aws-eu-central-1"}], "pagination": {}},
     ])
-    result = NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
+    result = NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app", expected_project_id="found")
     assert result["created"] is False
     assert result["project"]["id"] == "found"
     assert "cursor=next-page" in opener.requests[1][0].full_url
@@ -188,7 +188,7 @@ def test_render_service_lookup_walks_all_pages_before_creating():
                                          "type": "web_service", "branch": "main", "autoDeployTrigger": "checksPass", "serviceDetails": {"plan": "free", "region": "frankfurt"}}}],
     ])
     result = RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-        name="app", repository_url="https://github.com/a/b"
+        name="app", repository_url="https://github.com/a/b", expected_service_id="found"
     )
     assert result["created"] is False
     assert result["service"]["id"] == "found"
