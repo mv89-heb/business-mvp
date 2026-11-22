@@ -174,7 +174,12 @@ def create_provisioning_app(test_config=None):
     def add_security_headers(response):
         response.headers["X-Content-Type-Options"] = "nosniff"
         response.headers["X-Frame-Options"] = "DENY"
-        response.headers["Referrer-Policy"] = "no-referrer"
+        # Remote HTTPS login uses Flask-WTF SSL strict referer validation.
+        # same-origin sends Referer for our own form POSTs without disclosing
+        # the full URL to other origins. Keep the stricter local policy.
+        response.headers["Referrer-Policy"] = (
+            "same-origin" if app.config["PROVISIONING_PUBLIC_ACCESS"] else "no-referrer"
+        )
         response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; base-uri 'self'; form-action 'self'; "
