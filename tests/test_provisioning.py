@@ -77,3 +77,11 @@ def test_plan_serializes_as_json_without_secrets():
     assert "DATABASE_URL" not in serialized
     assert "SECRET_KEY" not in serialized
     assert "api_key" not in serialized.lower()
+
+
+def test_plan_uses_provider_region_identifiers():
+    plan = make_plan()
+    resources = {item["provider"]: item for item in plan["infrastructure"]["resources"]}
+    assert resources["neon"]["region"] == "aws-eu-central-1"
+    assert resources["render"]["region"] == "frankfurt"
+    assert plan["provider_readiness"]["github"] == "adapter_available_credentials_required"
