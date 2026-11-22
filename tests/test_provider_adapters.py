@@ -222,3 +222,14 @@ def test_render_refuses_existing_paid_service_without_mutation():
             name="app", repository_url="https://github.com/a/b"
         )
     assert len(opener.requests) == 1
+
+def test_render_refuses_existing_service_on_wrong_branch():
+    opener = FakeOpener([[
+        {"service": {"id": "srv-1", "name": "app", "repo": "https://github.com/a/b",
+                     "type": "web_service", "branch": "staging",
+                     "serviceDetails": {"plan": "free", "region": "frankfurt"}}]
+    ])
+    with pytest.raises(Exception, match="different Git branch"):
+        RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
+            name="app", repository_url="https://github.com/a/b", branch="main"
+        )
