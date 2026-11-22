@@ -145,6 +145,7 @@ def test_lead_webhook_is_optional_and_sends_saved_lead(monkeypatch, client):
     captured = {}
     response = MagicMock()
     response.status = 202
+    response.read.return_value = b'{"ok": true}'
     response.__enter__.return_value = response
 
     def fake_urlopen(request, timeout):
