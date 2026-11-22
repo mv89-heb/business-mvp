@@ -46,6 +46,23 @@ class Setting(db.Model):
     value = db.Column(db.Text, nullable=False)
 
 
+def _is_production():
+    return os.getenv("FLASK_ENV", "").strip().lower() == "production"
+
+
+def _runtime_configuration(test_config=None):
+    overrides = test_config or {}
+    secret_key = os.getenv("SECRET_KEY", "").strip() or overrides.get("SECRET_KEY")
+    database_url = os.getenv("DATABASE_URL", "").strip() or overrides.get("SQLALCHEMY_DATABASE_URI")
+
+    if _is_production() and not secret_key:
+        raise RuntimeError("SECRET_KEY must be configured before starting in production.")
+    if _is_production() and not database_url:
+        raise RuntimeError("DATABASE_URL must be configured before starting in production.")
+
+    return secret_key or "local-development-only-change-me", database_url or "sqlite:///local.db"
+
+
 def _database_url():
     value = os.getenv("DATABASE_URL", "sqlite:///local.db")
     if value.startswith("postgres://"):
@@ -78,18 +95,21 @@ def admin_required(fn):
 def create_app(test_config=None):
     app = Flask(__name__)
     business_config = load_business_config()
+    secret_key, database_url = _runtime_configuration(test_config)
     app.config.update(
-        SECRET_KEY=os.getenv("SECRET_KEY", "local-development-only-change-me"),
+        SECRET_KEY=secret_key,
         BUSINESS_CONFIG=business_config,
-        SQLALCHEMY_DATABASE_URI=_database_url(),
+        SQLALCHEMY_DATABASE_URI=database_url,
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Lax",
-        SESSION_COOKIE_SECURE=os.getenv("FLASK_ENV") == "production",
+        SESSION_COOKIE_SECURE=_is_production(),
         MAX_CONTENT_LENGTH=64 * 1024,
     )
     if test_config:
         app.config.update(test_config)
+    if _is_production() and not (os.getenv("ADMIN_PASSWORD") or os.getenv("ADMIN_PASSWORD_HASH")):
+        app.logger.warning("Admin login is unavailable until ADMIN_PASSWORD or ADMIN_PASSWORD_HASH is configured.")
     db.init_app(app)
     limiter.init_app(app)
     csrf.init_app(app)
