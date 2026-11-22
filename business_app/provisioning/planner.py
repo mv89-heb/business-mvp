@@ -153,8 +153,8 @@ def build_provisioning_plan(
         },
         "provider_readiness": {
             "github": "credentials_and_repository_creation_adapter_required",
-            "neon": "api_key_and_project_creation_adapter_required",
-            "render": "api_key_and_service_creation_adapter_required",
+            "neon": "credentials_and_project_creation_adapter_required",
+            "render": "credentials_and_service_creation_adapter_required",
         },
         "cost_policy": {
             "requested_render_plan": "free",
