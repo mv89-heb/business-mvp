@@ -146,7 +146,7 @@ def export_starter(target, business_name, slug, modules=None):
             "automation_webhooks" in selected
         )
         config_path.write_text(
-            __import__("json").dumps(config_data, ensure_ascii=False, indent=2) + "\\n",
+            json.dumps(config_data, ensure_ascii=False, indent=2) + "\n",
             encoding="utf-8",
         )
     return destination
