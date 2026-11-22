@@ -1,13 +1,13 @@
 {% extends "base.html" %}
-{% block title %}הפנייה התקבלה | אלי כהן בניה ועץ{% endblock %}
+{% block title %}הפנייה התקבלה | {{ business.name }}{% endblock %}
 {% block content %}
 <section class="thanks">
   <div class="thanks-mark">✓</div>
   <span class="eyebrow">הפרטים התקבלו בהצלחה</span>
   <h1>תודה שפניתם אלינו</h1>
-  <p>הפנייה נשמרה במערכת. אלי יחזור אליכם כדי להכיר את הפרויקט ולתאם את המשך הטיפול.</p>
+  <p>הפנייה נשמרה במערכת. נציג העסק יחזור אליכם כדי להכיר את הצורך ולתאם את הצעד הבא.</p>
   {% if lead_id %}<div class="lead-reference"><span>מספר הפנייה שלכם</span><strong>#{{ lead_id }}</strong><small>מומלץ לשמור את המספר לצורך בירור בהמשך.</small></div>{% endif %}
   <a class="button primary" href="/">חזרה לאתר</a>
-  <a class="thanks-whatsapp" href="https://wa.me/972507208386" target="_blank" rel="noopener">רוצים להוסיף פרטים? אפשר לשלוח הודעה ב־WhatsApp</a>
+  {% if business.contact.whatsapp_url %}<a class="thanks-whatsapp" href="{{ business.contact.whatsapp_url }}" target="_blank" rel="noopener">רוצים להוסיף פרטים? אפשר לשלוח הודעה ב־WhatsApp</a>{% endif %}
 </section>
 {% endblock %}
