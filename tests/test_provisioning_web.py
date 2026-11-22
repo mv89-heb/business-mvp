@@ -530,3 +530,28 @@ def test_remote_deployment_keeps_csrf_protection_enabled_by_default():
         base_url="https://wizard.example.test",
     )
     assert rejected.status_code == 400
+
+
+
+def test_developer_studio_layout_and_stylesheet_render_for_authenticated_user():
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.get("/wizard")
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "Business Studio" in page
+    assert "מרכז הפיתוח שלך" in page
+    assert 'href="#business-profile"' in page
+    assert 'href="#brand-profile"' in page
+    assert 'href="#modules"' in page
+    assert 'href="#infrastructure"' in page
+    assert 'href="#plan-review"' in page
+    assert "css/provisioning.css" in page
+
+    stylesheet = client.get("/static/css/provisioning.css")
+    assert stylesheet.status_code == 200
+    css = stylesheet.get_data(as_text=True)
+    assert ".workspace" in css
+    assert "@media(max-width:760px)" in css
+    assert ".status-chip" in css
