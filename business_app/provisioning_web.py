@@ -203,6 +203,9 @@ def create_provisioning_app(test_config=None):
             plan = build_provisioning_plan(**form_values)
             if session.get("preflight_fingerprint") != _plan_fingerprint(plan):
                 raise ProviderError("יש להריץ Preflight מוצלח לתוכנית הנוכחית לפני ביצוע.")
+            # Treat a successful preflight as a one-time execution gate; a retry
+            # must run a fresh read-only check before attempting provider writes.
+            session.pop("preflight_fingerprint", None)
             if request.form.get("confirm_zero_cost") != "yes":
                 raise ProviderError("לא התקבל אישור מפורש לכך שעלות Neon תהיה אפס.")
             result = ProvisioningWorkflow().run(
