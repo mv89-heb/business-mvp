@@ -151,11 +151,12 @@ def create_app(test_config=None):
         db.session.add(lead)
         db.session.commit()
         app.logger.info("Lead %s stored successfully", lead.id)
-        return redirect(url_for("thanks"))
+        return redirect(url_for("thanks", lead_id=lead.id))
 
     @app.get("/thanks")
     def thanks():
-        return render_template("thanks.html")
+        lead_id = request.args.get("lead_id", type=int)
+        return render_template("thanks.html", lead_id=lead_id)
 
     @app.route("/admin/login", methods=["GET", "POST"])
     @limiter.limit("10 per hour")
