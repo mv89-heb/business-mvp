@@ -10,7 +10,7 @@ from flask_limiter import Limiter
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_
 from werkzeug.security import check_password_hash
 
 db = SQLAlchemy()
@@ -189,7 +189,7 @@ def create_app(test_config=None):
         if search:
             pattern = f"%{search}%"
             query = query.where(
-                db.or_(Lead.name.ilike(pattern), Lead.phone.ilike(pattern),
+                or_(Lead.name.ilike(pattern), Lead.phone.ilike(pattern),
                        Lead.city.ilike(pattern), Lead.service.ilike(pattern),
                        Lead.details.ilike(pattern))
             )
