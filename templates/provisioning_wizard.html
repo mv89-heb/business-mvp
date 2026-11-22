@@ -175,6 +175,7 @@
           <section class="wizard-step" data-wizard-step="3" id="infrastructure" aria-label="תשתיות ותוכנית הקמה" hidden>
             <div class="panel">
               <div class="panel-heading"><div><div class="section-kicker">04 / INFRASTRUCTURE</div><h2>תשתיות, חיבורים ואישור</h2><p class="panel-description">כל המשאבים ייווצרו בנפרד עבור העסק. אין גישה לנתוני פרויקטים אחרים.</p></div><span class="status-chip success">מבודד לפרויקט</span></div>
+              {% if connection_results is not none %}<div class="notice success"><strong>הבדיקה הושלמה</strong><span>תוצאות החיבור עודכנו. פרטי אימות וסודות אינם מוצגים.</span></div>{% endif %}
               <div class="provider-grid">
                 {% for provider, title, description in [('github','GitHub','מאגר קוד פרטי לפרויקט'),('neon','Neon','מסד PostgreSQL מבודד'),('render','Render','שירות Web ופריסה אוטומטית')] %}
                   {% set result = connection_results.get(provider) if connection_results else none %}
