@@ -11,6 +11,22 @@
 #>
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
+
+# Windows PowerShell 5.1 may start with an OEM code page that cannot render
+# UTF-8 Hebrew correctly. Switch the interactive console to UTF-8 before
+# printing any Hebrew UI. Keep the BOM for reliable script-file decoding.
+try {
+    $chcp = Join-Path $env:WINDIR "System32\chcp.com"
+    if (Test-Path $chcp) { & $chcp 65001 | Out-Null }
+    $utf8 = New-Object System.Text.UTF8Encoding($false)
+    [Console]::InputEncoding = $utf8
+    [Console]::OutputEncoding = $utf8
+    $OutputEncoding = $utf8
+}
+catch {
+    # Do not prevent local setup if the host does not expose a Windows console.
+}
+
 $script:RepoUrl = "https://github.com/mv89-heb/eli-cohen-business-mvp.git"
 $script:RepoName = "eli-cohen-business-mvp"
 $script:RepoDir = $null
