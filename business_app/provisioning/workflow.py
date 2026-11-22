@@ -97,7 +97,7 @@ class ProvisioningWorkflow:
         self.github = github or GitHubProvider()
         self.neon = neon or NeonProvider()
         self.render = render or RenderProvider()
-        self.state_store = state_store or WorkflowStateStore()
+        self.state_store = state_store
         self.health_checker = health_checker or self._http_health_check
         self.sleep = sleep
         self.health_timeout = health_timeout
@@ -245,6 +245,10 @@ class ProvisioningWorkflow:
             raise ProviderError("GITHUB_OWNER is required")
         if not getattr(self.render, "workspace_id", None):
             raise ProviderError("RENDER_WORKSPACE_ID must identify the approved workspace")
+
+        # Keep read-only preflight free of local filesystem side effects.
+        if self.state_store is None:
+            self.state_store = WorkflowStateStore()
 
         workflow_id = plan.get("plan_id") or slug
         state = self.state_store.load(workflow_id) or {
