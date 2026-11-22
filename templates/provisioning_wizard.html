@@ -1,855 +1,244 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="he" dir="rtl">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <meta name="referrer" content="same-origin" />
-  <title>Business App Starter — Developer Studio</title>
-  <style>
-    :root {
-      --bg: #f8fafc;
-      --surface: #ffffff;
-      --surface-alt: #f1f5f9;
-      --border: #e2e8f0;
-      --text: #0f172a;
-      --text-muted: #475569;
-      --accent: #4f46e5;
-      --accent-hover: #4338ca;
-      --accent-soft: rgba(79, 70, 229, 0.1);
-      --accent-text: #4338ca;
-      --emerald: #059669;
-      --emerald-hover: #047857;
-      --cyan-text: #0e7490;
-      --amber-bg: rgba(245, 158, 11, 0.12);
-      --amber-text: #b45309;
-      --amber-border: rgba(245, 158, 11, 0.3);
-      --ok-bg: rgba(16, 185, 129, 0.12);
-      --ok-text: #047857;
-      --ok-border: rgba(16, 185, 129, 0.3);
-      --err-bg: #fef2f2;
-      --err-text: #b91c1c;
-      --err-border: #fecaca;
-      --shadow: 0 20px 35px -15px rgba(15, 23, 42, 0.12);
-    }
-
-    html.dark {
-      --bg: #020617;
-      --surface: #0f172a;
-      --surface-alt: #1e293b;
-      --border: #1e293b;
-      --text: #f1f5f9;
-      --text-muted: #94a3b8;
-      --accent: #4f46e5;
-      --accent-hover: #6366f1;
-      --accent-soft: rgba(79, 70, 229, 0.16);
-      --accent-text: #a5b4fc;
-      --emerald: #059669;
-      --emerald-hover: #10b981;
-      --cyan-text: #67e8f9;
-      --amber-bg: rgba(245, 158, 11, 0.12);
-      --amber-text: #fcd34d;
-      --amber-border: rgba(245, 158, 11, 0.25);
-      --ok-bg: rgba(16, 185, 129, 0.12);
-      --ok-text: #6ee7b7;
-      --ok-border: rgba(16, 185, 129, 0.25);
-      --err-bg: rgba(69, 10, 10, 0.65);
-      --err-text: #fda4af;
-      --err-border: #9f1239;
-      --shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
-    }
-
-    *, *::before, *::after { box-sizing: border-box; }
-    .hidden { display: none !important; }
-    .ltr-input { direction: ltr; text-align: left; }
-    .mono-text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
-    .mono-accent { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent-text); }
-    .mono-ok { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ok-text); }
-    .mono-cyan { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--cyan-text); }
-
-    body {
-      margin: 0;
-      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
-      background-color: var(--bg);
-      color: var(--text);
-      min-height: 100vh;
-      transition: background-color 0.2s ease, color 0.2s ease;
-    }
-
-    .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
-
-    .topbar {
-      position: sticky;
-      top: 0;
-      z-index: 30;
-      background-color: var(--surface);
-      border-bottom: 1px solid var(--border);
-    }
-
-    .topbar-inner {
-      max-width: 72rem;
-      margin: 0 auto;
-      padding: 0 1rem;
-      height: 3.5rem;
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
-      gap: 0.75rem;
-    }
-
-    .brand { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
-    .brand-icon {
-      width: 2rem; height: 2rem; border-radius: 0.5rem;
-      background: linear-gradient(135deg, #6366f1, #7c3aed);
-      color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
-    }
-    .brand-title { font-weight: 700; font-size: 0.95rem; }
-
-    .badge-dev, .badge-ok, .badge-warn {
-      display: inline-flex; align-items: center; gap: 0.35rem;
-      padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700;
-    }
-    .badge-dev, .badge-warn { background: var(--amber-bg); color: var(--amber-text); border: 1px solid var(--amber-border); }
-    .badge-ok { background: var(--ok-bg); color: var(--ok-text); border: 1px solid var(--ok-border); }
-
-    .theme-switcher {
-      display: inline-flex; background: var(--surface-alt); border: 1px solid var(--border);
-      border-radius: 0.5rem; padding: 2px; gap: 2px;
-    }
-    .theme-btn {
-      border: 0; background: transparent; color: var(--text-muted); font-size: 0.75rem;
-      font-weight: 600; padding: 0.35rem 0.6rem; border-radius: 0.375rem; cursor: pointer;
-    }
-    .theme-btn.active { background: var(--accent); color: #fff; }
-
-    .toast-container {
-      position: fixed; bottom: 1rem; left: 1rem; z-index: 50;
-      display: flex; flex-direction: column; gap: 0.5rem; max-width: 20rem;
-    }
-    .toast-item {
-      padding: 0.7rem 1rem; border-radius: 0.75rem; border: 1px solid var(--border);
-      background: var(--surface); color: var(--text); font-size: 0.75rem; font-weight: 600;
-      box-shadow: var(--shadow); transition: opacity 0.3s;
-    }
-
-    .login-main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
-    .login-card {
-      width: 100%; max-width: 28rem; background: var(--surface); border: 1px solid var(--border);
-      border-radius: 1rem; padding: 2rem; box-shadow: var(--shadow); position: relative; overflow: hidden;
-    }
-    .card-accent { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(to left, #6366f1, #8b5cf6, #22d3ee); }
-    .card-top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
-    .route-tag { font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--text-muted); direction: ltr; }
-    .login-title { margin: 0 0 0.5rem 0; font-size: 1.5rem; font-weight: 800; }
-    .login-subtitle { margin: 0 0 1.5rem 0; font-size: 0.875rem; line-height: 1.6; color: var(--text-muted); }
-    .error-box { margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.75rem; background: var(--err-bg); border: 1px solid var(--err-border); color: var(--err-text); font-size: 0.8rem; }
-    .login-form { display: flex; flex-direction: column; gap: 1rem; }
-
-    .field-label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--text); }
-    .input-wrap { position: relative; }
-    .field-input {
-      width: 100%; padding: 0.65rem 0.9rem; border-radius: 0.75rem; border: 1px solid var(--border);
-      background: var(--bg); color: var(--text); font-size: 0.875rem; outline: none;
-    }
-    .field-input.has-icon { padding-left: 2.5rem; }
-    .field-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2); }
-    .pwd-toggle { position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--text-muted); cursor: pointer; padding: 0.25rem; display: flex; }
-
-    .btn-primary, .btn-emerald, .btn-secondary {
-      border-radius: 0.75rem; font-size: 0.85rem; font-weight: 700; cursor: pointer;
-      padding: 0.65rem 1.15rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
-    }
-    .btn-primary { border: 0; background: var(--accent); color: #fff; }
-    .btn-primary:hover { background: var(--accent-hover); }
-    .btn-primary.full-width { width: 100%; padding: 0.8rem 1rem; }
-    .btn-emerald { border: 0; background: var(--emerald); color: #fff; }
-    .btn-emerald:hover { background: var(--emerald-hover); }
-    .btn-secondary { border: 1px solid var(--border); background: var(--surface-alt); color: var(--text); }
-
-    .card-footer {
-      margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border);
-      display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);
-    }
-
-    .wizard-main { max-width: 72rem; width: 100%; margin: 0 auto; padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 1.5rem; }
-    .card, .wizard-banner { background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; padding: 1.35rem; }
-    .wizard-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }
-    .wizard-heading-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.3rem; }
-    .wizard-title { margin: 0; font-size: 1.35rem; font-weight: 800; }
-    .wizard-subtitle { margin: 0; font-size: 0.875rem; color: var(--text-muted); }
-    .banner-actions { display: flex; align-items: center; gap: 0.75rem; }
-    .session-box { padding: 0.45rem 0.75rem; border-radius: 0.75rem; background: var(--bg); border: 1px solid var(--border); font-size: 0.75rem; }
-    .session-label { color: var(--text-muted); }
-    .session-timer { font-family: ui-monospace, monospace; font-weight: 700; color: var(--accent-text); direction: ltr; }
-
-    .stepper-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
-    @media (min-width: 1024px) { .stepper-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
-    .step-tab {
-      text-align: right; border-radius: 0.85rem; padding: 0.9rem; border: 1px solid var(--border);
-      background: var(--surface); color: var(--text); cursor: pointer;
-    }
-    .step-tab.active { background: var(--accent-soft); border-color: var(--accent); }
-    .step-tab-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; font-size: 0.75rem; font-family: ui-monospace, monospace; color: var(--accent-text); }
-    .step-dot { width: 8px; height: 8px; border-radius: 9999px; background: var(--border); }
-    .step-tab.active .step-dot { background: var(--accent); }
-    .step-tab-title { font-size: 0.875rem; font-weight: 700; }
-    .step-tab-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; }
-
-    .step1-layout { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
-    @media (min-width: 1024px) { .step1-layout { grid-template-columns: 2fr 1fr; } }
-    .panel-main, .panel-side { display: flex; flex-direction: column; gap: 1.25rem; }
-    .panel-header, .panel-header-wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; }
-    .panel-title { margin: 0; font-size: 1.1rem; font-weight: 700; }
-    .panel-subtitle { margin: 0.2rem 0 0 0; font-size: 0.85rem; color: var(--text-muted); }
-    .muted-note { font-size: 0.75rem; color: var(--text-muted); }
-
-    .form-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
-    @media (min-width: 640px) { .form-grid { grid-template-columns: repeat(2, 1fr); } }
-    .modules-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
-    @media (min-width: 640px) { .modules-grid { grid-template-columns: repeat(3, 1fr); } }
-    .module-card {
-      display: flex; align-items: flex-start; gap: 0.65rem; padding: 0.85rem;
-      border-radius: 0.75rem; background: var(--bg); border: 1px solid var(--border); cursor: pointer;
-    }
-    .module-title { font-size: 0.85rem; font-weight: 700; }
-    .module-desc { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; }
-
-    .side-title { margin: 0; font-size: 0.85rem; font-weight: 700; }
-    .preview-list { display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.78rem; }
-    .preview-item { padding: 0.75rem; border-radius: 0.75rem; background: var(--bg); border: 1px solid var(--border); }
-    .preview-label { color: var(--text-muted); margin-bottom: 0.25rem; }
-    .preview-val { font-weight: 600; word-break: break-all; }
-
-    .panel-actions { display: flex; gap: 0.75rem; margin-top: 1.25rem; }
-    .panel-actions.end { justify-content: flex-end; }
-    .panel-actions.start { justify-content: flex-start; }
-    .panel-actions.between { justify-content: space-between; }
-
-    .preflight-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
-    @media (min-width: 768px) { .preflight-grid { grid-template-columns: repeat(3, 1fr); } }
-    .subcard { padding: 1rem; border-radius: 0.85rem; background: var(--bg); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.75rem; }
-    .subcard-header { display: flex; justify-content: space-between; align-items: center; }
-    .subcard-title { margin: 0; font-size: 0.9rem; font-weight: 700; }
-    .link-btn { border: 0; background: transparent; color: var(--accent-text); font-size: 0.75rem; font-weight: 600; cursor: pointer; }
-
-    .dryrun-grid { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
-    @media (min-width: 1024px) { .dryrun-grid { grid-template-columns: repeat(2, 1fr); } }
-    .dryrun-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.65rem; font-size: 0.85rem; }
-    .dryrun-item { display: flex; align-items: flex-start; gap: 0.6rem; }
-    .dryrun-num { width: 1.25rem; height: 1.25rem; border-radius: 9999px; background: var(--accent-soft); color: var(--accent-text); font-size: 0.75rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
-    .env-pre { margin: 0; padding: 0.85rem; border-radius: 0.65rem; background: var(--surface); border: 1px solid var(--border); font-family: ui-monospace, monospace; font-size: 0.75rem; overflow-x: auto; line-height: 1.6; }
-
-    .stack-gap { display: flex; flex-direction: column; gap: 1.5rem; }
-    .progress-wrap { display: flex; flex-direction: column; gap: 0.45rem; margin-bottom: 1rem; }
-    .progress-meta { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); }
-    .progress-track { width: 100%; height: 0.6rem; border-radius: 9999px; background: var(--surface-alt); overflow: hidden; }
-    .progress-fill { height: 100%; width: 0%; background: linear-gradient(to left, #10b981, #6366f1); transition: width 0.3s ease; }
-
-    .provision-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
-    @media (min-width: 640px) { .provision-grid { grid-template-columns: repeat(2, 1fr); } }
-    @media (min-width: 1024px) { .provision-grid { grid-template-columns: repeat(4, 1fr); } }
-
-    .filter-select { padding: 0.35rem 0.65rem; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.75rem; }
-    .table-wrap { overflow-x: auto; }
-    .audit-table { width: 100%; border-collapse: collapse; text-align: right; font-size: 0.78rem; }
-    .audit-table th, .audit-table td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--border); }
-    .audit-table th { color: var(--text-muted); font-weight: 600; }
-  </style>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard-premium.css') }}?v=1">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="same-origin">
+  <meta name="theme-color" content="#101b32">
+  <title>Business Studio | סביבת פיתוח</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/provisioning.css') }}?v=3">
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard-premium.css') }}?v=3">
+  <script defer src="{{ url_for('static', filename='js/provisioning.js') }}?v=2"></script>
 </head>
-<body>
-  <div class="app-shell">
-    <header class="topbar">
-      <div class="topbar-inner">
-        <div class="brand">
-          <div class="brand-icon" aria-hidden="true">
-            <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-            </svg>
-          </div>
-          <span class="brand-title">Developer Studio</span>
-          <span class="badge-dev">DEVELOPER ONLY</span>
-        </div>
-
-        <div class="theme-switcher" role="group" aria-label="ערכת צבעים">
-          <button type="button" data-theme="system" class="theme-btn" title="התאם להגדרות המכשיר">מכשיר</button>
-          <button type="button" data-theme="light" class="theme-btn" title="מצב בהיר">בהיר</button>
-          <button type="button" data-theme="dark" class="theme-btn" title="מצב כהה">כהה</button>
+<body class="studio-body">
+{% if login_required or not session.get('developer') %}
+  <main class="login-page">
+    <section class="login-card">
+      <div class="login-brand">
+        <span class="login-mark" aria-hidden="true">B</span>
+        <div>
+          <div class="login-brand-title">Business Studio</div>
+          <div class="login-brand-subtitle">סביבת פיתוח פרטית</div>
         </div>
       </div>
-    </header>
-
-    <div id="toastContainer" class="toast-container"></div>
-
-    {% if not session.get('developer') %}
-    <main class="login-main">
-      <div class="login-card">
-        <div class="card-accent"></div>
-
-        <div class="card-top-row">
-          <span class="badge-dev">
-            <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
-            </svg>
-            DEVELOPER ONLY
-          </span>
-          <span class="route-tag">/login</span>
+      <div class="login-eyebrow">DEVELOPER ACCESS</div>
+      <h1>כניסה למרכז הפיתוח</h1>
+      <p class="login-intro">התחברות מאובטחת לאשף הפנימי להקמת מערכות עסקיות.</p>
+      {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+          {% for category, message in messages %}
+            <div class="notice {{ 'error' if category == 'error' else 'success' }}" role="alert">{{ message }}</div>
+          {% endfor %}
+        {% endif %}
+      {% endwith %}
+      <form method="post" action="{{ url_for('login') }}" class="login-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <label for="loginPassword">סיסמת גישה</label>
+        <input id="loginPassword" name="password" type="password" autocomplete="current-password" required autofocus>
+        <button class="button button-primary button-wide" type="submit">כניסה למערכת <span aria-hidden="true">←</span></button>
+      </form>
+      <div class="login-security"><span class="security-dot"></span> גישה למפתח בלבד · חיבור מאובטח</div>
+    </section>
+  </main>
+{% else %}
+  <div class="shell">
+    <div class="workspace">
+      <aside class="sidebar" aria-label="ניווט אשף ההקמה">
+        <div class="brandmark">
+          <span class="brand-icon" aria-hidden="true">B</span>
+          <span class="brand-copy"><strong>Business Studio</strong><small>DEVELOPER WORKSPACE</small></span>
         </div>
+        <div class="sidebar-project">
+          <span class="sidebar-project-icon" aria-hidden="true">✦</span>
+          <span><strong>סביבת פיתוח</strong><small>ניהול פרויקטים עסקיים</small></span>
+        </div>
+        <div class="nav-label">תהליך הקמה</div>
+        <nav class="side-nav">
+          <a href="#business-profile" class="active"><span class="nav-symbol">01</span><span>פרטי העסק</span></a>
+          <a href="#brand-profile"><span class="nav-symbol">02</span><span>מיתוג ופרטי קשר</span></a>
+          <a href="#modules"><span class="nav-symbol">03</span><span>מודולים ויכולות</span></a>
+          <a href="#infrastructure"><span class="nav-symbol">04</span><span>תשתיות והקמה</span></a>
+          <a href="#plan-review"><span class="nav-symbol">✓</span><span>תוכנית ואימות</span></a>
+        </nav>
+        <div class="sidebar-bottom">
+          <div class="private-tag"><span class="private-dot"></span> סביבת מפתח פרטית</div>
+          <p class="sidebar-note">המשאבים נוצרים רק לאחר אישור מפורש ובדיקת עלויות.</p>
+          <div class="sidebar-version">BUSINESS APP STARTER <span>v1.0</span></div>
+        </div>
+      </aside>
 
-        <h1 class="login-title">כניסה לכלי המפתח</h1>
-        <p class="login-subtitle">
-          גישה פרטית למפתח בלבד. אין למסור את הסיסמה או לשתף את הקישור.
-        </p>
+      <main class="workspace-main">
+        <header class="top">
+          <div class="top-left">
+            <div class="eyebrow">DEVELOPER WORKSPACE <span class="eyebrow-line"></span> SETUP WIZARD</div>
+            <h1 class="title">Business Studio</h1>
+            <p class="subtitle">מרכז הפיתוח שלך — מתכנון עסקי ועד מערכת עובדת בענן.</p>
+          </div>
+          <div class="top-actions">
+            <span class="environment-chip"><span class="environment-dot"></span>{{ 'סביבה מרוחקת מאובטחת' if remote_access else 'סביבה מקומית' }}</span>
+            <span class="user-chip"><span class="user-avatar">מ</span><span>מפתח מערכת</span></span>
+            <form method="post" action="{{ url_for('logout') }}">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+              <button class="button button-quiet" type="submit" aria-label="התנתקות">יציאה ↗</button>
+            </form>
+          </div>
+        </header>
 
         {% if error %}
-        <div class="error-box">{{ error }}</div>
+          <div class="notice error" role="alert"><strong>נדרשת תשומת לב</strong><span>{{ error }}</span></div>
+        {% endif %}
+        {% if plan %}
+          <div class="notice success"><strong>תוכנית Dry Run מוכנה</strong><span>No provider API was called — לא נוצרו משאבים ולא בוצעו פעולות כתיבה.</span></div>
+        {% endif %}
+        {% if preflight_report %}
+          <div class="notice success"><strong>PREFLIGHT</strong><span>בדיקת היתכנות הסתיימה. הדוח לקריאה בלבד: <code>"writes_performed": false</code>.</span></div>
+        {% endif %}
+        {% if execution_result %}
+          <div class="notice success"><strong>PROVISIONING RESULT</strong><span>תוצאת תהליך ההקמה התקבלה.</span></div>
         {% endif %}
 
-        <form method="POST" action="/login" class="login-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-          <div class="field-group">
-            <label for="loginPassword" class="field-label">סיסמת גישה</label>
-            <div class="input-wrap">
-              <input
-                id="loginPassword"
-                name="password"
-                type="password"
-                required
-                autocomplete="current-password"
-                placeholder="הזן סיסמת מפתח"
-                class="field-input has-icon"
-              />
-              <button id="togglePwdBtn" type="button" aria-label="הצג או הסתר סיסמה" class="pwd-toggle">
-                <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                  <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                </svg>
-              </button>
+        <section class="wizard-intro">
+          <div>
+            <div class="intro-kicker">WORKFLOW OVERVIEW</div>
+            <h2>מקימים פרויקט חדש, בצורה מסודרת.</h2>
+            <p>מגדירים את העסק, בוחרים יכולות, בודקים חיבורים ורק אז מאשרים יצירת תשתיות.</p>
+          </div>
+          <div class="intro-stat"><strong>4</strong><span>שלבים ממוקדים</span></div>
+        </section>
+
+        <form method="post" action="{{ url_for('wizard') }}" id="wizardForm" class="wizard-form" novalidate>
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+          <div class="wizard-progress">
+            <div class="wizard-progress-top"><span class="wizard-progress-title">התקדמות ההקמה</span><span data-wizard-status>שלב 1 מתוך 4</span></div>
+            <div class="progress-track"><span data-progress></span></div>
+            <div class="wizard-steps" aria-label="שלבי האשף">
+              <div class="wizard-step-label active" data-step-label="0"><b>01</b><span>פרטי העסק</span></div>
+              <div class="wizard-step-label" data-step-label="1"><b>02</b><span>מיתוג</span></div>
+              <div class="wizard-step-label" data-step-label="2"><b>03</b><span>מודולים</span></div>
+              <div class="wizard-step-label" data-step-label="3"><b>04</b><span>תשתיות</span></div>
             </div>
           </div>
 
-          <button type="submit" class="btn-primary full-width">
-            <span>כניסה לאשף</span>
-            <svg width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
-            </svg>
-          </button>
+          <div class="step-heading">
+            <div class="step-heading-number" data-step-number>01</div>
+            <div><div class="step-heading-kicker">SETUP STEP</div><h2 data-step-title>פרטי העסק</h2><p data-step-description>מגדירים את זהות הפרויקט והעסק.</p></div>
+          </div>
+
+          <section class="wizard-step" data-wizard-step="0" id="business-profile" aria-label="פרטי העסק">
+            <div class="panel panel-main">
+              <div class="panel-heading"><div><div class="section-kicker">01 / BUSINESS PROFILE</div><h2>פרטי העסק והפרויקט</h2><p class="panel-description">הנתונים האלה ישמשו ליצירת המאגר, מסד הנתונים ושירות ההרצה.</p></div><span class="status-chip">נדרש</span></div>
+              <div class="grid">
+                <div class="field"><label for="businessName">שם העסק *</label><input id="businessName" name="business_name" value="{{ form_values.business_name|default('') }}" maxlength="120" placeholder="לדוגמה: קליניקת אוריון" required></div>
+                <div class="field"><label for="projectSlug">מזהה פרויקט (Slug) *</label><input id="projectSlug" name="slug" class="ltr-input mono-text" value="{{ form_values.slug|default('') }}" pattern="[a-z0-9]+(-[a-z0-9]+)*" placeholder="orion-clinic" required><small class="hint">אותיות אנגליות קטנות, מספרים ומקפים בלבד.</small></div>
+                <div class="field"><label for="businessCategory">תחום פעילות *</label><select id="businessCategory" name="category" required>{% for key, label in categories.items() %}<option value="{{ key }}" {% if form_values.category|default('services') == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+                <div class="field"><label>אזור פריסה</label><div class="readonly-field"><span class="readonly-icon">◎</span><span><strong>פרנקפורט · אירופה</strong><small>Render Frankfurt + Neon EU Central</small></span><span class="readonly-tag">FREE TIER</span></div></div>
+              </div>
+              <div class="field full-width"><label for="businessSummary">מה המערכת אמורה לנהל?</label><p class="field-note">בשלב זה המערכת מתמקדת בקליטת לידים מהאתר ומ־WhatsApp ובניהול הטיפול בהם.</p></div>
+            </div>
+          </section>
+
+          <section class="wizard-step" data-wizard-step="1" id="brand-profile" aria-label="מיתוג ופרטי קשר" hidden>
+            <div class="panel">
+              <div class="panel-heading"><div><div class="section-kicker">02 / BRAND & CONTACT</div><h2>מיתוג ופרטי קשר</h2><p class="panel-description">מגדירים את השפה החזותית ואת דרכי ההתקשרות של העסק.</p></div><span class="status-chip">התאמה אישית</span></div>
+              <div class="grid">
+                <div class="field full"><label for="tagline">משפט מוביל / תיאור קצר</label><input id="tagline" name="tagline" value="{{ form_values.tagline|default('') }}" maxlength="160" placeholder="פתרונות מקצועיים לבית ולעסק"></div>
+                <div class="field"><label for="phone">טלפון</label><input id="phone" name="phone" value="{{ form_values.phone|default('') }}" placeholder="050-123-4567" inputmode="tel"></div>
+                <div class="field"><label for="whatsappNumber">מספר WhatsApp</label><input id="whatsappNumber" name="whatsapp_number" value="{{ form_values.whatsapp_number|default('') }}" placeholder="050-123-4567" inputmode="tel"></div>
+                <div class="field"><label for="address">כתובת העסק</label><input id="address" name="address" value="{{ form_values.address|default('') }}" maxlength="160" placeholder="רחוב ומספר, עיר"></div>
+                <div class="field"><label for="serviceArea">אזורי שירות</label><input id="serviceArea" name="service_area" value="{{ form_values.service_area|default('') }}" maxlength="160" placeholder="בית שמש והסביבה"></div>
+                <div class="field"><label for="primaryColor">צבע ראשי</label><div class="color-field"><input id="primaryColor" type="color" name="primary_color" value="{{ form_values.primary_color|default('#172b25') }}"><span>צבע מותג מוביל</span></div></div>
+                <div class="field"><label for="accentColor">צבע משלים</label><div class="color-field"><input id="accentColor" type="color" name="accent_color" value="{{ form_values.accent_color|default('#b88a54') }}"><span>כפתורים והדגשות</span></div></div>
+                <div class="field"><label for="fontFamily">גופן מערכת</label><select id="fontFamily" name="font_family">{% for font in ['Heebo','Assistant','Rubik','Arial'] %}<option value="{{ font }}" {% if form_values.font_family|default('Heebo') == font %}selected{% endif %}>{{ font }}</option>{% endfor %}</select></div>
+                <div class="field"><label for="services">שירותים עיקריים</label><input id="services" name="services" value="{{ form_values.services|default([])|join(', ') }}" placeholder="פרגולות, דקים"><small class="hint">עד 6 שירותים, מופרדים בפסיקים.</small></div>
+              </div>
+              <div class="brand-preview"><span class="brand-preview-mark">Aa</span><div><strong>תצוגה מקדימה של המותג</strong><small>הצבעים והגופן יועברו לתבנית האתר שייווצר.</small></div><span class="brand-preview-swatch" id="brandSwatch"></span></div>
+            </div>
+          </section>
+
+          <section class="wizard-step" data-wizard-step="2" id="modules" aria-label="בחירת מודולים" hidden>
+            <div class="panel">
+              <div class="panel-heading"><div><div class="section-kicker">03 / APPLICATION MODULES</div><h2>יכולות ומודולים</h2><p class="panel-description">בחר רק יכולות שהעסק צריך. מודולים שדורשים חיבור חיצוני יסומנו בהתאם.</p></div><span class="status-chip">בחירה גמישה</span></div>
+              <div class="module-grid">
+                {% for key, module in modules.items() %}
+                  <label class="module-option">
+                    <input type="checkbox" name="modules" value="{{ key }}" {% if key in form_values.modules|default(['lead_capture','lead_management']) %}checked{% endif %}>
+                    <span class="module-check" aria-hidden="true"></span>
+                    <span class="module-copy"><strong>{{ module.label }}</strong><small>{{ module.description }}</small></span>
+                    <span class="module-state {{ 'available' if module.status == 'available' else 'setup' }}">{{ 'מוכן' if module.status == 'available' else 'דורש הגדרה' }}</span>
+                  </label>
+                {% endfor %}
+              </div>
+              <div class="module-footnote"><span>ⓘ</span><span>WhatsApp, Gemini ואוטומציות דורשים חשבונות וסודות חיצוניים. הבחירה אינה מחברת שירותים אוטומטית.</span></div>
+            </div>
+          </section>
+
+          <section class="wizard-step" data-wizard-step="3" id="infrastructure" aria-label="תשתיות ותוכנית הקמה" hidden>
+            <div class="panel">
+              <div class="panel-heading"><div><div class="section-kicker">04 / INFRASTRUCTURE</div><h2>תשתיות, חיבורים ואישור</h2><p class="panel-description">כל המשאבים ייווצרו בנפרד עבור העסק. אין גישה לנתוני פרויקטים אחרים.</p></div><span class="status-chip success">מבודד לפרויקט</span></div>
+              <div class="provider-grid">
+                {% for provider, title, description in [('github','GitHub','מאגר קוד פרטי לפרויקט'),('neon','Neon','מסד PostgreSQL מבודד'),('render','Render','שירות Web ופריסה אוטומטית')] %}
+                  {% set result = connection_results.get(provider) if connection_results else none %}
+                  <article class="provider-card">
+                    <div class="provider-head"><span class="provider-logo">{{ provider[:1]|upper }}</span><span class="status-chip {{ 'success' if result and result.connected else 'warning' if result else '' }}">{{ 'מחובר' if result and result.connected else 'נדרש תיקון' if result else 'ממתין לבדיקה' }}</span></div>
+                    <strong class="provider-name">{{ title }}</strong><p class="provider-caption">{{ description }}</p>
+                    {% if result and result.message %}<small class="provider-message">{{ result.message }}</small>{% endif %}
+                    <span class="provider-env">{{ provider|upper }}</span>
+                  </article>
+                {% endfor %}
+              </div>
+              <div class="infrastructure-summary">
+                <div><span class="summary-icon">⌘</span><span><strong>GitHub Repository</strong><small class="ltr-input">{{ form_values.slug|default('your-project') }}</small></span></div>
+                <div><span class="summary-icon">▤</span><span><strong>Neon PostgreSQL</strong><small>מסד נתונים נפרד · EU Central</small></span></div>
+                <div><span class="summary-icon">↗</span><span><strong>Render Web Service</strong><small>Free instance · Frankfurt</small></span></div>
+              </div>
+              <div class="approval-panel">
+                <div class="approval-heading"><span class="approval-icon">✓</span><div><strong>אישור לפני יצירת משאבים</strong><small>Dry Run ו־Preflight אינם יוצרים או משנים משאבים.</small></div></div>
+                <label class="confirm-option"><input type="checkbox" name="confirm_zero_cost" value="yes"><span>אני מאשר שהקמת Neon תתבצע רק לאחר אימות מסלול חינמי בעלות אפס.</span></label>
+                <div class="field"><label for="adminPassword">סיסמת מנהל לפרויקט החדש</label><input id="adminPassword" name="admin_password" type="password" autocomplete="new-password" minlength="16" placeholder="סיסמה חזקה וייחודית לפרויקט"><small class="hint">לא תוצג בתוצאות, לא תישמר בלוגים ולא תישלח לפני אישור ההקמה.</small></div>
+                <input type="hidden" name="approval" value="CREATE">
+              </div>
+              <div class="action-grid">
+                <button class="button button-secondary" type="submit" formaction="{{ url_for('wizard') }}" data-wizard-submit>הפק תוכנית Dry Run</button>
+                <button class="button button-secondary" type="submit" formaction="{{ url_for('preflight_provisioning') }}">הרץ Preflight לקריאה בלבד</button>
+                <button class="button button-primary" type="submit" formaction="{{ url_for('execute_provisioning') }}">אשר והתחל הקמה</button>
+                <button class="button button-quiet" type="submit" form="connectionsForm">בדוק חיבורי ספקים</button>
+              </div>
+            </div>
+          </section>
+
+          <div class="wizard-controls">
+            <button class="button button-secondary" type="button" data-wizard-prev hidden>← חזרה</button>
+            <span class="wizard-status" data-wizard-status>שלב 1 מתוך 4</span>
+            <button class="button button-primary" type="button" data-wizard-next>המשך לשלב הבא ←</button>
+          </div>
         </form>
 
-        <div class="card-footer">
-          <span>תוקף סשן: 20 דקות</span>
-          <span>הגנת CSRF + Rate Limit פעילים</span>
-        </div>
-      </div>
-    </main>
+        <form id="connectionsForm" method="post" action="{{ url_for('check_connections') }}">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        </form>
 
-    {% else %}
-    <main class="wizard-main">
-      <section class="wizard-banner">
-        <div>
-          <div class="wizard-heading-row">
-            <h1 class="wizard-title">Business App Starter — אשף הקמה</h1>
-            <span class="badge-ok">מחובר כמפתח</span>
-          </div>
-          <p class="wizard-subtitle">
-            הקמה מבודדת של פרויקט עסקי חדש: מאגר GitHub, מסד נתונים Neon ושירות Render נפרדים לכל לקוח.
-          </p>
-        </div>
-        <div class="banner-actions">
-          <div class="session-box">
-            <div class="session-label">סשן פעיל</div>
-            <div id="sessionTimer" class="session-timer">20:00</div>
-          </div>
-          <form method="POST" action="/logout">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
-            <button type="submit" class="btn-secondary">התנתקות</button>
-          </form>
-        </div>
-      </section>
+        <section class="panel result-panel" id="plan-review">
+          <div class="panel-heading"><div><div class="section-kicker">PLAN & VALIDATION</div><h2>תוכנית הקמה ותוצאות בדיקה</h2><p class="panel-description">כל תוצאה מוצגת כאן לפני ביצוע פעולות בענן.</p></div><span class="status-chip">Audit trail</span></div>
+          {% if plan %}
+            <div class="result-banner success"><strong>תוכנית Dry Run נוצרה בהצלחה</strong><span>הנתונים נבדקו מקומית בלבד. No provider API was called.</span></div>
+            <pre>{{ plan|tojson(indent=2) }}</pre>
+          {% else %}
+            <div class="empty-state"><span class="empty-state-icon">⌁</span><strong>עדיין אין תוכנית להצגה</strong><span>השלם את ארבעת השלבים והפק תוכנית Dry Run כדי לראות את המשאבים המתוכננים.</span></div>
+          {% endif %}
+          {% if preflight_report %}
+            <h3 class="result-subtitle">PREFLIGHT REPORT</h3>
+            <pre>{{ preflight_report|tojson(indent=2) }}</pre>
+          {% endif %}
+          {% if execution_result %}
+            <h3 class="result-subtitle">PROVISIONING RESULT</h3>
+            <pre>{{ execution_result|tojson(indent=2) }}</pre>
+          {% endif %}
+        </section>
 
-      <nav aria-label="שלבי האשף" class="stepper-grid">
-        <button type="button" data-step="1" class="step-tab"></button>
-        <button type="button" data-step="2" class="step-tab"></button>
-        <button type="button" data-step="3" class="step-tab"></button>
-        <button type="button" data-step="4" class="step-tab"></button>
-      </nav>
-
-      <section id="stepPanel1" class="step-panel step1-layout">
-        <div class="card panel-main">
-          <div class="panel-header">
-            <h2 class="panel-title">1. הגדרת פרויקט הלקוח</h2>
-            <span class="muted-note">בידוד מלא לכל לקוח</span>
-          </div>
-
-          <div class="form-grid">
-            <div>
-              <label for="clientName" class="field-label">שם העסק / הלקוח</label>
-              <input id="clientName" type="text" value="קליניקת אוריון" class="field-input" />
-            </div>
-            <div>
-              <label for="projectSlug" class="field-label">מזהה פרויקט (Slug)</label>
-              <input id="projectSlug" type="text" value="orion-clinic-leads" class="field-input ltr-input mono-accent" />
-            </div>
-            <div>
-              <label for="githubOrg" class="field-label">ארגון / משתמש GitHub</label>
-              <input id="githubOrg" type="text" value="mv89-heb" class="field-input ltr-input mono-text" />
-            </div>
-            <div>
-              <label for="renderRegion" class="field-label">אזור פריסה (Render Region)</label>
-              <select id="renderRegion" class="field-input">
-                <option value="frankfurt">Frankfurt (EU Central)</option>
-                <option value="oregon">Oregon (US West)</option>
-                <option value="ohio">Ohio (US East)</option>
-              </select>
-            </div>
-          </div>
-
-          <div>
-            <div class="field-label">מודולים ואינטגרציות לפרויקט</div>
-            <div class="modules-grid">
-              <label class="module-card">
-                <input id="modWhatsapp" type="checkbox" checked />
-                <div>
-                  <div class="module-title">WhatsApp Cloud API</div>
-                  <div class="module-desc">קליטת לידים ישירות מהוואטסאפ</div>
-                </div>
-              </label>
-              <label class="module-card">
-                <input id="modGemini" type="checkbox" checked />
-                <div>
-                  <div class="module-title">עיבוד Gemini AI</div>
-                  <div class="module-desc">סיווג ותקצור פניות נכנסות</div>
-                </div>
-              </label>
-              <label class="module-card">
-                <input id="modAutomation" type="checkbox" />
-                <div>
-                  <div class="module-title">Make / n8n Webhook</div>
-                  <div class="module-desc">טריגר אוטומטי ללידים מאושרים</div>
-                </div>
-              </label>
-            </div>
-          </div>
-
-          <div class="panel-actions end">
-            <button type="button" id="btnToStep2" class="btn-primary">המשך לבדיקות Preflight ←</button>
-          </div>
-        </div>
-
-        <aside class="card panel-side">
-          <h3 class="side-title">תצוגת תוצרים צפויה</h3>
-          <div class="preview-list">
-            <div class="preview-item">
-              <div class="preview-label">מאגר GitHub חדש</div>
-              <div id="previewRepo" class="preview-val ltr-input mono-accent">mv89-heb/orion-clinic-leads</div>
-            </div>
-            <div class="preview-item">
-              <div class="preview-label">מסד נתונים Neon</div>
-              <div id="previewNeon" class="preview-val ltr-input mono-ok">neon-db-orion-clinic-leads</div>
-            </div>
-            <div class="preview-item">
-              <div class="preview-label">שירות Render</div>
-              <div id="previewRender" class="preview-val ltr-input mono-cyan">https://orion-clinic-leads.onrender.com</div>
-            </div>
-            <div class="preview-item">
-              <div class="preview-label">מודולים פעילים</div>
-              <div id="previewModules" class="preview-val">WhatsApp Cloud API, Gemini AI</div>
-            </div>
-          </div>
-        </aside>
-      </section>
-
-      <section id="stepPanel2" class="step-panel card hidden">
-        <div class="panel-header-wrap">
-          <div>
-            <h2 class="panel-title">2. בדיקות Preflight (קריאה בלבד)</h2>
-            <p class="panel-subtitle">אימות חיבורים, טוקנים והרשאות מול המתאמים לפני יצירת משאבים.</p>
-          </div>
-          <button id="btnRunPreflight" type="button" class="btn-emerald">הרץ בדיקות Preflight</button>
-        </div>
-
-        <div id="preflightGrid" class="preflight-grid"></div>
-
-        <div class="panel-actions between">
-          <button type="button" data-goto="1" class="nav-back btn-secondary">→ חזרה להגדרות</button>
-          <button id="btnToStep3" type="button" class="btn-primary">המשך לתוכנית Dry Run ←</button>
-        </div>
-      </section>
-
-      <section id="stepPanel3" class="step-panel card hidden">
-        <div class="panel-header-wrap">
-          <div>
-            <h2 class="panel-title">3. תוכנית הקמה (Dry Run)</h2>
-            <p class="panel-subtitle">סקירה מלאה של המשאבים ומשתני הסביבה שיוגדרו לפני ביצוע בפועל.</p>
-          </div>
-          <button id="btnGenerateDryRun" type="button" class="btn-primary">רענן תוכנית Dry Run</button>
-        </div>
-
-        <div class="dryrun-grid">
-          <div class="subcard">
-            <div class="subcard-title">פעולות מתוכננות</div>
-            <ul id="dryRunActions" class="dryrun-list"></ul>
-          </div>
-          <div class="subcard">
-            <div class="subcard-header">
-              <div class="subcard-title">משתני סביבה נדרשים לשירות</div>
-              <button id="btnCopyEnv" type="button" class="link-btn">העתק תבנית ENV</button>
-            </div>
-            <pre id="dryRunEnvBlock" class="env-pre ltr-input"></pre>
-          </div>
-        </div>
-
-        <div class="panel-actions between">
-          <button type="button" data-goto="2" class="nav-back btn-secondary">→ חזרה ל-Preflight</button>
-          <button id="btnToStep4" type="button" class="btn-primary">המשך להקמה ויומן Audit ←</button>
-        </div>
-      </section>
-
-      <section id="stepPanel4" class="step-panel hidden stack-gap">
-        <div class="card">
-          <div class="panel-header-wrap">
-            <div>
-              <h2 class="panel-title">4. הקמה מבוקרת (Provisioning)</h2>
-              <p class="panel-subtitle">הרצת שלבי ההקמה באופן מבוקר ושמירת לוג פעילות מקומי.</p>
-            </div>
-            <button id="btnRunProvision" type="button" class="btn-emerald">הפעל הקמה</button>
-          </div>
-
-          <div class="progress-wrap">
-            <div class="progress-meta">
-              <span id="provisionStatusText">ממתין להפעלה</span>
-              <span id="provisionPercent" class="mono-text">0%</span>
-            </div>
-            <div class="progress-track">
-              <div id="provisionBar" class="progress-fill"></div>
-            </div>
-          </div>
-
-          <div id="provisionStepsList" class="provision-grid"></div>
-        </div>
-
-        <div class="card">
-          <div class="panel-header-wrap">
-            <h3 class="subcard-title">יומן Audit מקומי</h3>
-            <select id="auditFilter" class="filter-select">
-              <option value="all">כל האירועים</option>
-              <option value="auth">אימות והתחברות</option>
-              <option value="preflight">בדיקות Preflight</option>
-              <option value="provision">הקמה ו-Dry Run</option>
-            </select>
-          </div>
-          <div class="table-wrap">
-            <table class="audit-table">
-              <thead>
-                <tr>
-                  <th>שעה</th>
-                  <th>אירוע</th>
-                  <th>פירוט</th>
-                  <th>סטטוס</th>
-                </tr>
-              </thead>
-              <tbody id="auditTableBody"></tbody>
-            </table>
-          </div>
-        </div>
-
-        <div class="panel-actions start">
-          <button type="button" data-goto="3" class="nav-back btn-secondary">→ חזרה ל-Dry Run</button>
-        </div>
-      </section>
-    </main>
-    {% endif %}
+        <footer class="footer"><span>Business Studio</span><span>כל פעולת כתיבה דורשת אישור מפורש · אין חשיפת סודות בממשק</span></footer>
+      </main>
+    </div>
   </div>
-
-  <script>
-    (function () {
-      let currentTheme = 'system';
-      try {
-        const saved = localStorage.getItem('dev_studio_theme');
-        if (saved === 'light' || saved === 'dark' || saved === 'system') {
-          currentTheme = saved;
-        }
-      } catch (_) {}
-
-      const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
-
-      function applyTheme() {
-        const systemDark = mq ? mq.matches : true;
-        const useDark = currentTheme === 'dark' || (currentTheme === 'system' && systemDark);
-        document.documentElement.classList.toggle('dark', useDark);
-
-        document.querySelectorAll('.theme-btn').forEach(function (btn) {
-          btn.classList.toggle('active', btn.dataset.theme === currentTheme);
-        });
-      }
-
-      document.querySelectorAll('.theme-btn').forEach(function (btn) {
-        btn.addEventListener('click', function () {
-          currentTheme = btn.dataset.theme;
-          try {
-            localStorage.setItem('dev_studio_theme', currentTheme);
-          } catch (_) {}
-          applyTheme();
-        });
-      });
-
-      if (mq) {
-        const onChange = function () {
-          if (currentTheme === 'system') applyTheme();
-        };
-        if (mq.addEventListener) mq.addEventListener('change', onChange);
-        else if (mq.addListener) mq.addListener(onChange);
-      }
-
-      const togglePwdBtn = document.getElementById('togglePwdBtn');
-      if (togglePwdBtn) {
-        togglePwdBtn.addEventListener('click', function () {
-          const input = document.getElementById('loginPassword');
-          if (input) input.type = input.type === 'password' ? 'text' : 'password';
-        });
-      }
-
-      applyTheme();
-
-      const stepTabs = document.querySelectorAll('.step-tab');
-      if (!stepTabs.length) return;
-
-      const state = {
-        step: 1,
-        sessionSeconds: 1200,
-        preflightAdapters: [
-          { id: 'github', name: 'GitHub API', detail: 'בדיקת PAT והרשאות יצירת מאגר', status: 'ממתין' },
-          { id: 'neon', name: 'Neon Postgres API', detail: 'בדיקת מפתח וזמינות פרויקט', status: 'ממתין' },
-          { id: 'render', name: 'Render API', detail: 'בדיקת Blueprint והרשאות שירות', status: 'ממתין' },
-        ],
-        provisionProgress: 0,
-        provisionRunning: false,
-        provisionStages: [
-          { id: 'repo', title: 'יצירת מאגר GitHub', done: false },
-          { id: 'db', title: 'הקמת מסד Neon', done: false },
-          { id: 'service', title: 'פריסת שירות Render', done: false },
-          { id: 'verify', title: 'אימות Healthz ו־CSRF', done: false },
-        ],
-        auditLogs: [
-          { time: new Date().toTimeString().slice(0, 8), category: 'auth', event: 'login_success', detail: 'התחברות מפתח אומתה', ok: true },
-        ],
-      };
-
-      let provisionInterval = null;
-
-      function showToast(msg) {
-        const container = document.getElementById('toastContainer');
-        if (!container) return;
-        const el = document.createElement('div');
-        el.className = 'toast-item';
-        el.textContent = msg;
-        container.appendChild(el);
-        setTimeout(function () {
-          el.style.opacity = '0';
-          setTimeout(function () { el.remove(); }, 300);
-        }, 3000);
-      }
-
-      function addAudit(category, event, detail, ok) {
-        state.auditLogs.unshift({ time: new Date().toTimeString().slice(0, 8), category, event, detail, ok });
-        renderAudit();
-      }
-
-      function renderStepper() {
-        const steps = [
-          { num: 1, title: 'הגדרת פרויקט', sub: 'שם, מאגר ואינטגרציות' },
-          { num: 2, title: 'בדיקות Preflight', sub: 'GitHub, Neon, Render' },
-          { num: 3, title: 'תוכנית Dry Run', sub: 'תצוגה מקדימה ו-ENV' },
-          { num: 4, title: 'הקמה ויומן Audit', sub: 'ביצוע מבוקר ומעקב' },
-        ];
-        stepTabs.forEach(function (btn, idx) {
-          const s = steps[idx];
-          btn.classList.toggle('active', state.step === s.num);
-          btn.innerHTML =
-            '<div class="step-tab-top"><span>0' + s.num + '</span><span class="step-dot"></span></div>' +
-            '<div class="step-tab-title">' + s.title + '</div>' +
-            '<div class="step-tab-sub">' + s.sub + '</div>';
-        });
-        document.querySelectorAll('.step-panel').forEach(function (panel, idx) {
-          panel.classList.toggle('hidden', state.step !== idx + 1);
-        });
-      }
-
-      function setStep(num) {
-        state.step = num;
-        renderStepper();
-        if (num === 3) renderDryRun();
-      }
-
-      function updateProjectPreview() {
-        const slug = (document.getElementById('projectSlug').value || 'client-app').trim();
-        const org = (document.getElementById('githubOrg').value || 'mv89-heb').trim();
-        document.getElementById('previewRepo').textContent = org + '/' + slug;
-        document.getElementById('previewNeon').textContent = 'neon-db-' + slug;
-        document.getElementById('previewRender').textContent = 'https://' + slug + '.onrender.com';
-
-        const mods = [];
-        if (document.getElementById('modWhatsapp').checked) mods.push('WhatsApp Cloud API');
-        if (document.getElementById('modGemini').checked) mods.push('Gemini AI');
-        if (document.getElementById('modAutomation').checked) mods.push('Make / n8n');
-        document.getElementById('previewModules').textContent = mods.length ? mods.join(', ') : 'אתר + טופס לידים בסיסי';
-      }
-
-      function renderPreflight() {
-        const grid = document.getElementById('preflightGrid');
-        grid.innerHTML = state.preflightAdapters.map(function (a) {
-          const cls = a.status === 'תקין' ? 'badge-ok' : 'badge-warn';
-          return (
-            '<div class="subcard">' +
-              '<div class="subcard-header">' +
-                '<span class="subcard-title ltr-input">' + a.name + '</span>' +
-                '<span class="' + cls + '">' + a.status + '</span>' +
-              '</div>' +
-              '<div class="muted-note">' + a.detail + '</div>' +
-            '</div>'
-          );
-        }).join('');
-      }
-
-      function renderDryRun() {
-        const slug = (document.getElementById('projectSlug').value || 'client-app').trim();
-        const org = (document.getElementById('githubOrg').value || 'mv89-heb').trim();
-        const region = document.getElementById('renderRegion').value;
-        const actions = [
-          'יצירת מאגר פרטי חדש בשם ' + org + '/' + slug + ' מתוך תבנית Starter',
-          'הקמת פרויקט ומסד נתונים מבודד ב־Neon (' + slug + ')',
-          'הגדרת שירות Web ב־Render באזור ' + region + ' עם gunicorn --workers 1',
-          'יצירת קובץ הגדרות .env מבודד ללקוח ללא שיתוף סודות בין פרויקטים',
-        ];
-        document.getElementById('dryRunActions').innerHTML = actions.map(function (item, i) {
-          return '<li class="dryrun-item"><span class="dryrun-num">' + (i + 1) + '</span><span>' + item + '</span></li>';
-        }).join('');
-
-        document.getElementById('dryRunEnvBlock').textContent =
-          'FLASK_ENV=production\n' +
-          'SECRET_KEY=<generated-64-char-secret>\n' +
-          'DATABASE_URL=postgresql://...@ep-...neon.tech/neondb\n' +
-          'ADMIN_PASSWORD_HASH=scrypt:32768:8:1$...\n' +
-          'WTF_CSRF_SSL_STRICT=False';
-      }
-
-      function renderProvision() {
-        document.getElementById('provisionBar').style.width = state.provisionProgress + '%';
-        document.getElementById('provisionPercent').textContent = state.provisionProgress + '%';
-        document.getElementById('provisionStatusText').textContent =
-          state.provisionProgress === 100 ? 'ההקמה הושלמה בהצלחה' : state.provisionRunning ? 'מריץ שלבי הקמה...' : 'ממתין להפעלה';
-
-        document.getElementById('provisionStepsList').innerHTML = state.provisionStages.map(function (st) {
-          return (
-            '<div class="subcard">' +
-              '<div class="subcard-header">' +
-                '<span class="' + (st.done ? 'badge-ok' : 'badge-warn') + '">' + (st.done ? 'הושלם' : 'ממתין') + '</span>' +
-              '</div>' +
-              '<div class="module-title">' + st.title + '</div>' +
-            '</div>'
-          );
-        }).join('');
-      }
-
-      function renderAudit() {
-        const filter = document.getElementById('auditFilter').value;
-        const rows = state.auditLogs.filter(function (l) { return filter === 'all' || l.category === filter; });
-        document.getElementById('auditTableBody').innerHTML = rows.map(function (r) {
-          return (
-            '<tr>' +
-              '<td class="mono-text">' + r.time + '</td>' +
-              '<td class="mono-accent">' + r.event + '</td>' +
-              '<td>' + r.detail + '</td>' +
-              '<td><span class="' + (r.ok ? 'badge-ok' : 'badge-warn') + '">' + (r.ok ? 'תקין' : 'שגיאה') + '</span></td>' +
-            '</tr>'
-          );
-        }).join('');
-      }
-
-      stepTabs.forEach(function (btn) {
-        btn.addEventListener('click', function () { setStep(Number(btn.dataset.step)); });
-      });
-      document.querySelectorAll('.nav-back').forEach(function (btn) {
-        btn.addEventListener('click', function () { setStep(Number(btn.dataset.goto)); });
-      });
-      document.getElementById('btnToStep2').addEventListener('click', function () { setStep(2); });
-      document.getElementById('btnToStep3').addEventListener('click', function () { setStep(3); });
-      document.getElementById('btnToStep4').addEventListener('click', function () { setStep(4); });
-
-      ['clientName', 'projectSlug', 'githubOrg', 'modWhatsapp', 'modGemini', 'modAutomation'].forEach(function (id) {
-        const el = document.getElementById(id);
-        if (el) {
-          el.addEventListener('input', updateProjectPreview);
-          el.addEventListener('change', updateProjectPreview);
-        }
-      });
-
-      document.getElementById('btnRunPreflight').addEventListener('click', function () {
-        state.preflightAdapters = state.preflightAdapters.map(function (a) { return Object.assign({}, a, { status: 'בודק...' }); });
-        renderPreflight();
-        setTimeout(function () {
-          state.preflightAdapters = state.preflightAdapters.map(function (a) { return Object.assign({}, a, { status: 'תקין' }); });
-          renderPreflight();
-          addAudit('preflight', 'preflight_ok', 'כל המתאמים תקינים', true);
-          showToast('בדיקות Preflight עברו בהצלחה');
-        }, 600);
-      });
-
-      document.getElementById('btnGenerateDryRun').addEventListener('click', function () {
-        renderDryRun();
-        addAudit('provision', 'dry_run_generated', 'תוכנית Dry Run עודכנה', true);
-        showToast('תוכנית Dry Run עודכנה');
-      });
-
-      document.getElementById('btnCopyEnv').addEventListener('click', function () {
-        const txt = document.getElementById('dryRunEnvBlock').textContent;
-        if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(txt).catch(function () {});
-        }
-        showToast('תבנית ENV הועתקה ללוח');
-      });
-
-      document.getElementById('btnRunProvision').addEventListener('click', function () {
-        if (state.provisionRunning) return;
-        if (provisionInterval) clearInterval(provisionInterval);
-        state.provisionRunning = true;
-        state.provisionProgress = 0;
-        state.provisionStages.forEach(function (s) { s.done = false; });
-        renderProvision();
-
-        let idx = 0;
-        provisionInterval = setInterval(function () {
-          if (idx < state.provisionStages.length) {
-            state.provisionStages[idx].done = true;
-            state.provisionProgress = (idx + 1) * 25;
-            idx += 1;
-            renderProvision();
-          } else {
-            clearInterval(provisionInterval);
-            state.provisionRunning = false;
-            renderProvision();
-            addAudit('provision', 'provision_completed', 'הקמת הפרויקט הסתיימה', true);
-            showToast('ההקמה הושלמה בהצלחה');
-          }
-        }, 550);
-      });
-
-      document.getElementById('auditFilter').addEventListener('change', renderAudit);
-
-      setInterval(function () {
-        if (state.sessionSeconds > 0) state.sessionSeconds -= 1;
-        const m = String(Math.floor(state.sessionSeconds / 60)).padStart(2, '0');
-        const s = String(state.sessionSeconds % 60).padStart(2, '0');
-        const timerEl = document.getElementById('sessionTimer');
-        if (timerEl) timerEl.textContent = m + ':' + s;
-      }, 1000);
-
-      renderStepper();
-      updateProjectPreview();
-      renderPreflight();
-      renderDryRun();
-      renderProvision();
-      renderAudit();
-    })();
-  </script>
+{% endif %}
 </body>
 </html>
