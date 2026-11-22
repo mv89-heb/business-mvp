@@ -35,6 +35,14 @@
       await load();
     } catch (error) { window.alert(error.message); button.disabled = false; }
   }
+  async function dispatch(id, button) {
+    button.disabled = true;
+    try {
+      const result = await api("/api/business-proposals/" + encodeURIComponent(id) + "/dispatch", {method:"POST", body:"{}"});
+      window.alert(result.result?.status === "SENT" ? "אירוע Make נשלח בהצלחה." : "האירוע נשאר בתור: " + (result.result?.status || "לא נשלח"));
+      await load();
+    } catch (error) { window.alert(error.message); button.disabled = false; }
+  }
   async function reject(id, button) {
     if (!window.confirm("לדחות את הצעת העסק?")) return;
     button.disabled = true;
@@ -52,6 +60,7 @@
       $("task-count").textContent = tasks.tasks.filter(t => t.status === "OPEN").length;
       const pbody = $("proposals-body"); pbody.replaceChildren();
       const pending = proposals.proposals.filter(p => p.status === "PENDING_APPROVAL");
+      const approved = proposals.proposals.filter(p => p.status === "APPROVED");
       if (!pending.length) { const tr=document.createElement("tr"); const td=document.createElement("td"); td.colSpan=6; td.className="empty"; td.textContent="אין הצעות שממתינות לאישור."; tr.append(td); pbody.append(tr); }
       pending.forEach(p => {
         const tr=document.createElement("tr"); cell(tr,p.name); cell(tr,p.industry); cell(tr,p.sourceBusinessId); cell(tr,p.createdAt ? new Date(p.createdAt).toLocaleString("he-IL") : "—"); const st=cell(tr,""); st.append(status("ממתין לאישור"));
@@ -59,6 +68,9 @@
         const yes=document.createElement("button"); yes.className="primary"; yes.textContent="אישור"; yes.addEventListener("click",()=>approve(p.id,yes));
         const no=document.createElement("button"); no.className="danger"; no.textContent="דחייה"; no.addEventListener("click",()=>reject(p.id,no)); actions.append(yes,no); pbody.append(tr);
       });
+      const abody=$("approved-body"); abody.replaceChildren();
+      if (!approved.length) { const tr=document.createElement("tr"); const td=document.createElement("td"); td.colSpan=5; td.className="empty"; td.textContent="עדיין אין עסקים שאושרו."; tr.append(td); abody.append(tr); }
+      approved.forEach(p=>{const tr=document.createElement("tr");cell(tr,p.name);cell(tr,p.slug);const bs=cell(tr,"");bs.append(status("פעיל",true));const ws=cell(tr,"");ws.append(status(p.webhookStatus==="SENT"?"נשלח":p.webhookStatus==="RETRY"?"ניסיון חוזר":"ממתין להגדרה"));const action=cell(tr,"");if(p.webhookStatus!=="SENT"){const retry=document.createElement("button");retry.className="secondary";retry.textContent="נסה שליחה";retry.addEventListener("click",()=>dispatch(p.id,retry));action.append(retry);}abody.append(tr);});
       const bbody=$("businesses-body"); bbody.replaceChildren();
       businesses.businesses.forEach(b=>{const tr=document.createElement("tr");cell(tr,b.name);cell(tr,b.slug);cell(tr,b.industry);cell(tr,b.isTemplate?"תבנית":"עסק");const st=cell(tr,"");st.append(status(b.status,b.status==="ACTIVE"));bbody.append(tr);});
       const tbody=$("tasks-body"); tbody.replaceChildren();

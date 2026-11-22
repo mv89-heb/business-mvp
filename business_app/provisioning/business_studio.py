@@ -13,6 +13,7 @@ import re
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+from urllib.parse import urlsplit
 from uuid import uuid4
 
 from flask import Blueprint, current_app, jsonify, render_template, request, session
@@ -334,6 +335,8 @@ class BusinessStudioStore:
         secret = (webhook_secret or os.getenv("MAKE_WEBHOOK_SECRET", "")).strip()
         if not url or not secret:
             return {"status": "QUEUED_CONFIGURATION_REQUIRED"}
+        if urlsplit(url).scheme != "https" or not urlsplit(url).hostname:
+            return {"status": "CONFIGURATION_ERROR", "message": "Make webhook must use HTTPS."}
         with self._connect() as conn:
             self._ensure_schema(conn)
             row = conn.execute("""
@@ -354,7 +357,7 @@ class BusinessStudioStore:
                 if not 200 <= response.status < 300:
                     raise RuntimeError("Make webhook returned a non-success response")
             status, error = "SENT", None
-        except (HTTPError, URLError, TimeoutError, RuntimeError):
+        except (HTTPError, URLError, TimeoutError, RuntimeError, OSError, ValueError):
             status, error = "RETRY", "Webhook delivery failed; event remains queued."
         with self._connect() as conn:
             self._ensure_schema(conn)
@@ -481,6 +484,8 @@ def create_business_studio_blueprint(store_factory=None):
     @bp.post("/api/createTask")
     def create_task():
         data = request.get_json(silent=True) or {}
+        if not isinstance(data, dict):
+            return jsonify({"error": "גוף הבקשה חייב להיות אובייקט JSON."}), 400
         title = str(data.get("title") or "").strip()
         description = str(data.get("description") or "").strip()
         proposal_id = data.get("proposalId")
