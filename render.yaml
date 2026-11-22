@@ -1,0 +1,23 @@
+services:
+  - type: web
+    name: eli-cohen-business-mvp
+    runtime: python
+    plan: free
+    buildCommand: pip install -r requirements.txt
+    startCommand: gunicorn --workers 2 --threads 4 --timeout 60 wsgi:app
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: DATABASE_URL
+        sync: false
+      - key: SECRET_KEY
+        generateValue: true
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: FLASK_ENV
+        value: production
+      - key: ESTIMATE_BASE_RATE
+        value: "0"
+      - key: ESTIMATE_RATE_PER_SQM
+        value: "0"
