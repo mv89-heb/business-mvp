@@ -1,7 +1,7 @@
 ﻿#requires -Version 5.1
 <#
 .SYNOPSIS
-  One-command, developer-only setup and verification for eli-cohen-business-mvp.
+  One-command, developer-only setup and verification for business-mvp.
 .DESCRIPTION
   Checks prerequisites, safely clones/updates main, creates an isolated Python
   environment, installs dependencies, runs tests, and creates a dry-run plan.
@@ -37,8 +37,8 @@ catch {
     # Do not prevent local setup if the host does not expose a Windows console.
 }
 
-$script:RepoUrl = "https://github.com/mv89-heb/eli-cohen-business-mvp.git"
-$script:RepoName = "eli-cohen-business-mvp"
+$script:RepoUrl = "https://github.com/mv89-heb/business-mvp.git"
+$script:RepoName = "business-mvp"
 $script:RepoDir = $null
 $script:PlanPath = $null
 $script:PythonLauncher = $null
