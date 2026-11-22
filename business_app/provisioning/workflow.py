@@ -27,42 +27,88 @@ def _utc_now():
 
 
 class WorkflowStateStore:
-    """Atomic local state storage; intentionally excludes all secret values."""
+    """Persist secret-free workflow state in Neon when configured, else use private local files."""
 
-    def __init__(self, root=None):
-        self.root = Path(root or Path.home() / ".business-app-provisioner" / "runs").expanduser()
-        self.root.mkdir(parents=True, exist_ok=True)
-        try:
-            os.chmod(self.root, 0o700)
-        except OSError:
-            pass
+    def __init__(self, root=None, database_url=None):
+        self.database_url = (database_url or os.getenv("DATABASE_URL", "")).strip() or None
+        self.root = None
+        if not self.database_url:
+            self.root = Path(root or Path.home() / ".business-app-provisioner" / "runs").expanduser()
+            self.root.mkdir(parents=True, exist_ok=True)
+            try:
+                os.chmod(self.root, 0o700)
+            except OSError:
+                pass
+
+    def _connect(self):
+        import psycopg
+        database_url = self.database_url
+        if database_url.startswith("postgres://"):
+            database_url = "postgresql://" + database_url[len("postgres://"):]
+        return psycopg.connect(database_url, connect_timeout=8)
+
+    @staticmethod
+    def _ensure_schema(connection):
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS provisioning_workflow_state (
+                workflow_id TEXT PRIMARY KEY, plan_id TEXT, business_slug TEXT,
+                status TEXT, step TEXT, state JSONB NOT NULL,
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(), error TEXT
+            )
+        """)
+        connection.execute("""
+            CREATE TABLE IF NOT EXISTS provisioning_audit_events (
+                id BIGSERIAL PRIMARY KEY, event VARCHAR(64) NOT NULL,
+                actor VARCHAR(64) NOT NULL DEFAULT 'developer',
+                details JSONB NOT NULL DEFAULT '{}'::jsonb,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        connection.execute("""
+            CREATE INDEX IF NOT EXISTS ix_provisioning_audit_created_at
+            ON provisioning_audit_events (created_at DESC)
+        """)
+
+    def check_connection(self):
+        if not self.database_url:
+            return True
+        with self._connect() as connection:
+            self._ensure_schema(connection)
+            connection.execute("SELECT 1")
+        return True
+
+    def append_audit_event(self, event, actor, details):
+        if not self.database_url:
+            raise RuntimeError("PostgreSQL is not configured for persistent audit storage")
+        allowed = {"provider", "connected", "plan_id", "business_slug", "status", "step", "reason"}
+        safe_details = {
+            key: value for key, value in details.items()
+            if key in allowed and isinstance(value, (str, int, float, bool, type(None)))
+        }
+        with self._connect() as connection:
+            self._ensure_schema(connection)
+            connection.execute(
+                "INSERT INTO provisioning_audit_events (event, actor, details) VALUES (%s, %s, %s::jsonb)",
+                (str(event)[:64], str(actor)[:64], json.dumps(safe_details, ensure_ascii=False)),
+            )
 
     def path_for(self, workflow_id):
         if not workflow_id or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in workflow_id):
             raise ValueError("Invalid workflow identifier")
+        if self.root is None:
+            raise RuntimeError("File paths are unavailable when PostgreSQL persistence is enabled")
         return self.root / f"{workflow_id}.json"
 
-    def load(self, workflow_id):
-        path = self.path_for(workflow_id)
-        if not path.exists():
-            return None
-        return json.loads(path.read_text(encoding="utf-8"))
-
-    def save(self, workflow_id, state):
-        path = self.path_for(workflow_id)
+    @staticmethod
+    def _safe_state(workflow_id, state):
         safe_state = {
-            "workflow_id": workflow_id,
-            "plan_id": state.get("plan_id"),
-            "business_slug": state.get("business_slug"),
-            "status": state.get("status"),
-            "step": state.get("step"),
-            "resources": state.get("resources", {}),
-            "history": state.get("history", []),
-            "updated_at": _utc_now(),
+            "workflow_id": workflow_id, "plan_id": state.get("plan_id"),
+            "business_slug": state.get("business_slug"), "status": state.get("status"),
+            "step": state.get("step"), "resources": state.get("resources", {}),
+            "history": state.get("history", []), "updated_at": _utc_now(),
             "error": state.get("error"),
         }
-        # Validate the complete persisted payload, not just a few known field names.
-        serialized = json.dumps(safe_state, ensure_ascii=False, indent=2) + "\n"
+        serialized = json.dumps(safe_state, ensure_ascii=False, separators=(",", ":"))
         forbidden_markers = (
             "DATABASE_URL", "ADMIN_PASSWORD", "SECRET_KEY", "NEON_API_KEY",
             "GITHUB_TOKEN", "RENDER_API_KEY", "AUTHORIZATION", "PRIVATE_KEY",
@@ -70,8 +116,47 @@ class WorkflowStateStore:
         )
         if any(marker in serialized.upper() for marker in forbidden_markers):
             raise ValueError("Refusing to persist provisioning state containing a secret marker")
-        if re.search(r"(?i)(?:postgres(?:ql)?://|bearer\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|(?:pbkdf2|scrypt):)", serialized):
+        if re.search(r"(?i)(?:postgres(?:ql)?://|bearer\\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|(?:pbkdf2|scrypt):)", serialized):
             raise ValueError("Refusing to persist provisioning state containing a credential or connection string")
+        return safe_state, serialized
+
+    def load(self, workflow_id):
+        if self.database_url:
+            if not workflow_id or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in workflow_id):
+                raise ValueError("Invalid workflow identifier")
+            with self._connect() as connection:
+                self._ensure_schema(connection)
+                row = connection.execute(
+                    "SELECT state::text FROM provisioning_workflow_state WHERE workflow_id = %s",
+                    (workflow_id,),
+                ).fetchone()
+            return json.loads(row[0]) if row else None
+        path = self.path_for(workflow_id)
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def save(self, workflow_id, state):
+        safe_state, serialized = self._safe_state(workflow_id, state)
+        if self.database_url:
+            with self._connect() as connection:
+                self._ensure_schema(connection)
+                connection.execute("""
+                    INSERT INTO provisioning_workflow_state
+                        (workflow_id, plan_id, business_slug, status, step, state, updated_at, error)
+                    VALUES (%s, %s, %s, %s, %s, %s::jsonb, NOW(), %s)
+                    ON CONFLICT (workflow_id) DO UPDATE SET
+                        plan_id = EXCLUDED.plan_id, business_slug = EXCLUDED.business_slug,
+                        status = EXCLUDED.status, step = EXCLUDED.step, state = EXCLUDED.state,
+                        updated_at = NOW(), error = EXCLUDED.error
+                """, (
+                    workflow_id, safe_state.get("plan_id"), safe_state.get("business_slug"),
+                    safe_state.get("status"), safe_state.get("step"), serialized,
+                    safe_state.get("error"),
+                ))
+            return workflow_id
+        path = self.path_for(workflow_id)
+        serialized = json.dumps(safe_state, ensure_ascii=False, indent=2) + "\\n"
         handle, temp_name = tempfile.mkstemp(prefix=f".{workflow_id}-", suffix=".tmp", dir=self.root)
         try:
             with os.fdopen(handle, "w", encoding="utf-8") as stream:
@@ -142,16 +227,28 @@ class ProvisioningWorkflow:
             known_resources = {}
             plan_id = plan.get("plan_id")
             if isinstance(plan_id, str) and re.fullmatch(r"[a-f0-9]{20}", plan_id):
-                state_path = Path.home() / ".business-app-provisioner" / "runs" / f"{plan_id}.json"
-                if state_path.is_file():
+                database_url = os.getenv("DATABASE_URL", "").strip()
+                if database_url:
                     try:
-                        saved_state = json.loads(state_path.read_text(encoding="utf-8"))
-                    except (OSError, json.JSONDecodeError):
-                        raise ProviderError("Local provisioning state could not be verified; refusing to reuse existing cloud resources") from None
+                        saved_state = WorkflowStateStore(database_url=database_url).load(plan_id)
+                    except Exception:
+                        raise ProviderError("Persistent provisioning state could not be verified; refusing to reuse existing cloud resources") from None
+                else:
+                    state_path = Path.home() / ".business-app-provisioner" / "runs" / f"{plan_id}.json"
+                    if not state_path.is_file():
+                        saved_state = None
+                    else:
+                        try:
+                            saved_state = json.loads(state_path.read_text(encoding="utf-8"))
+                        except (OSError, json.JSONDecodeError):
+                            raise ProviderError("Local provisioning state could not be verified; refusing to reuse existing cloud resources") from None
+                if saved_state is not None:
                     if not isinstance(saved_state, dict) or saved_state.get("plan_id") != plan_id or saved_state.get("business_slug") != slug:
-                        raise ProviderError("Local provisioning state does not match this business plan")
+                        raise ProviderError("Saved provisioning state does not match this business plan")
                     known_resources = saved_state.get("resources") or {}
                     if not isinstance(known_resources, dict):
+                        raise ProviderError("Provisioning resource ownership state is invalid")
+        if not isinstance(known_resources, dict):
                         raise ProviderError("Local provisioning resource ownership state is invalid")
         if not isinstance(known_resources, dict):
             raise ProviderError("Provisioning resource ownership state is invalid")
