@@ -200,3 +200,25 @@ def test_neon_project_creation_requires_explicit_free_tier_verification():
     with pytest.raises(Exception, match="Verify Neon free-tier eligibility"):
         NeonProvider("token", opener=opener).ensure_project("app")
     assert len(opener.requests) == 1
+
+def test_github_organization_repo_uses_organization_endpoint():
+    opener = FakeOpener([
+        HTTPError("https://api.github.com/repos/acme/new-app", 404, "not found", {}, BytesIO(b"{}")),
+        {"login": "mv89-heb"},
+        {"id": 77, "private": True, "full_name": "acme/new-app"},
+    ])
+    result = GitHubProvider("token", opener=opener).ensure_private_repository("acme", "new-app")
+    assert result["created"] is True
+    assert opener.requests[-1][0].full_url.endswith("/orgs/acme/repos")
+
+
+def test_render_refuses_existing_paid_service_without_mutation():
+    opener = FakeOpener([[
+        {"service": {"id": "srv-paid", "name": "app", "repo": "https://github.com/a/b",
+                     "type": "web_service", "serviceDetails": {"plan": "starter"}}]
+    ])
+    with pytest.raises(Exception, match="not on the Free plan"):
+        RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
+            name="app", repository_url="https://github.com/a/b"
+        )
+    assert len(opener.requests) == 1
