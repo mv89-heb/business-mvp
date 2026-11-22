@@ -254,6 +254,18 @@ class ProvisioningWorkflow:
             }
             record("render_service", "completed", state["resources"]["render"])
 
+            # A retry may discover a service created by an earlier run whose
+            # response/state write was interrupted. Refresh its required runtime
+            # configuration before checking health; otherwise old credentials
+            # (or a different Neon project) could remain active indefinitely.
+            if not service_result.get("created", False):
+                record("render_environment", "running")
+                deploy = self.render.reconcile_environment_and_deploy(service_id, render_env)
+                record("render_environment", "completed", {
+                    "deploy_id": deploy.get("id"),
+                    "message": "Required environment variables reconciled; deploy requested",
+                })
+
             record("health_check", "running")
             health_service = service
             details = service.get("serviceDetails") or {}
