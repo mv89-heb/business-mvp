@@ -14,6 +14,8 @@ from pathlib import Path
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
 
+from werkzeug.security import generate_password_hash
+
 from business_app.export_starter import export_starter
 from .providers import GitHubProvider, NeonProvider, RenderProvider
 from .providers.http import ProviderError
@@ -217,7 +219,7 @@ class ProvisioningWorkflow:
             render_env = {
                 "DATABASE_URL": database_uri,
                 "SECRET_KEY": secrets.token_urlsafe(48),
-                "ADMIN_PASSWORD": admin_password,
+                "ADMIN_PASSWORD_HASH": generate_password_hash(admin_password),
                 "PYTHON_VERSION": "3.11.9",
             }
             repository_url = repository.get("html_url") or f"https://github.com/{github_owner}/{slug}"
