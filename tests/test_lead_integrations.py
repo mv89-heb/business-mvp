@@ -16,6 +16,9 @@ def integration_client(tmp_path, monkeypatch):
     monkeypatch.setenv("AUTOMATION_WEBHOOK_SECRET", "test-automation-secret")
     config = load_business_config()
     config["integrations"]["whatsapp_cloud_api"]["enabled"] = True
+    config["modules"]["whatsapp_inbound"] = True
+    config["modules"]["automation_webhooks"] = True
+    config["modules"]["ai_lead_enrichment"] = True
     app = create_app({
         "TESTING": True,
         "BUSINESS_CONFIG": config,
