@@ -2,6 +2,7 @@ services:
   - type: web
     name: eli-cohen-business-mvp
     runtime: python
+    region: frankfurt
     plan: free
     buildCommand: pip install -r requirements.txt
     startCommand: gunicorn --workers 2 --threads 4 --timeout 60 wsgi:app
