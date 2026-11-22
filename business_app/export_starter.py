@@ -51,7 +51,7 @@ def _is_excluded_export_name(name):
         return True
     if lowered.startswith(".env.") or lowered.endswith(SENSITIVE_EXPORT_SUFFIXES):
         return True
-    return any(fnmatch.fnmatchcase(name, pattern) for pattern in EXCLUDED_EXPORT_PATHS)
+    return any(fnmatch.fnmatchcase(lowered, pattern.lower()) for pattern in EXCLUDED_EXPORT_PATHS)
 
 
 def _ignore_export_artifacts(directory, names):
