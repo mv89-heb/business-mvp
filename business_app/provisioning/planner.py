@@ -35,18 +35,18 @@ SUPPORTED_MODULES = {
     },
     "whatsapp_inbound": {
         "label": "קליטת לידים מ־WhatsApp",
-        "description": "Meta Cloud API webhook מאומת, מניעת כפילויות ושמירת הודעות נכנסות",
-        "status": "available",
+        "description": "Webhook Meta מאומת בקוד; נדרשים חשבון Meta, App Secret ו־Verify Token",
+        "status": "implemented_setup_required",
     },
     "automation_webhooks": {
         "label": "אוטומציות Make / n8n",
-        "description": "Outbox עמיד, אימות Bearer ו־callback לעדכון תוצאות",
-        "status": "available",
+        "description": "API Outbox/ACK/Callback קיים; נדרש workflow נפרד ב־Make או n8n",
+        "status": "api_ready_automation_required",
     },
     "ai_lead_enrichment": {
         "label": "סיווג לידים באמצעות Gemini",
-        "description": "עיבוד דרך Make או n8n עם השחרת מידע אישי ועדכון CRM",
-        "status": "available",
+        "description": "Callback CRM קיים; נדרש workflow חיצוני עם Gemini; טקסט חופשי כבוי כברירת מחדל",
+        "status": "external_gemini_workflow_required",
     },
 }
 
