@@ -175,7 +175,7 @@ def test_github_command_ingest_requires_oidc_and_creates_only_pending_proposal(m
     client=app.test_client()
     response=client.post("/internal/github/commands",headers={"Authorization":"Bearer github-oidc"},json={
         "repository":"mv89-heb/business-mvp","sender":"mv89-heb",
-        "issue":{"number":123,"title":"[Business Studio Command] create proposal","author":"mv89-heb","body":"{}"}
+        "issue":{"number":123,"title":"[Business Studio Command] create proposal","author":"mv89-heb","body":"{\"commandId\":\"12345678-1234-1234-1234-123456789012\"}"}
     })
     assert response.status_code==200
     assert response.json["accepted"] is True
