@@ -22,7 +22,12 @@ def client(tmp_path):
 def test_homepage_is_hebrew_rtl(client):
     response = client.get("/")
     assert response.status_code == 200
-    assert 'lang="he" dir="rtl"' in response.get_data(as_text=True)
+    html = response.get_data(as_text=True)
+    assert 'lang="he" dir="rtl"' in html
+    assert "דקים" in html
+    assert "פרגולות" in html
+    assert "חיפויי עץ" in html
+    assert "תיקונים וחידוש" in html
 
 
 def test_estimate_without_approved_rates_is_not_invented(client):
@@ -42,7 +47,7 @@ def test_lead_is_saved_and_thanks_page_shown(client):
     response = client.post("/leads", data={
         "name": "ישראל ישראלי",
         "phone": "050-1234567",
-        "service": "עבודות עץ",
+        "service": "פרגולה",
         "area": "20",
         "details": "פרגולה",
         "contact_consent": "on",
@@ -54,6 +59,7 @@ def test_lead_is_saved_and_thanks_page_shown(client):
         lead = db.session.execute(db.select(Lead)).scalar_one()
         assert lead.name == "ישראל ישראלי"
         assert lead.phone == "050-1234567"
+        assert lead.service == "פרגולה"
 
 
 def test_lead_requires_contact_consent(client):
