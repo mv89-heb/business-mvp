@@ -86,7 +86,7 @@ def _validate_export_tree(source_root):
                     raise ValueError(f"Starter source contains a symbolic link: {relative.as_posix()}")
 
 
-def export_starter(target, business_name, slug, modules=None):
+def export_starter(target, business_name, slug, modules=None, business_profile=None):
     if not isinstance(business_name, str) or not business_name.strip():
         raise ValueError("Business name must not be empty.")
     if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
@@ -130,10 +130,52 @@ def export_starter(target, business_name, slug, modules=None):
     # The export deliberately does not copy the live customer's business.json or render.yaml.
     from business_app.bootstrap import bootstrap
     bootstrap(destination, business_name=business_name, slug=slug)
+    config_path = destination / "config" / "business.json"
+    config_data = json.loads(config_path.read_text(encoding="utf-8"))
+
+    if business_profile is not None:
+        if not isinstance(business_profile, dict):
+            raise ValueError("Business profile must be an object")
+        contact = business_profile.get("contact") or {}
+        branding = business_profile.get("branding") or {}
+        config_data["tagline"] = business_profile.get("tagline", "")
+        config_data.setdefault("contact", {}).update({
+            "phone_display": contact.get("phone_display", ""),
+            "phone_href": contact.get("phone_href", ""),
+            "whatsapp_url": contact.get("whatsapp_url", ""),
+            "address": contact.get("address", ""),
+            "service_area": contact.get("service_area", ""),
+        })
+        config_data.setdefault("branding", {}).update({
+            "primary_color": branding.get("primary_color", "#172b25"),
+            "theme_color": branding.get("primary_color", "#172b25"),
+            "accent_color": branding.get("accent_color", "#b88a54"),
+            "font_family": branding.get("font_family", "Heebo"),
+        })
+        page_content = config_data.setdefault("content", {})
+        hero = page_content.setdefault("hero", {})
+        hero["eyebrow"] = business_profile.get("category_label", "עסק")
+        hero["title_line_1"] = business_name
+        hero["title_line_2"] = business_profile.get("tagline") or "נשמח לעזור לכם"
+        hero["description"] = "השאירו פרטים ונחזור אליכם בהקדם."
+        configured_services = business_profile.get("services") or []
+        page_content["services"] = [
+            {
+                "id": f"service-{index}",
+                "number": f"{index:02d}",
+                "name": service,
+                "form_value": service,
+                "description": "",
+                "link_text": "לפרטים נוספים",
+                "prompt": f"ספרו לנו על השירות המבוקש: {service}",
+            }
+            for index, service in enumerate(configured_services, start=1)
+        ]
+        if not configured_services:
+            page_content["services"] = []
+
     if modules is not None:
         selected = set(modules)
-        config_path = destination / "config" / "business.json"
-        config_data = json.loads(config_path.read_text(encoding="utf-8"))
         for module_name in (
             "lead_capture", "lead_management", "estimate_calculator",
             "whatsapp_inbound", "automation_webhooks", "ai_lead_enrichment",
@@ -145,10 +187,10 @@ def export_starter(target, business_name, slug, modules=None):
         config_data.setdefault("integrations", {}).setdefault("automation_webhook", {})["enabled"] = (
             "automation_webhooks" in selected
         )
-        config_path.write_text(
-            json.dumps(config_data, ensure_ascii=False, indent=2) + "\n",
-            encoding="utf-8",
-        )
+    config_path.write_text(
+        json.dumps(config_data, ensure_ascii=False, indent=2) + "\n",
+        encoding="utf-8",
+    )
     return destination
 
 
