@@ -292,7 +292,7 @@ def build_provisioning_plan(
         "requires_explicit_execution_approval": True,
         "warnings": [
             "This is a dry-run plan. No provider API was called and no cloud resource was created.",
-            "Only the modules listed as available in this starter can be selected.",
+            "Only modules implemented in this starter can be selected; some require separate provider accounts and external workflow setup.",
             "The live provider account, quotas, free-tier eligibility and current prices are not verified by this plan.",
         ],
     }
