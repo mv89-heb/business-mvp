@@ -607,7 +607,7 @@ def test_workflow_state_store_uses_postgres_and_round_trips_state(tmp_path, monk
 def test_postgres_state_store_rejects_secret_values_before_writing(monkeypatch):
     monkeypatch.setenv("DATABASE_URL", "postgresql://test-user:test-password@localhost/testdb")
     store = WorkflowStateStore()
-    with pytest.raises(ValueError, match="secret marker"):
+    with pytest.raises(ValueError, match="credential or connection string"):
         store.save("safe-id", {
             "plan_id": "safe-id",
             "business_slug": "safe-business",
