@@ -57,7 +57,7 @@ def test_github_creates_private_repo_only_when_missing():
 
 def test_github_reuses_existing_private_repo_without_post():
     opener = FakeOpener([{"id": 1, "private": True, "full_name": "mv89-heb/app"}])
-    result = GitHubProvider("token", opener=opener).ensure_private_repository("mv89-heb", "app")
+    result = GitHubProvider("token", opener=opener).ensure_private_repository("mv89-heb", "app", expected_repository_id=1)
     assert result["created"] is False
     assert len(opener.requests) == 1
 
@@ -84,7 +84,7 @@ def test_neon_creates_project_with_scale_to_zero_defaults():
 
 def test_neon_reuses_existing_project_and_does_not_create_duplicate():
     opener = FakeOpener([{"projects": [{"id": "neon-1", "name": "app", "region_id": "aws-eu-central-1"}]}])
-    result = NeonProvider("token", opener=opener).ensure_project("app")
+    result = NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app", expected_project_id="neon-1")
     assert result["created"] is False
     assert len(opener.requests) == 1
 
@@ -92,12 +92,12 @@ def test_neon_reuses_existing_project_and_does_not_create_duplicate():
 def test_neon_rejects_same_name_in_different_region():
     opener = FakeOpener([{"projects": [{"id": "neon-1", "name": "app", "region_id": "aws-us-east-2"}]}])
     with pytest.raises(Exception, match="different region"):
-        NeonProvider("token", opener=opener).ensure_project("app")
+        NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
 
 
 def test_neon_connection_uri_is_not_added_to_request_url():
     opener = FakeOpener([{"uri": "postgresql://user:secret@host/db"}])
-    uri = NeonProvider("token", opener=opener).get_connection_uri("neon-1")
+    uri = NeonProvider("token", org_id="org-1", opener=opener).get_connection_uri("neon-1")
     assert uri.startswith("postgresql://")
     assert "secret" not in opener.requests[0][0].full_url
 
@@ -133,7 +133,7 @@ def test_render_reuses_existing_service_without_post():
                      "type": "web_service", "branch": "main", "autoDeployTrigger": "checksPass", "serviceDetails": {"plan": "free", "region": "frankfurt"}}}
     ]])
     result = RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-        name="app", repository_url="https://github.com/a/b"
+        name="app", repository_url="https://github.com/a/b", expected_service_id="srv-1"
     )
     assert result["created"] is False
     assert len(opener.requests) == 1
@@ -162,7 +162,7 @@ def test_neon_project_lookup_walks_all_pages_before_creating():
         {"projects": [{"id": "first", "name": "other", "region_id": "aws-eu-central-1"}], "pagination": {"cursor": "next-page"}},
         {"projects": [{"id": "found", "name": "app", "region_id": "aws-eu-central-1"}], "pagination": {}},
     ])
-    result = NeonProvider("token", opener=opener).ensure_project("app")
+    result = NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app", expected_project_id="found")
     assert result["created"] is False
     assert result["project"]["id"] == "found"
     assert "cursor=next-page" in opener.requests[1][0].full_url
@@ -173,7 +173,7 @@ def test_neon_refuses_create_when_project_list_is_incomplete():
         {"projects": [], "unavailable_project_ids": ["project-unknown"], "pagination": {}}
     ])
     with pytest.raises(Exception, match="could not verify every project"):
-        NeonProvider("token", opener=opener).ensure_project("app")
+        NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
 
 
 def test_render_service_lookup_walks_all_pages_before_creating():
@@ -188,7 +188,7 @@ def test_render_service_lookup_walks_all_pages_before_creating():
                                          "type": "web_service", "branch": "main", "autoDeployTrigger": "checksPass", "serviceDetails": {"plan": "free", "region": "frankfurt"}}}],
     ])
     result = RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-        name="app", repository_url="https://github.com/a/b"
+        name="app", repository_url="https://github.com/a/b", expected_service_id="found"
     )
     assert result["created"] is False
     assert result["service"]["id"] == "found"
@@ -198,7 +198,7 @@ def test_render_service_lookup_walks_all_pages_before_creating():
 def test_neon_project_creation_requires_explicit_free_tier_verification():
     opener = FakeOpener([{"projects": []}])
     with pytest.raises(Exception, match="Verify Neon free-tier eligibility"):
-        NeonProvider("token", opener=opener).ensure_project("app")
+        NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
     assert len(opener.requests) == 1
 
 def test_github_organization_repo_uses_organization_endpoint():
@@ -219,7 +219,7 @@ def test_render_refuses_existing_paid_service_without_mutation():
     ])
     with pytest.raises(Exception, match="not on the Free plan"):
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-            name="app", repository_url="https://github.com/a/b"
+            name="app", repository_url="https://github.com/a/b", expected_service_id="srv-paid"
         )
     assert len(opener.requests) == 1
 
@@ -231,7 +231,7 @@ def test_render_refuses_existing_service_on_wrong_branch():
     ])
     with pytest.raises(Exception, match="different Git branch"):
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-            name="app", repository_url="https://github.com/a/b", branch="main"
+            name="app", repository_url="https://github.com/a/b", branch="main", expected_service_id="srv-1"
         )
 
 
@@ -285,7 +285,7 @@ def test_github_publish_refuses_environment_secrets_before_network_call(tmp_path
 
     (tmp_path / ".env").write_text("DATABASE_URL=postgresql://secret", encoding="utf-8")
     opener = FakeOpener([])
-    with pytest.raises(Exception, match="environment file"):
+    with pytest.raises(Exception, match="secret, provisioning artifact"):
         GitHubProvider("token", opener=opener).publish_directory(
             "developer", "new-app", tmp_path
         )
@@ -355,7 +355,7 @@ def test_render_refuses_service_when_free_plan_cannot_be_verified():
     ])
     with pytest.raises(Exception, match="did not confirm the Free plan"):
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-            name="app", repository_url="https://github.com/a/b"
+            name="app", repository_url="https://github.com/a/b", expected_service_id="srv-1"
         )
     assert len(opener.requests) == 3
 
@@ -368,7 +368,7 @@ def test_render_refuses_existing_service_when_region_is_unverified():
     ]])
     with pytest.raises(Exception, match="different region"):
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-            name="app", repository_url="https://github.com/a/b"
+            name="app", repository_url="https://github.com/a/b", expected_service_id="srv-1"
         )
 
 
@@ -406,3 +406,117 @@ def test_render_reconciles_existing_service_env_vars_without_replacing_other_var
     assert opener.requests[0][0].full_url.endswith("/services/srv-1/env-vars/DATABASE_URL")
     assert json.loads(opener.requests[0][0].data) == {"value": "postgresql://db"}
     assert opener.requests[-1][0].full_url.endswith("/services/srv-1/deploys")
+
+
+
+def test_neon_requires_organization_scope_before_project_discovery():
+    provider = NeonProvider("token", org_id="", opener=FakeOpener([]))
+    with pytest.raises(ProviderConfigurationError, match="NEON_ORG_ID"):
+        provider.list_projects()
+    assert provider.client.opener.requests == []
+
+
+def test_neon_refuses_existing_project_with_mismatched_organization():
+    opener = FakeOpener([{
+        "projects": [{
+            "id": "foreign",
+            "name": "app",
+            "region_id": "aws-eu-central-1",
+            "org_id": "other-org",
+        }]
+    }])
+    with pytest.raises(Exception, match="different organization"):
+        NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
+    assert len(opener.requests) == 1
+
+
+
+@pytest.mark.parametrize("relative", [
+    ".netrc",
+    "credentials.json",
+    "nested/.env.production",
+    "uploads/customer-data.txt",
+    ".business-app-provisioner/state.json",
+    "database.sqlite3",
+    "backup.dump",
+])
+def test_github_publish_refuses_all_secret_and_runtime_artifact_paths(tmp_path, relative):
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("sensitive", encoding="utf-8")
+    opener = FakeOpener([])
+
+    with pytest.raises(Exception, match="secret, provisioning artifact"):
+        GitHubProvider("token", opener=opener).publish_directory(
+            "developer", "new-app", tmp_path
+        )
+
+    assert opener.requests == []
+
+
+def test_github_publish_rejects_symlinked_directory_before_network_call(tmp_path):
+    outside = tmp_path.parent / "outside-customer-data"
+    outside.mkdir(exist_ok=True)
+    (outside / "data.txt").write_text("customer data", encoding="utf-8")
+    link = tmp_path / "uploads"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is not available on this platform")
+    opener = FakeOpener([])
+
+    with pytest.raises(Exception, match="symbolic link"):
+        GitHubProvider("token", opener=opener).publish_directory(
+            "developer", "new-app", tmp_path
+        )
+
+    assert opener.requests == []
+
+
+def test_github_publish_rejects_symlinked_export_root(tmp_path):
+    real_root = tmp_path / "real"
+    real_root.mkdir()
+    (real_root / "README.md").write_text("clean", encoding="utf-8")
+    link = tmp_path / "linked-root"
+    try:
+        link.symlink_to(real_root, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is not available on this platform")
+    opener = FakeOpener([])
+
+    with pytest.raises(Exception, match="root is a symbolic link"):
+        GitHubProvider("token", opener=opener).publish_directory(
+            "developer", "new-app", link
+        )
+
+    assert opener.requests == []
+
+
+
+def test_github_provider_refuses_unregistered_existing_private_repository():
+    opener = FakeOpener([{"id": 1, "private": True, "full_name": "mv89-heb/app"}])
+    with pytest.raises(Exception, match="not registered"):
+        GitHubProvider("token", opener=opener).ensure_private_repository("mv89-heb", "app")
+    assert len(opener.requests) == 1
+
+
+def test_neon_provider_refuses_unregistered_existing_project():
+    opener = FakeOpener([{"projects": [{
+        "id": "neon-1", "name": "app", "region_id": "aws-eu-central-1", "org_id": "org-1"
+    }]}])
+    with pytest.raises(Exception, match="not registered"):
+        NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
+    assert len(opener.requests) == 1
+
+
+def test_render_provider_refuses_unregistered_existing_service():
+    opener = FakeOpener([[
+        {"service": {"id": "srv-1", "name": "app", "repo": "https://github.com/a/b",
+                     "type": "web_service", "branch": "main", "autoDeployTrigger": "checksPass",
+                     "serviceDetails": {"plan": "free", "region": "frankfurt"}}}
+    ]])
+    with pytest.raises(Exception, match="not registered"):
+        RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
+            name="app", repository_url="https://github.com/a/b"
+        )
+    assert len(opener.requests) == 1

@@ -130,18 +130,37 @@ class ProvisioningWorkflow:
     def _normalize_repository_url(value):
         return (value or "").strip().rstrip("/").removesuffix(".git").casefold()
 
-    def preflight(self, plan, *, github_owner):
-        """Inspect provider access and resource-name collisions using read-only API calls only."""
+    def preflight(self, plan, *, github_owner, known_resources=None):
+        """Inspect provider access and require identity matches for previously created resources."""
         if not isinstance(plan, dict) or plan.get("mode") != "dry_run":
             raise ProviderError("Preflight requires a dry-run provisioning plan")
         business = plan.get("business") or {}
         slug = business.get("slug")
         if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
             raise ProviderError("Provisioning plan is missing a valid business slug")
+        if known_resources is None:
+            known_resources = {}
+            plan_id = plan.get("plan_id")
+            if isinstance(plan_id, str) and re.fullmatch(r"[a-f0-9]{20}", plan_id):
+                state_path = Path.home() / ".business-app-provisioner" / "runs" / f"{plan_id}.json"
+                if state_path.is_file():
+                    try:
+                        saved_state = json.loads(state_path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        raise ProviderError("Local provisioning state could not be verified; refusing to reuse existing cloud resources") from None
+                    if not isinstance(saved_state, dict) or saved_state.get("plan_id") != plan_id or saved_state.get("business_slug") != slug:
+                        raise ProviderError("Local provisioning state does not match this business plan")
+                    known_resources = saved_state.get("resources") or {}
+                    if not isinstance(known_resources, dict):
+                        raise ProviderError("Local provisioning resource ownership state is invalid")
+        if not isinstance(known_resources, dict):
+            raise ProviderError("Provisioning resource ownership state is invalid")
         if not github_owner or not isinstance(github_owner, str):
             raise ProviderError("GITHUB_OWNER is required")
         if not getattr(self.render, "workspace_id", None):
             raise ProviderError("RENDER_WORKSPACE_ID must identify the approved workspace")
+        if not getattr(self.neon, "org_id", None):
+            raise ProviderError("NEON_ORG_ID must identify the approved Neon organization")
 
         connections = {
             "github": self.github.check_connection(),
@@ -160,6 +179,10 @@ class ProvisioningWorkflow:
         repository = self.github.get_repository(github_owner, slug)
         if repository and repository.get("private") is not True:
             raise ProviderError("A repository with this name already exists but is not private")
+        if repository:
+            recorded_repository = known_resources.get("github") or {}
+            if not repository.get("id") or str(recorded_repository.get("repository_id")) != str(repository.get("id")):
+                raise ProviderError("A GitHub repository with this name already exists but is not registered to this provisioning workflow")
         repository_url = (
             (repository or {}).get("html_url")
             or f"https://github.com/{github_owner}/{slug}"
@@ -178,6 +201,13 @@ class ProvisioningWorkflow:
         project = projects[0] if projects else None
         if project and project.get("region_id") != neon_region:
             raise ProviderError("A Neon project with this name exists in a different region")
+        neon_org_id = getattr(self.neon, "org_id", None)
+        if project and project.get("org_id") and project.get("org_id") != neon_org_id:
+            raise ProviderError("A Neon project with this name belongs to a different organization")
+        if project:
+            recorded_project = known_resources.get("neon") or {}
+            if not project.get("id") or str(recorded_project.get("project_id")) != str(project.get("id")):
+                raise ProviderError("A Neon project with this name already exists but is not registered to this provisioning workflow")
 
         services = [
             item for item in self.render.list_services()
@@ -187,6 +217,9 @@ class ProvisioningWorkflow:
             raise ProviderError("Multiple Render services have this name; choose the intended service explicitly")
         service = services[0] if services else None
         if service:
+            recorded_service = known_resources.get("render") or {}
+            if not service.get("id") or str(recorded_service.get("service_id")) != str(service.get("id")):
+                raise ProviderError("A Render service with this name already exists but is not registered to this provisioning workflow")
             details = service.get("serviceDetails") or {}
             if self._normalize_repository_url(service.get("repo")) != self._normalize_repository_url(repository_url):
                 raise ProviderError("A Render service with this name exists but has a different source repository")
@@ -253,13 +286,22 @@ class ProvisioningWorkflow:
             raise ProviderError("GITHUB_OWNER is required")
         if not getattr(self.render, "workspace_id", None):
             raise ProviderError("RENDER_WORKSPACE_ID must identify the approved workspace")
+        if not getattr(self.neon, "org_id", None):
+            raise ProviderError("NEON_ORG_ID must identify the approved Neon organization")
 
         # Keep read-only preflight free of local filesystem side effects.
         if self.state_store is None:
             self.state_store = WorkflowStateStore()
 
         workflow_id = plan.get("plan_id") or slug
-        state = self.state_store.load(workflow_id) or {
+        state = self.state_store.load(workflow_id)
+        if state is not None and (
+            not isinstance(state, dict)
+            or state.get("plan_id") != plan.get("plan_id")
+            or state.get("business_slug") != slug
+        ):
+            raise ProviderError("Saved provisioning state does not match this business plan")
+        state = state or {
             "plan_id": plan.get("plan_id"),
             "business_slug": slug,
             "status": "not_started",
@@ -281,7 +323,7 @@ class ProvisioningWorkflow:
 
         try:
             record("preflight", "running")
-            preflight_report = self.preflight(plan, github_owner=github_owner)
+            preflight_report = self.preflight(plan, github_owner=github_owner, known_resources=state.get("resources", {}))
             record("preflight", "completed", {
                 "read_only": preflight_report["read_only"],
                 "writes_performed": preflight_report["writes_performed"],
@@ -294,11 +336,15 @@ class ProvisioningWorkflow:
                 export_starter(export_path, business_name=business.get("name", slug), slug=slug)
 
                 record("github_repository", "running")
-                repo_result = self.github.ensure_private_repository(github_owner, slug)
+                repo_result = self.github.ensure_private_repository(
+                    github_owner, slug,
+                    expected_repository_id=(state.get("resources", {}).get("github") or {}).get("repository_id"),
+                )
                 repository = repo_result["repository"]
                 if repository.get("private") is not True:
                     raise ProviderError("GitHub did not confirm a private repository")
                 state["resources"]["github"] = {
+                    "repository_id": repository.get("id"),
                     "repository": repository.get("full_name") or f"{github_owner}/{slug}",
                     "url": repository.get("html_url"),
                     "created": repo_result.get("created", False),
@@ -316,13 +362,18 @@ class ProvisioningWorkflow:
                 })
 
             record("neon_project", "running")
-            project_result = self.neon.ensure_project(slug, free_tier_verified=True)
+            project_result = self.neon.ensure_project(
+                slug,
+                free_tier_verified=True,
+                expected_project_id=(state.get("resources", {}).get("neon") or {}).get("project_id"),
+            )
             project = project_result["project"]
             project_id = project.get("id")
             if not project_id:
                 raise ProviderError("Neon did not return a project identifier")
             state["resources"]["neon"] = {
                 "project_id": project_id,
+                "org_id": getattr(self.neon, "org_id", None),
                 "project_name": project.get("name", slug),
                 "region": project.get("region_id"),
                 "created": project_result.get("created", False),
@@ -348,6 +399,7 @@ class ProvisioningWorkflow:
                 repository_url=repository_url,
                 branch="main",
                 env_vars=render_env,
+                expected_service_id=(state.get("resources", {}).get("render") or {}).get("service_id"),
             )
             service = service_result["service"]
             service_id = service.get("id")
@@ -355,6 +407,7 @@ class ProvisioningWorkflow:
                 raise ProviderError("Render did not return a service identifier")
             state["resources"]["render"] = {
                 "service_id": service_id,
+                "workspace_id": getattr(self.render, "workspace_id", None),
                 "service_name": service.get("name", slug),
                 "url": (service.get("serviceDetails") or {}).get("url") or service.get("url"),
                 "created": service_result.get("created", False),
