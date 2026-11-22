@@ -1,4 +1,5 @@
 import json
+import re
 
 from business_app.provisioning_web import create_provisioning_app
 
@@ -479,6 +480,36 @@ def test_healthz_is_public_and_does_not_disclose_configuration():
     assert response.status_code == 200
     assert response.get_json() == {"status": "ok"}
 
+
+
+def test_remote_login_accepts_a_valid_csrf_token_with_seconds_time_limit():
+    config = {
+        "TESTING": True,
+        "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
+        "PROVISIONING_PASSWORD": "a-remote-password-with-at-least-32-characters",
+        "PROVISIONING_PUBLIC_ACCESS": True,
+        "PROVISIONING_ALLOWED_HOSTS": ["wizard.example.test"],
+    }
+    client = create_provisioning_app(config).test_client()
+    page = client.get("/login", base_url="https://wizard.example.test")
+    assert page.status_code == 200
+    token = re.search(
+        r'name="csrf_token" value="([^"]+)"',
+        page.get_data(as_text=True),
+    )
+    assert token is not None
+
+    response = client.post(
+        "/login",
+        data={
+            "password": config["PROVISIONING_PASSWORD"],
+            "csrf_token": token.group(1),
+        },
+        headers={"Referer": "https://wizard.example.test/login"},
+        base_url="https://wizard.example.test",
+    )
+    assert response.status_code == 302, response.get_data(as_text=True)
+    assert response.headers["Location"].endswith("/wizard")
 
 
 def test_remote_deployment_keeps_csrf_protection_enabled_by_default():
