@@ -144,7 +144,7 @@ def test_execution_route_runs_workflow_only_after_explicit_approval(monkeypatch)
     })
     page = response.get_data(as_text=True)
     assert response.status_code == 200
-    assert "Provisioning Result" in page
+    assert "PROVISIONING RESULT" in page
     assert captured["approval"] == "CREATE"
     assert captured["github_owner"] == "developer"
     assert captured["neon_free_tier_verified"] is True
