@@ -102,3 +102,84 @@ def test_lead_integration_modules_are_available_in_the_plan():
         "lead_capture", "lead_management", "whatsapp_inbound",
         "automation_webhooks", "ai_lead_enrichment",
     }
+
+
+def test_plan_includes_validated_business_profile_and_changes_identity():
+    profile = make_plan(
+        tagline="פתרונות מקצועיים לבית",
+        phone="050-123-4567",
+        whatsapp_number="050-123-4567",
+        address="רחוב הדוגמה 12",
+        service_area="בית שמש והסביבה",
+        primary_color="#123456",
+        accent_color="#ABCDEF",
+        font_family="Heebo",
+        services=["פרגולות", "דקים", "פרגולות"],
+    )
+    business = profile["business"]
+    assert business["tagline"] == "פתרונות מקצועיים לבית"
+    assert business["contact"]["phone_href"] == "tel:0501234567"
+    assert business["contact"]["whatsapp_url"] == "https://wa.me/972501234567"
+    assert business["branding"] == {
+        "primary_color": "#123456",
+        "accent_color": "#abcdef",
+        "font_family": "Heebo",
+    }
+    assert business["services"] == ["פרגולות", "דקים"]
+    assert profile["plan_id"] != make_plan().get("plan_id")
+
+
+def test_plan_identity_changes_when_modules_change():
+    basic = make_plan()
+    expanded = make_plan(modules=["lead_capture", "lead_management", "whatsapp_inbound"])
+    assert basic["plan_id"] != expanded["plan_id"]
+
+
+@pytest.mark.parametrize(
+    "overrides",
+    [
+        {"primary_color": "blue"},
+        {"accent_color": "#123"},
+        {"font_family": "Comic Sans"},
+        {"phone": "call me"},
+        {"phone": "050+1234567"},
+        {"services": ["שירות"] * 7},
+    ],
+)
+def test_invalid_business_profile_fails_closed(overrides):
+    with pytest.raises(ProvisioningInputError):
+        make_plan(**overrides)
+
+
+def test_export_starter_applies_business_profile_and_modules(tmp_path):
+    import json
+    from business_app.export_starter import export_starter
+
+    plan = make_plan(
+        tagline="עסק מקצועי ואמין",
+        phone="050-123-4567",
+        whatsapp_number="050-123-4567",
+        service_area="בית שמש והסביבה",
+        primary_color="#123456",
+        accent_color="#ABCDEF",
+        font_family="Rubik",
+        services=["שירות ראשון", "שירות שני"],
+    )
+    destination = tmp_path / "starter-export"
+    export_starter(
+        destination,
+        business_name=plan["business"]["name"],
+        slug=plan["business"]["slug"],
+        modules=plan["application"]["modules"],
+        business_profile=plan["business"],
+    )
+    config = json.loads((destination / "config" / "business.json").read_text(encoding="utf-8"))
+    assert config["tagline"] == "עסק מקצועי ואמין"
+    assert config["contact"]["phone_display"] == "050-123-4567"
+    assert config["contact"]["whatsapp_url"] == "https://wa.me/972501234567"
+    assert config["branding"]["primary_color"] == "#123456"
+    assert config["branding"]["accent_color"] == "#abcdef"
+    assert config["branding"]["font_family"] == "Rubik"
+    assert [item["name"] for item in config["content"]["services"]] == ["שירות ראשון", "שירות שני"]
+    assert config["modules"]["lead_capture"] is True
+    assert not (destination / "business_app" / "provisioning").exists()

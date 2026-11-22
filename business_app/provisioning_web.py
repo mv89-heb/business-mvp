@@ -7,8 +7,9 @@ import hmac
 import ipaddress
 import json
 import os
+from datetime import datetime, timedelta, timezone
+from pathlib import Path
 from urllib.parse import urlsplit
-from datetime import timedelta
 from functools import wraps
 
 from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
@@ -28,6 +29,79 @@ from business_app.provisioning import (
 )
 
 csrf = CSRFProtect()
+
+
+def _empty_form_values():
+    return {
+        "business_name": "",
+        "slug": "",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "tagline": "",
+        "phone": "",
+        "whatsapp_number": "",
+        "address": "",
+        "service_area": "",
+        "primary_color": "#172b25",
+        "accent_color": "#b88a54",
+        "font_family": "Heebo",
+        "services": [],
+    }
+
+
+def _read_form_values(form):
+    values = _empty_form_values()
+    values.update({
+        "business_name": form.get("business_name", ""),
+        "slug": form.get("slug", ""),
+        "category": form.get("category", "services"),
+        "modules": form.getlist("modules"),
+        "tagline": form.get("tagline", ""),
+        "phone": form.get("phone", ""),
+        "whatsapp_number": form.get("whatsapp_number", ""),
+        "address": form.get("address", ""),
+        "service_area": form.get("service_area", ""),
+        "primary_color": form.get("primary_color", "#172b25"),
+        "accent_color": form.get("accent_color", "#b88a54"),
+        "font_family": form.get("font_family", "Heebo"),
+        "services": [
+            item.strip() for item in form.get("services", "").split(",") if item.strip()
+        ],
+    })
+    return values
+
+
+def _audit_event(app, event, **details):
+    """Append a minimal, secret-free local audit record; never block provisioning on log I/O."""
+    allowed = {"provider", "connected", "plan_id", "business_slug", "status", "step", "reason"}
+    safe_details = {
+        key: value for key, value in details.items()
+        if key in allowed and isinstance(value, (str, int, float, bool, type(None)))
+    }
+    path = Path(app.config.get("PROVISIONING_AUDIT_PATH") or (
+        Path.home() / ".business-app-provisioner" / "audit.jsonl"
+    )).expanduser()
+    record = {
+        "at": datetime.now(timezone.utc).isoformat(),
+        "event": str(event)[:64],
+        "actor": "developer",
+        "details": safe_details,
+    }
+    try:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(path.parent, 0o700)
+        except OSError:
+            pass
+        descriptor = os.open(str(path), os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
+        with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
+            stream.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
+        try:
+            os.chmod(path, 0o600)
+        except OSError:
+            pass
+    except OSError:
+        app.logger.warning("Provisioning audit record could not be written")
 
 
 def _plan_fingerprint(plan):
@@ -66,6 +140,19 @@ def create_provisioning_app(test_config=None):
     limiter = Limiter(key_func=get_remote_address, default_limits=[], storage_uri="memory://")
     limiter.init_app(app)
 
+    @app.after_request
+    def add_security_headers(response):
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["X-Frame-Options"] = "DENY"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["Permissions-Policy"] = "camera=(), microphone=(), geolocation=()"
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; base-uri 'self'; form-action 'self'; "
+            "frame-ancestors 'none'; object-src 'none'; style-src 'self' 'unsafe-inline'"
+        )
+        response.headers["Cache-Control"] = "no-store"
+        return response
+
     @app.before_request
     def enforce_loopback_only():
         # Host and peer checks are enforced by the app as well as by the
@@ -103,7 +190,9 @@ def create_provisioning_app(test_config=None):
                 session.clear()
                 session.permanent = True
                 session["developer"] = True
+                _audit_event(app, "login_success")
                 return redirect(url_for("wizard"))
+            _audit_event(app, "login_failure", reason="invalid_password")
             flash("סיסמה שגויה.", "error")
         return render_template("provisioning_wizard.html", login_required=True)
 
@@ -111,6 +200,7 @@ def create_provisioning_app(test_config=None):
     @developer_required
     def logout():
         session.clear()
+        _audit_event(app, "logout")
         return redirect(url_for("login"))
 
     @app.post("/connections/check")
@@ -130,24 +220,22 @@ def create_provisioning_app(test_config=None):
                     "message": "החיבור אומת בהצלחה.",
                     "details": {key: value for key, value in result.items() if key != "provider"},
                 }
+                _audit_event(app, "provider_connection", provider=provider_name, connected=True)
             except ProviderError as exc:
                 results[provider_name] = {"connected": False, "message": str(exc)}
+                _audit_event(app, "provider_connection", provider=provider_name, connected=False, reason="provider_error")
             except Exception:
                 results[provider_name] = {
                     "connected": False,
                     "message": "בדיקת החיבור נכשלה. פרטי שגיאה ונתוני אימות לא נחשפו.",
                 }
+                _audit_event(app, "provider_connection", provider=provider_name, connected=False, reason="unexpected_error")
         return render_template(
             "provisioning_wizard.html",
             login_required=False,
             categories=BUSINESS_CATEGORIES,
             modules=SUPPORTED_MODULES,
-            form_values={
-                "business_name": "",
-                "slug": "",
-                "category": "services",
-                "modules": ["lead_capture", "lead_management"],
-            },
+            form_values=_empty_form_values(),
             connection_results=results,
         )
 
@@ -155,12 +243,7 @@ def create_provisioning_app(test_config=None):
     @app.post("/preflight")
     @developer_required
     def preflight_provisioning():
-        form_values = {
-            "business_name": request.form.get("business_name", ""),
-            "slug": request.form.get("slug", ""),
-            "category": request.form.get("category", "services"),
-            "modules": request.form.getlist("modules"),
-        }
+        form_values = _read_form_values(request.form)
         plan = None
         report = None
         error = None
@@ -169,11 +252,14 @@ def create_provisioning_app(test_config=None):
             owner = os.getenv("GITHUB_OWNER", "").strip()
             report = ProvisioningWorkflow().preflight(plan, github_owner=owner)
             session["preflight_fingerprint"] = _plan_fingerprint(plan)
+            _audit_event(app, "preflight_success", plan_id=plan.get("plan_id"), business_slug=plan.get("business", {}).get("slug"))
         except (ProvisioningInputError, ProviderError) as exc:
             session.pop("preflight_fingerprint", None)
+            _audit_event(app, "preflight_failure", reason=type(exc).__name__)
             error = str(exc)
         except Exception:
             session.pop("preflight_fingerprint", None)
+            _audit_event(app, "preflight_failure", reason="unexpected_error")
             error = "בדיקת ההיתכנות נכשלה. פרטי שגיאה ונתוני אימות לא נחשפו."
         return render_template(
             "provisioning_wizard.html",
@@ -190,12 +276,7 @@ def create_provisioning_app(test_config=None):
     @app.post("/execute")
     @developer_required
     def execute_provisioning():
-        form_values = {
-            "business_name": request.form.get("business_name", ""),
-            "slug": request.form.get("slug", ""),
-            "category": request.form.get("category", "services"),
-            "modules": request.form.getlist("modules"),
-        }
+        form_values = _read_form_values(request.form)
         plan = None
         result = None
         error = None
@@ -208,6 +289,7 @@ def create_provisioning_app(test_config=None):
             session.pop("preflight_fingerprint", None)
             if request.form.get("confirm_zero_cost") != "yes":
                 raise ProviderError("לא התקבל אישור מפורש לכך שעלות Neon תהיה אפס.")
+            _audit_event(app, "provisioning_started", plan_id=plan.get("plan_id"), business_slug=plan.get("business", {}).get("slug"))
             result = ProvisioningWorkflow().run(
                 plan,
                 github_owner=os.getenv("GITHUB_OWNER", "").strip(),
@@ -215,9 +297,12 @@ def create_provisioning_app(test_config=None):
                 approval=request.form.get("approval", ""),
                 neon_free_tier_verified=True,
             )
+            _audit_event(app, "provisioning_completed", plan_id=plan.get("plan_id"), business_slug=plan.get("business", {}).get("slug"), status="completed")
         except (ProvisioningInputError, ProviderError) as exc:
+            _audit_event(app, "provisioning_failure", reason=type(exc).__name__)
             error = str(exc)
         except Exception:
+            _audit_event(app, "provisioning_failure", reason="unexpected_error")
             error = "ההקמה נעצרה. פרטי שגיאה ונתוני אימות לא נחשפו; בדוק את מצב התהליך המקומי."
         return render_template(
             "provisioning_wizard.html",
@@ -236,20 +321,10 @@ def create_provisioning_app(test_config=None):
     def wizard():
         plan = None
         error = None
-        form_values = {
-            "business_name": "",
-            "slug": "",
-            "category": "services",
-            "modules": ["lead_capture", "lead_management"],
-        }
+        form_values = _empty_form_values()
         if request.method == "POST":
             session.pop("preflight_fingerprint", None)
-            form_values = {
-                "business_name": request.form.get("business_name", ""),
-                "slug": request.form.get("slug", ""),
-                "category": request.form.get("category", "services"),
-                "modules": request.form.getlist("modules"),
-            }
+            form_values = _read_form_values(request.form)
             try:
                 plan = build_provisioning_plan(**form_values)
             except ProvisioningInputError as exc:

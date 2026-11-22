@@ -10,6 +10,7 @@ from app import create_app, db
 
 @pytest.fixture()
 def integration_client(tmp_path, monkeypatch):
+    monkeypatch.delenv("AI_ALLOW_FREE_TEXT", raising=False)
     monkeypatch.setenv("ADMIN_PASSWORD", "test-admin-password")
     monkeypatch.setenv("WHATSAPP_APP_SECRET", "test-meta-secret")
     monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "test-verify-token")
@@ -93,6 +94,7 @@ def test_whatsapp_inbound_creates_lead_message_and_outbox_once(integration_clien
         assert len(messages) == 1
         assert len(outbox) == 2
         assert all("phone" not in event.payload for event in outbox)
+        assert all(event.payload.get("details_redacted", event.payload.get("message_text_redacted", "")) == "" for event in outbox)
 
 
 def test_whatsapp_webhook_rejects_invalid_signature(integration_client):
@@ -145,3 +147,23 @@ def test_automation_enrichment_callback_updates_metadata(integration_client):
     dashboard = client.get("/admin")
     assert "מעוניין בדק לחצר" in dashboard.get_data(as_text=True)
     assert "מקור: website" in dashboard.get_data(as_text=True)
+
+
+def test_ai_free_text_requires_explicit_opt_in_and_is_redacted(integration_client, monkeypatch):
+    client, app = integration_client
+    monkeypatch.setenv("AI_ALLOW_FREE_TEXT", "true")
+    response = client.post("/leads", data={
+        "name": "לקוח בדיקה",
+        "phone": "050-7654323",
+        "service": "פרגולה",
+        "details": "אפשר לחזור אליי בטלפון 050-123-4567 ובמייל test@example.com",
+        "contact_consent": "on",
+    })
+    assert response.status_code == 302
+    headers = {"Authorization": "Bearer test-automation-secret"}
+    events = client.get("/api/integrations/outbox", headers=headers).get_json()["events"]
+    payload = events[0]["payload"]
+    assert "[טלפון הושחר]" in payload["details_redacted"]
+    assert "[דוא״ל הושחר]" in payload["details_redacted"]
+    assert "050-123-4567" not in payload["details_redacted"]
+    assert "test@example.com" not in payload["details_redacted"]

@@ -50,7 +50,7 @@
 - Secrets נשמרים ב־Render Environment או במנהל סודות; לעולם לא ב־Git, JSON, logs או Dry Run.
 - כל Webhook חיצוני דורש אימות חתימה או bearer secret, rate limiting ו־idempotency.
 - אין לשמור payload מלא של Meta אם אין צורך; לשמור רק שדות נדרשים.
-- PII לא נשלח ל־Gemini כברירת מחדל. יש להשחיר טלפונים, כתובות, שמות ודוא״ל לפני עיבוד.
+- טקסט חופשי אינו נשלח לאוטומציית AI כברירת מחדל. `AI_ALLOW_FREE_TEXT=true` מפעיל opt-in מפורש; אז הקוד משחיר טלפונים ודוא״ל בלבד ב־best-effort, ואינו מבטיח הסרת שמות או כתובות. לפני שימוש ב־Gemini יש להוסיף סינון נוסף בצד Make/n8n או להשאיר את הטקסט החופשי כבוי.
 - תוצאות AI הן הצעות בלבד; אין לבצע שליחה, שינוי מחיר או סגירת עסקה אוטומטיים.
 - הפרדה מלאה בין tenant/customer: repository, DB, service, secrets, webhook tokens, Canva assets ו־automation credentials.
 - מסך Wizard לא יפורסם באינטרנט לפני אימות משתמש חזק, MFA/SSO לפי הצורך, CSRF, RBAC, audit log, session hardening ובדיקות אבטחה.
@@ -65,21 +65,19 @@
 - WhatsApp Business Platform: אין להבטיח שימוש חינמי; תמחור Meta תלוי בסוג/מדינת ההודעה והחשבון.
 - Canva: חיבור API עצמאי דורש Developer App ו־OAuth; חיבור Canva בתוך ChatGPT אינו credential של האשף.
 
-## מצב סביבת העבודה שנבדק
+## מצב המימוש במאגר — 22 בנובמבר 2026
 
-- Render service `business-mvp-iqem` פעיל, Free, Frankfurt, ומחובר ל־`business-mvp/main` עם auto-deploy.
-- Neon project `eli-cohen-business-mvp` קיים באזור `aws-eu-central-1`; branch `main` כולל כרגע `lead` ו־`setting`.
-- היישום הקיים כולל טופס אתר, שמירת לידים, מסך ניהול בסיסי, חיפוש, סטטוסים וייצוא CSV.
-- WhatsApp Cloud API אינו ממומש כרגע; קיים רק adapter חסום.
-- PR #34 אינו ממוזג. אין למזג אותו לפני פתרון תצורת העסק והפרדת סביבת ה־Wizard מהיישום החי, כי הוא מסיר את `config/business.json` בעוד השירות הפעיל תלוי בתצורת האתר.
+- PR #34 מוזג ל־`main` ב־22.11.2026. המאגר מוגדר כ־Developer Studio פרטי וכלי Starter, ולא כאתר של לקוח מסוים.
+- בסביבת Render שנבדקה לא נמצא שירות בשם `business-mvp-iqem` או שירות אחר המחובר למאגר `business-mvp`; לא בוצעה פריסה חדשה.
+- אשף המפתח פועל ב־`127.0.0.1` בלבד ומופרד מהאפליקציה העסקית. אין לפרסם אותו לציבור ללא שכבת גישה מרחוק ייעודית ומאומתת.
+- אפליקציית ה־Starter כוללת טופס לידים, CRM בסיסי, WhatsApp inbound מאומת בקוד, טבלאות metadata/messages/events ו־Outbox/ACK/callback. קיום הקוד והבדיקות אינו מעיד על חיבור חי לחשבון Meta או למערכת אוטומציה.
+- Make/n8n ו־Gemini אינם מחוברים לחשבונות בפועל; ה־Outbox וה־callback הם חוזה API שמאפשר להקים את הזרימה.
+- Canva יכולה לשמש דרך חיבור ChatGPT המאומת כאשר הוא מחובר; אין OAuth עצמאי באשף.
 
-## שלבי מימוש
+## שלבי ההשלמה שנותרו
 
-1. שמירת מצב קיים וגיבוי נתונים; הקמת branch בדיקה ב־Neon.
-2. מודל CRM additive: metadata, messages, events ו־outbox.
-3. WhatsApp Cloud API inbound: verification, signature validation, deduplication ו־phone matching.
-4. API מאובטח ל־Make/n8n: outbox, ack, callback ועדכון סיווג.
-5. Gemini redaction + classification עם audit trail.
-6. שדרוג מסך CRM: מקור, עדיפות, תקציר, timeline, follow-up, פילטרים וייצוא.
-7. הרחבת Wizard ל־Preflight, תבניות workflows, Canva/Gemini/automation connections ו־per-customer secrets.
-8. בדיקות unit/integration, CI, staging, health, בדיקת ליד end-to-end ואז פריסה מבוקרת.
+1. להרחיב את אשף העסק כך שיאסוף פרופיל מותג ותוכן בסיסי וייצר `business.json` מלא במקום תבנית ברירת מחדל בלבד.
+2. להוסיף תבניות import והוראות הפעלה ל־Make/n8n, כולל שימוש ב־Gemini, credential storage, ACK ו־callback.
+3. לחבר חשבונות Meta ו־Make/n8n ולבצע בדיקות end-to-end עם נתוני דמה לפני שימוש בלידים אמיתיים.
+4. לבדוק בפועל את זכאות Neon Free, חיבור GitHub ל־Render ופריסה מבודדת של לקוח בדיקה; לא להשתמש בפרויקט לקוח קיים.
+5. להשאיר את אשף המפתח מקומי. גישה מרחוק תיחשב משימה נפרדת ותדרוש MFA/SSO, RBAC, CSRF, session hardening, audit logging ובדיקות אבטחה.

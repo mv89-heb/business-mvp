@@ -166,3 +166,32 @@ def test_export_rejects_symlinks_in_all_separately_copied_sources(tmp_path, rela
 
     with pytest.raises(ValueError, match="symbolic link"):
         _validate_export_tree(source)
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("primary_color", "red; background:url(https://attacker.test)"),
+        ("accent_color", "#123"),
+        ("theme_color", "javascript:alert(1)"),
+        ("font_family", "Arial; background:red"),
+    ],
+)
+def test_branding_configuration_rejects_unsafe_css_values(tmp_path, key, value):
+    data = load_business_config()
+    data["branding"][key] = value
+    path = tmp_path / "unsafe-brand.json"
+    path.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+    with pytest.raises(BusinessConfigError):
+        load_business_config(path)
+
+
+def test_selected_brand_font_is_used_by_customer_site_template():
+    from pathlib import Path
+    from business_app.export_starter import ROOT
+
+    base_template = (ROOT / "templates" / "base.html").read_text(encoding="utf-8")
+    stylesheet = (ROOT / "static" / "css" / "app.css").read_text(encoding="utf-8")
+    assert "business.branding.font_family" in base_template
+    assert "--brand-font:'{{ business.branding.font_family }}'" in base_template
+    assert "font-family:var(--brand-font,'Heebo')" in stylesheet

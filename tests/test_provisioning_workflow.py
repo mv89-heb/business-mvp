@@ -68,6 +68,7 @@ class FakeRender:
     def ensure_web_service(self, **kwargs):
         assert kwargs["env_vars"]["DATABASE_URL"].startswith("postgresql://")
         assert "ADMIN_PASSWORD" not in kwargs["env_vars"]
+        assert kwargs["env_vars"]["FLASK_ENV"] == "production"
         assert check_password_hash(kwargs["env_vars"]["ADMIN_PASSWORD_HASH"], "a-very-long-test-password")
         assert len(kwargs["env_vars"]["SECRET_KEY"]) >= 40
         return {"created": self.created, "service": {
@@ -91,7 +92,7 @@ def make_plan():
 def make_workflow(tmp_path, monkeypatch, *, health_checker=None, health_timeout=0, render_created=True):
     import business_app.provisioning.workflow as workflow_module
 
-    def fake_export(target, business_name, slug, modules=None):
+    def fake_export(target, business_name, slug, modules=None, business_profile=None):
         target.mkdir(parents=True)
         (target / "README.md").write_text("# clean starter", encoding="utf-8")
         (target / "app.py").write_text("app = None\n", encoding="utf-8")

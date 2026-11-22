@@ -79,6 +79,20 @@
           </div>
         </section>
         <section class="panel">
+          <div class="eyebrow">01B · BRAND & CONTACT</div><h2>מיתוג ופרטי קשר</h2>
+          <div class="grid">
+            <div class="field full"><label for="tagline">משפט תיאור קצר</label><input id="tagline" name="tagline" maxlength="160" value="{{ form_values.tagline }}" placeholder="מה העסק מציע ולמי?"></div>
+            <div class="field"><label for="phone">טלפון להצגה באתר</label><input id="phone" name="phone" maxlength="30" value="{{ form_values.phone }}" placeholder="050-1234567"></div>
+            <div class="field"><label for="whatsapp_number">מספר WhatsApp עסקי</label><input id="whatsapp_number" name="whatsapp_number" maxlength="30" value="{{ form_values.whatsapp_number }}" placeholder="050-1234567"></div>
+            <div class="field"><label for="address">כתובת העסק</label><input id="address" name="address" maxlength="160" value="{{ form_values.address }}"></div>
+            <div class="field"><label for="service_area">אזור שירות</label><input id="service_area" name="service_area" maxlength="160" value="{{ form_values.service_area }}" placeholder="למשל: בית שמש והסביבה"></div>
+            <div class="field full"><label for="services">שירותים עיקריים</label><input id="services" name="services" maxlength="500" value="{{ form_values.services|join(', ') }}" placeholder="שירות ראשון, שירות שני, שירות שלישי"><span class="hint">עד 6 שירותים, מופרדים בפסיקים. תיאורי שירות לא מומצאים.</span></div>
+            <div class="field"><label for="primary_color">צבע ראשי</label><input id="primary_color" name="primary_color" type="color" value="{{ form_values.primary_color }}"></div>
+            <div class="field"><label for="accent_color">צבע הדגשה</label><input id="accent_color" name="accent_color" type="color" value="{{ form_values.accent_color }}"></div>
+            <div class="field"><label for="font_family">גופן</label><select id="font_family" name="font_family">{% for font in ['Heebo','Assistant','Rubik','Arial'] %}<option value="{{ font }}" {% if form_values.font_family == font %}selected{% endif %}>{{ font }}</option>{% endfor %}</select></div>
+          </div>
+        </section>
+        <section class="panel">
           <div class="eyebrow">02 · APPLICATION MODULES</div><h2>מודולים להפעלה</h2>
           <div class="choices">
             {% for key,details in modules.items() %}
@@ -108,6 +122,10 @@
             <input type="hidden" name="business_name" value="{{ form_values.business_name }}">
             <input type="hidden" name="slug" value="{{ form_values.slug }}">
             <input type="hidden" name="category" value="{{ form_values.category }}">
+            {% for field in ['tagline','phone','whatsapp_number','address','service_area','primary_color','accent_color','font_family'] %}
+              <input type="hidden" name="{{ field }}" value="{{ form_values[field] }}">
+            {% endfor %}
+            <input type="hidden" name="services" value="{{ form_values.services|join(', ') }}">
             {% for selected_module in form_values.modules %}
               <input type="hidden" name="modules" value="{{ selected_module }}">
             {% endfor %}
@@ -128,6 +146,10 @@
             <input type="hidden" name="business_name" value="{{ form_values.business_name }}">
             <input type="hidden" name="slug" value="{{ form_values.slug }}">
             <input type="hidden" name="category" value="{{ form_values.category }}">
+            {% for field in ['tagline','phone','whatsapp_number','address','service_area','primary_color','accent_color','font_family'] %}
+              <input type="hidden" name="{{ field }}" value="{{ form_values[field] }}">
+            {% endfor %}
+            <input type="hidden" name="services" value="{{ form_values.services|join(', ') }}">
             {% for selected_module in form_values.modules %}
               <input type="hidden" name="modules" value="{{ selected_module }}">
             {% endfor %}

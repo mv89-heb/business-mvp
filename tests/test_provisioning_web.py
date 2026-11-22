@@ -1,13 +1,18 @@
+import json
+
 from business_app.provisioning_web import create_provisioning_app
 
 
-def make_client():
-    app = create_provisioning_app({
+def make_client(audit_path=None):
+    config = {
         "TESTING": True,
         "SECRET_KEY": "test-session-secret-that-is-at-least-32-chars",
         "PROVISIONING_PASSWORD": "developer-test-password",
         "WTF_CSRF_ENABLED": False,
-    })
+    }
+    if audit_path is not None:
+        config["PROVISIONING_AUDIT_PATH"] = str(audit_path)
+    app = create_provisioning_app(config)
     return app.test_client()
 
 
@@ -120,6 +125,31 @@ def test_preflight_route_runs_read_only_and_unlocks_execution(monkeypatch):
     assert '"writes_performed": false' in page
     with client.session_transaction() as session:
         assert session["preflight_fingerprint"]
+
+
+def test_wizard_carries_brand_profile_into_the_dry_run_plan():
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.post("/wizard", data={
+        "business_name": "עסק בדיקה",
+        "slug": "test-business",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "tagline": "פתרונות מקצועיים לבית",
+        "phone": "050-123-4567",
+        "whatsapp_number": "050-123-4567",
+        "address": "רחוב הדוגמה 12",
+        "service_area": "בית שמש והסביבה",
+        "primary_color": "#123456",
+        "accent_color": "#abcdef",
+        "font_family": "Rubik",
+        "services": "פרגולות, דקים",
+    })
+    page = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'name="tagline" value="פתרונות מקצועיים לבית"' in page
+    assert '"whatsapp_url": "https://wa.me/972501234567"' in page
+    assert 'value="פרגולות, דקים"' in page
 
 
 def test_execution_route_requires_developer_login():
@@ -308,3 +338,77 @@ def test_web_wizard_session_cookie_is_http_only_and_strict():
     assert "HttpOnly" in cookie
     assert "SameSite=Strict" in cookie
     assert "Secure" not in cookie  # Localhost HTTP is required by the local-only tool.
+
+
+def test_wizard_sets_security_headers_and_disables_caching():
+    client = make_client()
+    response = client.get("/login")
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_audit_log_records_auth_events_without_passwords(tmp_path):
+    audit_path = tmp_path / "audit.jsonl"
+    client = make_client(audit_path)
+    client.post("/login", data={"password": "wrong-secret-value"})
+    client.post("/login", data={"password": "developer-test-password"})
+    records = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+    assert [record["event"] for record in records] == ["login_failure", "login_success"]
+    serialized = audit_path.read_text(encoding="utf-8")
+    assert "wrong-secret-value" not in serialized
+    assert "developer-test-password" not in serialized
+
+
+def test_execution_preserves_brand_profile_after_preflight(monkeypatch):
+    import business_app.provisioning_web as provisioning_web
+    from business_app.provisioning import build_provisioning_plan
+    from business_app.provisioning_web import _plan_fingerprint
+
+    captured = {}
+
+    class FakeWorkflow:
+        def run(self, plan, **kwargs):
+            captured["plan"] = plan
+            return {"workflow_id": "profile-plan", "status": "completed"}
+
+    monkeypatch.setattr(provisioning_web, "ProvisioningWorkflow", FakeWorkflow)
+    monkeypatch.setenv("GITHUB_OWNER", "developer")
+    profile = {
+        "business_name": "עסק בדיקה",
+        "slug": "test-business",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "tagline": "פתרונות מקצועיים לבית",
+        "phone": "050-123-4567",
+        "whatsapp_number": "050-123-4567",
+        "address": "רחוב הדוגמה 12",
+        "service_area": "בית שמש והסביבה",
+        "primary_color": "#123456",
+        "accent_color": "#abcdef",
+        "font_family": "Rubik",
+        "services": ["פרגולות", "דקים"],
+    }
+    plan = build_provisioning_plan(**profile)
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    with client.session_transaction() as session:
+        session["preflight_fingerprint"] = _plan_fingerprint(plan)
+
+    response = client.post("/execute", data={
+        **{key: value for key, value in profile.items() if key != "services"},
+        "services": "פרגולות, דקים",
+        "approval": "CREATE",
+        "confirm_zero_cost": "yes",
+        "admin_password": "a-very-long-test-password",
+    })
+
+    assert response.status_code == 200
+    assert "PROVISIONING RESULT" in response.get_data(as_text=True)
+    assert captured["plan"]["business"]["tagline"] == profile["tagline"]
+    assert captured["plan"]["business"]["contact"]["phone_href"] == "tel:0501234567"
+    assert captured["plan"]["business"]["contact"]["whatsapp_url"] == "https://wa.me/972501234567"
+    assert captured["plan"]["business"]["branding"]["font_family"] == "Rubik"
+    assert captured["plan"]["business"]["services"] == ["פרגולות", "דקים"]

@@ -352,6 +352,7 @@ class ProvisioningWorkflow:
                     business_name=business.get("name", slug),
                     slug=slug,
                     modules=(plan.get("application") or {}).get("modules", []),
+                    business_profile=business,
                 )
 
                 record("github_repository", "running")
@@ -411,6 +412,7 @@ class ProvisioningWorkflow:
                 "SECRET_KEY": secrets.token_urlsafe(48),
                 "ADMIN_PASSWORD_HASH": generate_password_hash(admin_password),
                 "PYTHON_VERSION": "3.11.9",
+                "FLASK_ENV": "production",
             }
             for secret_name in (
                 "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN",
