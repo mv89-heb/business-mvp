@@ -327,7 +327,10 @@ class ProvisioningWorkflow:
                 export_starter(export_path, business_name=business.get("name", slug), slug=slug)
 
                 record("github_repository", "running")
-                repo_result = self.github.ensure_private_repository(github_owner, slug)
+                repo_result = self.github.ensure_private_repository(
+                    github_owner, slug,
+                    expected_repository_id=(state.get("resources", {}).get("github") or {}).get("repository_id"),
+                )
                 repository = repo_result["repository"]
                 if repository.get("private") is not True:
                     raise ProviderError("GitHub did not confirm a private repository")
@@ -350,7 +353,11 @@ class ProvisioningWorkflow:
                 })
 
             record("neon_project", "running")
-            project_result = self.neon.ensure_project(slug, free_tier_verified=True)
+            project_result = self.neon.ensure_project(
+                slug,
+                free_tier_verified=True,
+                expected_project_id=(state.get("resources", {}).get("neon") or {}).get("project_id"),
+            )
             project = project_result["project"]
             project_id = project.get("id")
             if not project_id:
@@ -383,6 +390,7 @@ class ProvisioningWorkflow:
                 repository_url=repository_url,
                 branch="main",
                 env_vars=render_env,
+                expected_service_id=(state.get("resources", {}).get("render") or {}).get("service_id"),
             )
             service = service_result["service"]
             service_id = service.get("id")
