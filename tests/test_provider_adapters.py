@@ -428,3 +428,65 @@ def test_neon_refuses_existing_project_with_mismatched_organization():
     with pytest.raises(Exception, match="different organization"):
         NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
     assert len(opener.requests) == 1
+
+
+
+@pytest.mark.parametrize("relative", [
+    ".netrc",
+    "credentials.json",
+    "nested/.env.production",
+    "uploads/customer-data.txt",
+    ".business-app-provisioner/state.json",
+    "database.sqlite3",
+    "backup.dump",
+])
+def test_github_publish_refuses_all_secret_and_runtime_artifact_paths(tmp_path, relative):
+    target = tmp_path / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    target.write_text("sensitive", encoding="utf-8")
+    opener = FakeOpener([])
+
+    with pytest.raises(Exception, match="secret, provisioning artifact"):
+        GitHubProvider("token", opener=opener).publish_directory(
+            "developer", "new-app", tmp_path
+        )
+
+    assert opener.requests == []
+
+
+def test_github_publish_rejects_symlinked_directory_before_network_call(tmp_path):
+    outside = tmp_path.parent / "outside-customer-data"
+    outside.mkdir(exist_ok=True)
+    (outside / "data.txt").write_text("customer data", encoding="utf-8")
+    link = tmp_path / "uploads"
+    try:
+        link.symlink_to(outside, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is not available on this platform")
+    opener = FakeOpener([])
+
+    with pytest.raises(Exception, match="symbolic link"):
+        GitHubProvider("token", opener=opener).publish_directory(
+            "developer", "new-app", tmp_path
+        )
+
+    assert opener.requests == []
+
+
+def test_github_publish_rejects_symlinked_export_root(tmp_path):
+    real_root = tmp_path / "real"
+    real_root.mkdir()
+    (real_root / "README.md").write_text("clean", encoding="utf-8")
+    link = tmp_path / "linked-root"
+    try:
+        link.symlink_to(real_root, target_is_directory=True)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is not available on this platform")
+    opener = FakeOpener([])
+
+    with pytest.raises(Exception, match="root is a symbolic link"):
+        GitHubProvider("token", opener=opener).publish_directory(
+            "developer", "new-app", link
+        )
+
+    assert opener.requests == []
