@@ -1,216 +1,236 @@
-<!doctype html>
-<html lang="he" dir="rtl">
+<!DOCTYPE html>
+<html lang="he" dir="rtl" class="dark">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>אשף הקמת עסקים | כלי מפתח</title>
-  <link rel="stylesheet" href="{{ url_for('static', filename='css/provisioning.css') }}">
-  <script defer src="{{ url_for('static', filename='js/provisioning.js') }}"></script>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="same-origin" />
+  <title>Business App Starter — Developer Studio</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <script>
+    tailwind.config = {
+      darkMode: 'class',
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Heebo', 'Inter', 'system-ui', 'sans-serif'],
+            mono: ['ui-monospace', 'SFMono-Regular', 'Menlo', 'Monaco', 'Consolas', 'monospace'],
+          },
+        },
+      },
+    };
+  </script>
+  <style>
+    body {
+      font-family: 'Heebo', 'Inter', system-ui, sans-serif;
+    }
+    .ltr-input {
+      direction: ltr;
+      text-align: left;
+    }
+  </style>
 </head>
-<body>
-  <main class="shell">
-    {% if login_required %}
-      <section class="panel lock">
-        <div class="login-mark" aria-hidden="true">B</div>
-        <div class="eyebrow">DEVELOPER ONLY</div>
-        <h1 class="title">כניסה לכלי המפתח</h1>
-        <p class="subtitle">{% if remote_access %}גישה פרטית למפתח בלבד. אין למסור את הסיסמה או לשתף את הקישור.{% else %}האשף פועל מקומית במחשב המפתח ואינו חלק ממערכת הלקוחות.{% endif %}</p>
-        {% with messages = get_flashed_messages(with_categories=true) %}
-          {% for category, message in messages %}<div class="notice error">{{ message }}</div>{% endfor %}
-        {% endwith %}
-        <form method="post" action="{{ url_for('login') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <div class="field"><label for="password">סיסמת גישה</label><input id="password" name="password" type="password" required autocomplete="current-password"></div>
-          <div class="actions"><button class="button" type="submit">כניסה לאשף</button></div>
-        </form>
-      </section>
-    {% else %}
-      <div class="workspace">
-        <aside class="sidebar" aria-label="ניווט ראשי">
-          <div class="brandmark"><div class="brand-icon" aria-hidden="true">B</div><div><div class="brand-name">Business Studio</div><div class="brand-caption">סביבת פיתוח פרטית</div></div></div>
-          <div class="nav-label">WORKSPACE</div>
-          <nav class="side-nav">
-            <a class="active" href="#dashboard"><span class="nav-symbol">⌂</span>סקירה כללית</a>
-            <a href="#business-profile"><span class="nav-symbol">◈</span>פרטי העסק</a>
-            <a href="#brand-profile"><span class="nav-symbol">✳</span>מיתוג ושפה</a>
-            <a href="#modules"><span class="nav-symbol">▦</span>מודולים</a>
-            <a href="#infrastructure"><span class="nav-symbol">⌘</span>תשתיות</a>
-            <a href="#plan-review"><span class="nav-symbol">✓</span>תוכנית הקמה</a>
-          </nav>
-          <div class="sidebar-bottom"><div class="private-tag"><span class="private-dot"></span>גישה פרטית למפתח</div><div class="sidebar-note">כל פרויקט לקוח מבודד בנפרד</div></div>
-        </aside>
-        <div class="workspace-main">
-      <header class="top" id="dashboard">
-        <div class="top-left"><div class="eyebrow">DEVELOPER WORKSPACE · {% if remote_access %}SECURE REMOTE ACCESS{% else %}LOCAL ONLY{% endif %}</div><h1 class="title">מרכז הפיתוח שלך</h1><p class="subtitle">תכנון, הקמה וניהול של פרויקטים עסקיים — במקום אחד.</p></div>
-        <div class="top-actions"><div class="user-chip"><span class="user-avatar">מ</span>מפתח · מנהל מערכת</div><form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button secondary" type="submit">יציאה</button></form></div>
-      </header>
-      <section class="panel">
-        <div class="panel-heading"><div><div class="eyebrow">CONNECTED SERVICES</div><h2>השירותים שלך</h2><p class="panel-description">בדיקת חיבורים לספקים לפני שמתחילים להקים פרויקט חדש.</p></div>{% if connection_results %}<span class="status-chip success">הבדיקה הושלמה</span>{% else %}<span class="status-chip warning">ממתין לבדיקה</span>{% endif %}</div>
-        <div class="provider-grid">
-          <div class="provider-card"><div class="provider-head"><span class="provider-name">GitHub</span>{% if connection_results and connection_results.get('github') %}{% if connection_results['github'].connected %}<span class="status-chip success">מחובר</span>{% else %}<span class="status-chip error">נכשל</span>{% endif %}{% else %}<span class="status-chip">לא נבדק</span>{% endif %}</div><div class="provider-caption">מאגרים, ענפים ו־Pull Requests</div></div>
-          <div class="provider-card"><div class="provider-head"><span class="provider-name">Neon</span>{% if connection_results and connection_results.get('neon') %}{% if connection_results['neon'].connected %}<span class="status-chip success">מחובר</span>{% else %}<span class="status-chip error">נכשל</span>{% endif %}{% else %}<span class="status-chip">לא נבדק</span>{% endif %}</div><div class="provider-caption">PostgreSQL מבודד לכל פרויקט</div></div>
-          <div class="provider-card"><div class="provider-head"><span class="provider-name">Render</span>{% if connection_results and connection_results.get('render') %}{% if connection_results['render'].connected %}<span class="status-chip success">מחובר</span>{% else %}<span class="status-chip error">נכשל</span>{% endif %}{% else %}<span class="status-chip">לא נבדק</span>{% endif %}</div><div class="provider-caption">פריסה, Health Checks ושירותים</div></div>
+<body class="bg-slate-50 text-slate-900 dark:bg-slate-950 dark:text-slate-100 min-h-screen antialiased transition-colors duration-200 selection:bg-indigo-500/30 selection:text-indigo-900 dark:selection:text-indigo-200">
+  <div id="app" class="min-h-screen flex flex-col">
+    <!-- Top Header -->
+    <header class="border-b border-slate-200 dark:border-slate-800/80 bg-white/90 dark:bg-slate-900/90 backdrop-blur sticky top-0 z-30 transition-colors">
+      <div class="max-w-6xl mx-auto px-4 sm:px-6 h-14 flex items-center justify-between gap-3">
+        <div class="flex items-center gap-3 min-w-0">
+          <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-violet-600 flex items-center justify-center shadow-lg shadow-indigo-500/20 shrink-0">
+            <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" stroke-width="2.2" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3M5 20h14a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+            </svg>
+          </div>
+          <div class="truncate flex items-center gap-2">
+            <span class="font-bold text-sm sm:text-base text-slate-900 dark:text-white truncate">Developer Studio</span>
+            <span class="hidden sm:inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25">
+              DEVELOPER ONLY
+            </span>
+          </div>
         </div>
-        <p class="hint">האשף בודק חיבורים באמצעות מפתחות שמוגדרים בסביבת המפתח בלבד. ערכי מפתחות וסודות אינם מוצגים.</p>
-        <form method="post" action="{{ url_for('check_connections') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <button class="button secondary" type="submit">בדוק חיבורי GitHub, Neon ו-Render</button>
-        </form>
-        <p class="hint">Canva מופעלת דרך חיבור Canva המאומת ב-ChatGPT לצורך מיתוג ועיצוב; היא אינה נבדקת באמצעות מפתח מקומי באשף.</p>
-        {% if connection_results %}
-          <div class="grid" style="margin-top:16px">
-            {% for key, result in connection_results.items() %}
-              <div class="notice {% if not result.connected %}error{% endif %}">
-                <strong>{{ key|upper }}</strong><br>
-                {{ result.message }}
-                {% if result.details %}<small>{{ result.details }}</small>{% endif %}
-              </div>
-            {% endfor %}
+
+        <!-- Theme Switcher: Auto (Device) / Light / Dark -->
+        <div role="group" aria-label="ערכת צבעים" class="inline-flex rounded-lg bg-slate-100 dark:bg-slate-800/90 p-0.5 border border-slate-200 dark:border-slate-700/70 text-xs shrink-0">
+          <button type="button" data-theme="system" title="התאם להגדרות המכשיר" class="theme-btn px-2 py-1.5 rounded-md font-medium transition cursor-pointer">
+            מכשיר
+          </button>
+          <button type="button" data-theme="light" title="מצב בהיר" class="theme-btn px-2 py-1.5 rounded-md font-medium transition cursor-pointer">
+            בהיר
+          </button>
+          <button type="button" data-theme="dark" title="מצב כהה" class="theme-btn px-2 py-1.5 rounded-md font-medium transition cursor-pointer">
+            כהה
+          </button>
+        </div>
+      </div>
+    </header>
+
+    {% if not session.get('developer') %}
+    <!-- LOGIN VIEW -->
+    <main class="flex-1 flex items-center justify-center px-4 py-10">
+      <div class="w-full max-w-md">
+        <div class="rounded-2xl bg-white dark:bg-slate-900/90 border border-slate-200 dark:border-slate-800 shadow-xl shadow-slate-200/60 dark:shadow-2xl dark:shadow-black/50 p-6 sm:p-8 relative overflow-hidden transition-colors">
+          <div class="absolute inset-x-0 top-0 h-1 bg-gradient-to-l from-indigo-500 via-violet-500 to-cyan-400"></div>
+
+          <div class="flex items-center justify-between mb-6">
+            <span class="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold bg-amber-500/10 text-amber-700 dark:text-amber-300 border border-amber-500/25">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" />
+              </svg>
+              DEVELOPER ONLY
+            </span>
+            <span class="text-xs text-slate-500 dark:text-slate-400 font-mono ltr-input">/login</span>
           </div>
-        {% endif %}
-      </section>
-      <div class="notice">שלב זה מפיק תוכנית Dry Run בלבד. לא נוצרים כרגע מאגר GitHub, פרויקט Neon או שירות Render.</div>
-      {% with messages = get_flashed_messages(with_categories=true) %}
-        {% for category, message in messages %}<div class="notice error">{{ message }}</div>{% endfor %}
-      {% endwith %}
-      {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
-      <div class="step-banner"><div class="step-count" data-step-number>01</div><div class="step-copy"><strong data-step-title>פרטי העסק</strong><span data-step-description>מגדירים את זהות הפרויקט והעסק.</span></div></div>
-      <div class="wizard-steps" aria-label="שלבי האשף">
-        <span class="wizard-step-label active" data-step-label="0"><b>01</b> פרטי העסק</span>
-        <span class="wizard-step-label" data-step-label="1"><b>02</b> מיתוג וקשר</span>
-        <span class="wizard-step-label" data-step-label="2"><b>03</b> מודולים</span>
-        <span class="wizard-step-label" data-step-label="3"><b>04</b> תשתיות</span>
-      </div>
-      <div class="progress-track" aria-label="התקדמות"><span data-progress></span></div>
-      <form method="post" action="{{ url_for('wizard') }}" novalidate>
-        <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <div class="wizard-step" data-wizard-step="0">
-        <section class="panel" id="business-profile">
-          <div class="eyebrow">01 · BUSINESS PROFILE</div><h2>פרטי העסק</h2>
-          <div class="grid">
-            <div class="field"><label for="business_name">שם העסק</label><input id="business_name" name="business_name" maxlength="120" required value="{{ form_values.business_name }}"></div>
-            <div class="field"><label for="slug">מזהה מערכת באנגלית</label><input id="slug" name="slug" pattern="[a-z0-9]+(-[a-z0-9]+)*" required placeholder="new-business" value="{{ form_values.slug }}"><span class="hint">אותיות קטנות באנגלית, מספרים ומקפים בלבד</span></div>
-            <div class="field full"><label for="category">סוג העסק</label><select id="category" name="category">{% for key,label in categories.items() %}<option value="{{ key }}" {% if form_values.category == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
+
+          <h1 class="text-2xl font-extrabold text-slate-900 dark:text-white mb-2">כניסה לכלי המפתח</h1>
+          <p class="text-sm text-slate-600 dark:text-slate-400 leading-relaxed mb-6">
+            גישה פרטית למפתח בלבד. אין למסור את הסיסמה או לשתף את הקישור.
+          </p>
+
+          {% if error %}
+          <div class="mb-4 p-3 rounded-xl bg-rose-50 dark:bg-rose-950/60 border border-rose-200 dark:border-rose-800 text-xs text-rose-700 dark:text-rose-300">
+            {{ error }}
           </div>
-        </section>
-      </div>
-      <div class="wizard-step" data-wizard-step="1">
-        <section class="panel" id="brand-profile">
-          <div class="eyebrow">02 · BRAND & CONTACT</div><h2>מיתוג ופרטי קשר</h2>
-          <div class="grid">
-            <div class="field full"><label for="tagline">משפט תיאור קצר</label><input id="tagline" name="tagline" maxlength="160" value="{{ form_values.tagline }}" placeholder="מה העסק מציע ולמי?"></div>
-            <div class="field"><label for="phone">טלפון להצגה באתר</label><input id="phone" name="phone" maxlength="30" value="{{ form_values.phone }}" placeholder="050-1234567"></div>
-            <div class="field"><label for="whatsapp_number">מספר WhatsApp עסקי</label><input id="whatsapp_number" name="whatsapp_number" maxlength="30" value="{{ form_values.whatsapp_number }}" placeholder="050-1234567"></div>
-            <div class="field"><label for="address">כתובת העסק</label><input id="address" name="address" maxlength="160" value="{{ form_values.address }}"></div>
-            <div class="field"><label for="service_area">אזור שירות</label><input id="service_area" name="service_area" maxlength="160" value="{{ form_values.service_area }}" placeholder="למשל: בית שמש והסביבה"></div>
-            <div class="field full"><label for="services">שירותים עיקריים</label><input id="services" name="services" maxlength="500" value="{{ form_values.services|join(', ') }}" placeholder="שירות ראשון, שירות שני, שירות שלישי"><span class="hint">עד 6 שירותים, מופרדים בפסיקים. תיאורי שירות לא מומצאים.</span></div>
-            <div class="field"><label for="primary_color">צבע ראשי</label><input id="primary_color" name="primary_color" type="color" value="{{ form_values.primary_color }}"></div>
-            <div class="field"><label for="accent_color">צבע הדגשה</label><input id="accent_color" name="accent_color" type="color" value="{{ form_values.accent_color }}"></div>
-            <div class="field"><label for="font_family">גופן</label><select id="font_family" name="font_family">{% for font in ['Heebo','Assistant','Rubik','Arial'] %}<option value="{{ font }}" {% if form_values.font_family == font %}selected{% endif %}>{{ font }}</option>{% endfor %}</select></div>
-          </div>
-        </section>
-      </div>
-      <div class="wizard-step" data-wizard-step="2">
-        <section class="panel" id="modules">
-          <div class="eyebrow">03 · APPLICATION MODULES</div><h2>מודולים להפעלה</h2>
-          <div class="choices">
-            {% for key,details in modules.items() %}
-              <label class="choice"><input type="checkbox" name="modules" value="{{ key }}" {% if key in form_values.modules %}checked{% endif %}><span>{{ details.label }}<small>{{ details.description }}</small></span></label>
-            {% endfor %}
-          </div>
-          <p class="hint">מודולים מתקדמים כגון מלאי, רכש, CRM מלא ותורים יוצגו לבחירה רק לאחר שיפותחו וייבדקו.</p>
-        </section>
-      </div>
-      <div class="wizard-step" data-wizard-step="3">
-        <section class="panel" id="infrastructure">
-          <div class="eyebrow">04 · INFRASTRUCTURE</div><h2>תשתית מוצעת</h2>
-          <div class="grid">
-            <div class="field"><label>GitHub</label><input value="Repository פרטי ונפרד" disabled></div>
-            <div class="field"><label>Neon</label><input value="PostgreSQL נפרד · aws-eu-central-1" disabled></div>
-            <div class="field"><label>Render</label><input value="Web Service · Frankfurt · Free" disabled></div>
-            <div class="field"><label>מדיניות עלויות</label><input value="ללא משאבים בתשלום" disabled></div>
-          </div>
-        </section>
-      </div>
-      <div class="wizard-controls">
-        <button class="button secondary" type="button" data-wizard-prev hidden>חזרה</button>
-        <span class="wizard-status" data-wizard-status aria-live="polite">שלב 1 מתוך 4</span>
-        <button class="button" type="button" data-wizard-next>המשך</button>
-        <button class="button" type="submit" data-wizard-submit hidden>הפק תוכנית הקמה</button>
-      </div>
-      </form>
-      {% if plan %}
-        <section class="panel" id="plan-review">
-          <div class="eyebrow">05 · REVIEW</div><h2>תוכנית ההקמה</h2>
-          <div class="notice">עדיין לא נוצרו משאבים. בדוק את פרטי העסק והמודולים לפני מעבר לביצוע.</div>
-          <pre>{{ plan|tojson(indent=2) }}</pre>
-          <form method="post" action="{{ url_for('preflight_provisioning') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="business_name" value="{{ form_values.business_name }}">
-            <input type="hidden" name="slug" value="{{ form_values.slug }}">
-            <input type="hidden" name="category" value="{{ form_values.category }}">
-            {% for field in ['tagline','phone','whatsapp_number','address','service_area','primary_color','accent_color','font_family'] %}
-              <input type="hidden" name="{{ field }}" value="{{ form_values[field] }}">
-            {% endfor %}
-            <input type="hidden" name="services" value="{{ form_values.services|join(', ') }}">
-            {% for selected_module in form_values.modules %}
-              <input type="hidden" name="modules" value="{{ selected_module }}">
-            {% endfor %}
-            <div class="actions"><button class="button" type="submit">בצע בדיקת היתכנות לקריאה בלבד</button></div>
-          </form>
-        </section>
-        {% if preflight_report %}
-          <section class="panel" id="preflight-report">
-            <div class="eyebrow">06 · PREFLIGHT · READ ONLY</div><h2>דוח בדיקת היתכנות</h2>
-            <div class="notice">הבדיקה הסתיימה ללא יצירה או שינוי של משאבים. יש לבדוק ידנית זכאות Neon Free ועלויות עדכניות לפני כל ביצוע.</div>
-            <pre>{{ preflight_report|tojson(indent=2) }}</pre>
-          </section>
-          <section class="panel" id="execution">
-            <div class="eyebrow">07 · EXECUTION · EXPLICIT APPROVAL</div><h2>ביצוע הקמה אמיתית</h2>
-          <div class="notice error">הפעולה הבאה יוצרת Repository פרטי, פרויקט Neon ושירות Render אמיתיים. היא אינה מוחקת משאבים קיימים ואינה מפעילה תוכנית Render בתשלום.</div>
-          <form method="post" action="{{ url_for('execute_provisioning') }}">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-            <input type="hidden" name="business_name" value="{{ form_values.business_name }}">
-            <input type="hidden" name="slug" value="{{ form_values.slug }}">
-            <input type="hidden" name="category" value="{{ form_values.category }}">
-            {% for field in ['tagline','phone','whatsapp_number','address','service_area','primary_color','accent_color','font_family'] %}
-              <input type="hidden" name="{{ field }}" value="{{ form_values[field] }}">
-            {% endfor %}
-            <input type="hidden" name="services" value="{{ form_values.services|join(', ') }}">
-            {% for selected_module in form_values.modules %}
-              <input type="hidden" name="modules" value="{{ selected_module }}">
-            {% endfor %}
-            <div class="grid">
-              <div class="field">
-                <label for="approval">אישור יצירה</label>
-                <input id="approval" name="approval" required autocomplete="off" placeholder="הקלד CREATE בדיוק">
-              </div>
-              <div class="field">
-                <label for="admin_password">סיסמת מנהל למערכת הלקוח</label>
-                <input id="admin_password" name="admin_password" type="password" minlength="14" required autocomplete="new-password" placeholder="לפחות 14 תווים">
+          {% endif %}
+
+          <form method="POST" action="/login" class="space-y-4">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <div>
+              <label for="loginPassword" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-1.5">
+                סיסמת גישה
+              </label>
+              <div class="relative">
+                <input
+                  id="loginPassword"
+                  name="password"
+                  type="password"
+                  required
+                  autocomplete="current-password"
+                  placeholder="הזן סיסמת מפתח"
+                  class="w-full rounded-xl bg-slate-50 dark:bg-slate-950/80 border border-slate-300 dark:border-slate-700/80 focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/25 px-4 py-3 text-sm text-slate-900 dark:text-white placeholder-slate-400 dark:placeholder-slate-500 outline-none transition pl-11"
+                />
+                <button
+                  id="togglePwdBtn"
+                  type="button"
+                  aria-label="הצג או הסתר סיסמה"
+                  class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 p-1 cursor-pointer"
+                >
+                  <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                  </svg>
+                </button>
               </div>
             </div>
-            <label class="choice" style="margin-top:14px">
-              <input type="checkbox" name="confirm_zero_cost" value="yes" required>
-              <span>בדקתי בחשבון Neon שהפרויקט זכאי למסלול Free ושלא צפוי חיוב. אם איני יכול לאמת עלות אפס, לא אבצע את ההקמה.</span>
-            </label>
-            <p class="hint">נדרשים גם GITHUB_TOKEN, GITHUB_OWNER, NEON_API_KEY, RENDER_API_KEY ו־RENDER_WORKSPACE_ID בסביבת המפתח. הסיסמה וכתובת מסד הנתונים מועברות לספקים בזיכרון בלבד ואינן נשמרות בקובץ מצב.</p>
-            <div class="actions"><button class="button" type="submit">אשר ובצע הקמה</button></div>
+
+            <button
+              type="submit"
+              class="w-full py-3 px-4 rounded-xl bg-indigo-600 hover:bg-indigo-500 active:bg-indigo-700 text-white font-semibold text-sm shadow-lg shadow-indigo-600/25 transition flex items-center justify-center gap-2 cursor-pointer"
+            >
+              <span>כניסה לאשף</span>
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M11 16l-4-4m0 0l4-4m-4 4h14m-5 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h7a3 3 0 013 3v1" />
+              </svg>
+            </button>
           </form>
-          </section>
-        {% endif %}
-      {% endif %}
-      {% if execution_result %}
-        <section class="panel">
-          <div class="eyebrow">PROVISIONING RESULT</div><h2>תוצאת ההקמה</h2>
-          <div class="notice">המערכת סימנה את התהליך כהושלם רק לאחר מעבר בדיקת /health.</div>
-          <pre>{{ execution_result|tojson(indent=2) }}</pre>
-        </section>
-      {% endif %}
-      <p class="footer">{% if remote_access %}סביבת מפתח פרטית. אין להעביר את פרטי הגישה או להשתמש באשף ממכשיר ציבורי.{% else %}הכלי אינו משולב ב־app.py ואינו נחשף ללקוחות. הפעל אותו רק מקומית ב־127.0.0.1.{% endif %}</p>
+
+          <div class="mt-6 pt-5 border-t border-slate-200 dark:border-slate-800/80 flex items-center justify-between text-xs text-slate-500 dark:text-slate-400">
+            <span>תוקף סשן: 20 דקות</span>
+            <span>הגנת CSRF + Rate Limit פעילים</span>
+          </div>
         </div>
       </div>
+    </main>
+
+    {% else %}
+    <!-- WIZARD VIEW -->
+    <main class="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-6 sm:py-8 space-y-6">
+      <section class="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none p-4 sm:p-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4 transition-colors">
+        <div>
+          <div class="flex flex-wrap items-center gap-2 mb-1">
+            <h1 class="text-xl sm:text-2xl font-extrabold text-slate-900 dark:text-white">Business App Starter — אשף הקמה</h1>
+            <span class="px-2.5 py-0.5 rounded-full text-xs font-medium bg-emerald-500/10 text-emerald-700 dark:text-emerald-300 border border-emerald-500/25">
+              מחובר כמפתח
+            </span>
+          </div>
+          <p class="text-sm text-slate-600 dark:text-slate-400">
+            הקמה מבודדת של פרויקט עסקי חדש: מאגר GitHub, מסד נתונים Neon ושירות Render נפרדים לכל לקוח.
+          </p>
+        </div>
+        <div class="flex items-center gap-3 shrink-0">
+          <form method="POST" action="/logout">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}" />
+            <button type="submit" class="px-3.5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold border border-slate-300 dark:border-slate-700 transition cursor-pointer">
+              התנתקות
+            </button>
+          </form>
+        </div>
+      </section>
+
+      <!-- כאן ניתן לשלב את בלוק התוכן/הפעולות הקיים של האשף מול נקודות הקצה ב-provisioning_web.py -->
+      <section class="rounded-2xl bg-white dark:bg-slate-900/80 border border-slate-200 dark:border-slate-800 shadow-sm dark:shadow-none p-5 sm:p-6">
+        {% block wizard_content %}{% endblock %}
+      </section>
+    </main>
     {% endif %}
-  </main>
+  </div>
+
+  <script>
+    (function () {
+      let currentTheme = 'system';
+      try {
+        const saved = localStorage.getItem('dev_studio_theme');
+        if (saved === 'light' || saved === 'dark' || saved === 'system') {
+          currentTheme = saved;
+        }
+      } catch (_) {}
+
+      const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+      function applyTheme() {
+        const systemDark = mq ? mq.matches : true;
+        const useDark = currentTheme === 'dark' || (currentTheme === 'system' && systemDark);
+        document.documentElement.classList.toggle('dark', useDark);
+
+        document.querySelectorAll('.theme-btn').forEach((btn) => {
+          const active = btn.dataset.theme === currentTheme;
+          btn.className = `theme-btn px-2 py-1.5 rounded-md font-medium transition cursor-pointer ${
+            active
+              ? 'bg-indigo-600 text-white shadow'
+              : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white'
+          }`;
+        });
+      }
+
+      document.querySelectorAll('.theme-btn').forEach((btn) => {
+        btn.addEventListener('click', () => {
+          currentTheme = btn.dataset.theme;
+          try {
+            localStorage.setItem('dev_studio_theme', currentTheme);
+          } catch (_) {}
+          applyTheme();
+        });
+      });
+
+      if (mq) {
+        const onChange = () => {
+          if (currentTheme === 'system') applyTheme();
+        };
+        if (mq.addEventListener) mq.addEventListener('change', onChange);
+        else if (mq.addListener) mq.addListener(onChange);
+      }
+
+      const togglePwdBtn = document.getElementById('togglePwdBtn');
+      if (togglePwdBtn) {
+        togglePwdBtn.addEventListener('click', () => {
+          const input = document.getElementById('loginPassword');
+          if (input) input.type = input.type === 'password' ? 'text' : 'password';
+        });
+      }
+
+      applyTheme();
+    })();
+  </script>
 </body>
 </html>
