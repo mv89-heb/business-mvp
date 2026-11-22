@@ -478,3 +478,23 @@ def test_healthz_is_public_and_does_not_disclose_configuration():
     response = client.get("/healthz")
     assert response.status_code == 200
     assert response.get_json() == {"status": "ok"}
+
+
+
+def test_remote_deployment_keeps_csrf_protection_enabled_by_default():
+    config = {
+        "TESTING": True,
+        "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
+        "PROVISIONING_PASSWORD": "a-remote-password-with-at-least-32-characters",
+        "PROVISIONING_PUBLIC_ACCESS": True,
+        "PROVISIONING_ALLOWED_HOSTS": ["wizard.example.test"],
+    }
+    client = create_provisioning_app(config).test_client()
+    page = client.get("/login", base_url="https://wizard.example.test")
+    assert page.status_code == 200
+    rejected = client.post(
+        "/login",
+        data={"password": config["PROVISIONING_PASSWORD"]},
+        base_url="https://wizard.example.test",
+    )
+    assert rejected.status_code == 400
