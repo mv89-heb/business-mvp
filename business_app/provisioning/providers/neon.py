@@ -63,9 +63,9 @@ class NeonProvider:
                 "suspend_timeout_seconds": 300,
             },
         }
-        payload = {"project": project_config}
         if self.org_id:
-            payload["org_id"] = self.org_id
+            project_config["org_id"] = self.org_id
+        payload = {"project": project_config}
         response = self.client.request("POST", "/projects", payload=payload)
         project = response.get("project", response)
         if not project.get("id"):
