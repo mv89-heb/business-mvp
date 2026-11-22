@@ -117,6 +117,11 @@ def _enqueue_outbox(lead, event_type, payload):
     ))
 
 
+def _ai_free_text_enabled():
+    """Free-text AI processing is opt-in because text may contain personal data."""
+    return os.getenv("AI_ALLOW_FREE_TEXT", "").strip().lower() == "true"
+
+
 def _automation_authorized():
     expected = os.getenv("AUTOMATION_WEBHOOK_SECRET", "").strip()
     authorization = request.headers.get("Authorization", "")
@@ -283,7 +288,7 @@ def create_app(test_config=None):
             _enqueue_outbox(lead, "lead.created", {
                 "lead_id": lead.id, "source": "website", "service": lead.service,
                 "area": lead.area, "budget": lead.budget,
-                "details_redacted": redact_for_ai(lead.details or ""),
+                "details_redacted": redact_for_ai(lead.details or "") if _ai_free_text_enabled() else "",
             })
         db.session.commit()
         app.logger.info("Lead %s stored successfully", lead.id)
@@ -461,7 +466,7 @@ def create_app(test_config=None):
                     if automation_enabled:
                         _enqueue_outbox(lead, "lead.created", {
                             "lead_id": lead.id, "source": "whatsapp", "service": "WhatsApp",
-                            "details_redacted": message["ai_text"],
+                            "details_redacted": message["ai_text"] if _ai_free_text_enabled() else "",
                         })
                 else:
                     metadata = db.session.get(LeadMetadata, lead.id)
@@ -485,7 +490,7 @@ def create_app(test_config=None):
                         "lead_id": lead.id, "source": "whatsapp",
                         "message_id": message["message_id"],
                         "message_type": message["message_type"],
-                        "message_text_redacted": message["ai_text"],
+                        "message_text_redacted": message["ai_text"] if _ai_free_text_enabled() else "",
                         "message_at": message["message_at"].isoformat(),
                     })
                 processed += 1
