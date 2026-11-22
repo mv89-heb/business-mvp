@@ -1,4 +1,4 @@
-#requires -Version 5.1
+﻿#requires -Version 5.1
 <#
 .SYNOPSIS
   One-command, developer-only setup and verification for eli-cohen-business-mvp.

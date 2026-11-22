@@ -22,9 +22,13 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Validate PowerShell syntax
-        shell: pwsh
+      - name: Validate Windows PowerShell 5.1 syntax and encoding
+        shell: powershell
         run: |
+          $bytes = [System.IO.File]::ReadAllBytes("RUN-BUSINESS-STARTER.ps1")
+          if ($bytes.Length -lt 3 -or $bytes[0] -ne 0xEF -or $bytes[1] -ne 0xBB -or $bytes[2] -ne 0xBF) {
+            throw "PowerShell script must be UTF-8 with BOM for Windows PowerShell 5.1."
+          }
           $tokens = $null
           $errors = $null
           [System.Management.Automation.Language.Parser]::ParseFile("RUN-BUSINESS-STARTER.ps1", [ref]$tokens, [ref]$errors) | Out-Null
@@ -32,4 +36,4 @@ jobs:
             $errors | Format-List
             exit 1
           }
-          Write-Host "PowerShell syntax OK"
+          Write-Host "Windows PowerShell 5.1 syntax and UTF-8 BOM OK"
