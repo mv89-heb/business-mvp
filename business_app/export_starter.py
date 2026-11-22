@@ -1,6 +1,7 @@
 """Create a customer-neutral, isolated copy of this application starter."""
 import argparse
 import fnmatch
+import os
 import re
 import shutil
 import sys
@@ -19,22 +20,62 @@ EXCLUDED_EXPORT_PATHS = (
     "PROVIDER_INTEGRATIONS_HE.md",
     "test_provisioning*.py",
     "test_provider_adapters.py",
+    ".provisioning-state",
+    ".business-app-provisioner",
+    "provisioning-state",
+    "instance",
+    "uploads",
+    "user_uploads",
+    "backups",
+    "runtime",
+    "logs",
 )
+
+SENSITIVE_EXPORT_SUFFIXES = (
+    ".pyc", ".pyo", ".log", ".sqlite", ".sqlite3", ".db", ".pem",
+    ".key", ".p12", ".pfx", ".p8", ".jks", ".keystore", ".bak",
+    ".backup", ".dump",
+)
+SENSITIVE_EXPORT_FILENAMES = {
+    ".env", ".envrc", ".netrc", ".npmrc", "credentials.json",
+    "service-account.json", "id_rsa", "id_ed25519",
+}
+
+
+def _is_excluded_export_name(name):
+    lowered = name.lower()
+    if lowered == ".env.example":
+        return False
+    if lowered in SENSITIVE_EXPORT_FILENAMES:
+        return True
+    if lowered.startswith(".env.") or lowered.endswith(SENSITIVE_EXPORT_SUFFIXES):
+        return True
+    return any(fnmatch.fnmatchcase(name, pattern) for pattern in EXCLUDED_EXPORT_PATHS)
 
 
 def _ignore_export_artifacts(directory, names):
-    """Exclude developer tooling and local artifacts at every copied directory level."""
-    ignored = set()
-    for name in names:
-        if name in {"__pycache__", ".pytest_cache", ".git", ".venv", "venv", "node_modules", ".DS_Store"}:
-            ignored.add(name)
-        elif name.endswith((".pyc", ".pyo", ".log", ".sqlite", ".db")):
-            ignored.add(name)
-        elif any(fnmatch.fnmatchcase(name, pattern) for pattern in EXCLUDED_EXPORT_PATHS):
-            ignored.add(name)
-        elif name == ".env":
-            ignored.add(name)
-    return ignored
+    """Exclude developer tooling, credentials and runtime/customer data at every level."""
+    return {
+        name for name in names
+        if name in {"__pycache__", ".pytest_cache", ".git", ".venv", "venv", "node_modules", ".DS_Store"}
+        or _is_excluded_export_name(name)
+    }
+
+
+def _validate_export_tree(source_root):
+    """Reject symlinks instead of following paths outside the source repository."""
+    for directory in DIRECTORIES:
+        root = source_root / directory
+        if root.is_symlink():
+            raise ValueError(f"Starter source contains a symbolic link: {directory}")
+        if not root.is_dir():
+            continue
+        for current, dirnames, filenames in os.walk(root, followlinks=False):
+            for name in dirnames + filenames:
+                candidate = Path(current) / name
+                if candidate.is_symlink():
+                    relative = candidate.relative_to(source_root)
+                    raise ValueError(f"Starter source contains a symbolic link: {relative.as_posix()}")
 
 
 def export_starter(target, business_name, slug):
@@ -47,6 +88,14 @@ def export_starter(target, business_name, slug):
         raise ValueError("Starter destination must be outside the source repository and its parent folders.")
     if destination.exists() and any(destination.iterdir()):
         raise FileExistsError(f"Destination must be empty: {destination}")
+
+    # Validate before copying anything: copytree follows symlinks by default,
+    # which could otherwise pull credentials or customer files from outside ROOT.
+    for filename in FILES:
+        source_file = ROOT / filename
+        if source_file.is_symlink():
+            raise ValueError(f"Starter source contains a symbolic link: {filename}")
+    _validate_export_tree(ROOT)
 
     destination.mkdir(parents=True, exist_ok=True)
     for filename in FILES:

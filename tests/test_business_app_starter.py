@@ -104,3 +104,41 @@ def test_clean_export_refuses_source_parent_destination():
 
     with pytest.raises(ValueError):
         export_starter(ROOT.parent, "עסק בדיקה", "test-business")
+
+
+
+def test_export_ignore_rules_exclude_secrets_and_runtime_state_but_keep_example_env():
+    from business_app.export_starter import _ignore_export_artifacts
+
+    names = [
+        ".env", ".env.production", ".env.example", ".envrc", ".netrc",
+        "credentials.json", "service-account.json", "private.pem", "signing.key",
+        "customer.sqlite", "customer.db", "application.log", ".provisioning-state",
+        ".business-app-provisioner", "uploads", "provisioning", "provisioning_web.py",
+        "README.md", "app.py",
+    ]
+
+    ignored = _ignore_export_artifacts(".", names)
+
+    assert ".env.example" not in ignored
+    for sensitive in names:
+        if sensitive not in {".env.example", "README.md", "app.py"}:
+            assert sensitive in ignored
+
+
+def test_export_rejects_symlinks_that_could_escape_source_tree(tmp_path):
+    from business_app.export_starter import _validate_export_tree
+
+    source = tmp_path / "source"
+    app_dir = source / "business_app"
+    app_dir.mkdir(parents=True)
+    outside_secret = tmp_path / "outside-secret.txt"
+    outside_secret.write_text("must never be copied", encoding="utf-8")
+    link = app_dir / "external-secret.txt"
+    try:
+        link.symlink_to(outside_secret)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is not available on this platform")
+
+    with pytest.raises(ValueError, match="symbolic link"):
+        _validate_export_tree(source)
