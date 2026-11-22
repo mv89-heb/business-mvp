@@ -81,3 +81,9 @@ def test_clean_export_refuses_destination_inside_source_repository(tmp_path):
 
     with pytest.raises(ValueError):
         export_starter(ROOT / "unsafe-export", "עסק בדיקה", "test-business")
+
+def test_clean_export_refuses_source_parent_destination():
+    from business_app.export_starter import export_starter, ROOT
+
+    with pytest.raises(ValueError):
+        export_starter(ROOT.parent, "עסק בדיקה", "test-business")
