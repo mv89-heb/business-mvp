@@ -142,3 +142,27 @@ def test_export_rejects_symlinks_that_could_escape_source_tree(tmp_path):
 
     with pytest.raises(ValueError, match="symbolic link"):
         _validate_export_tree(source)
+
+
+
+@pytest.mark.parametrize("relative", [
+    "config/business.template.json",
+    "render.yaml.template",
+    "starter/README.md",
+])
+def test_export_rejects_symlinks_in_all_separately_copied_sources(tmp_path, relative):
+    from business_app.export_starter import _validate_export_tree
+
+    source = tmp_path / "source"
+    source.mkdir()
+    outside = tmp_path / "outside-secret.txt"
+    outside.write_text("not for export", encoding="utf-8")
+    target = source / relative
+    target.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        target.symlink_to(outside)
+    except (OSError, NotImplementedError):
+        pytest.skip("Symlink creation is not available on this platform")
+
+    with pytest.raises(ValueError, match="symbolic link"):
+        _validate_export_tree(source)
