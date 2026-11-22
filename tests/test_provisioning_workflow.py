@@ -45,6 +45,10 @@ class FakeNeon:
 class FakeRender:
     workspace_id = "workspace-approved"
 
+    def __init__(self, created=True):
+        self.created = created
+        self.reconciled = []
+
     def check_connection(self):
         return {"provider": "render", "connected": True, "workspace_selected": True}
 
@@ -53,10 +57,14 @@ class FakeRender:
         assert "ADMIN_PASSWORD" not in kwargs["env_vars"]
         assert check_password_hash(kwargs["env_vars"]["ADMIN_PASSWORD_HASH"], "a-very-long-test-password")
         assert len(kwargs["env_vars"]["SECRET_KEY"]) >= 40
-        return {"created": True, "service": {
+        return {"created": self.created, "service": {
             "id": "srv-123", "name": "test-business",
             "serviceDetails": {"url": "https://test-business.onrender.com"},
         }}
+
+    def reconcile_environment_and_deploy(self, service_id, env_vars):
+        self.reconciled.append((service_id, env_vars))
+        return {"id": "deploy-retry-1"}
 
 
 def make_plan():
@@ -67,7 +75,7 @@ def make_plan():
     }
 
 
-def make_workflow(tmp_path, monkeypatch, *, health_checker=None, health_timeout=0):
+def make_workflow(tmp_path, monkeypatch, *, health_checker=None, health_timeout=0, render_created=True):
     import business_app.provisioning.workflow as workflow_module
 
     def fake_export(target, business_name, slug):
@@ -81,7 +89,7 @@ def make_workflow(tmp_path, monkeypatch, *, health_checker=None, health_timeout=
     workflow = ProvisioningWorkflow(
         github=github,
         neon=FakeNeon(),
-        render=FakeRender(),
+        render=FakeRender(created=render_created),
         state_store=WorkflowStateStore(tmp_path / "state"),
         health_checker=health_checker or (lambda url: True),
         health_timeout=health_timeout,
@@ -227,3 +235,24 @@ def test_state_store_rejects_path_traversal_workflow_ids(tmp_path):
     store = WorkflowStateStore(tmp_path / "state")
     with pytest.raises(ValueError, match="Invalid workflow identifier"):
         store.save("../outside", {"status": "failed"})
+
+
+def test_retry_reconciles_existing_render_service_environment_before_health_check(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch, render_created=False)
+    result = workflow.run(
+        make_plan(),
+        github_owner="developer",
+        admin_password="a-very-long-test-password",
+        approval="CREATE",
+        neon_free_tier_verified=True,
+    )
+    assert result["status"] == "completed"
+    assert len(workflow.render.reconciled) == 1
+    service_id, env_vars = workflow.render.reconciled[0]
+    assert service_id == "srv-123"
+    assert env_vars["DATABASE_URL"].startswith("postgresql://")
+    assert "ADMIN_PASSWORD" not in env_vars
+    state = json.loads((tmp_path / "state" / "plan-123456.json").read_text(encoding="utf-8"))
+    steps = [entry["step"] for entry in state["history"]]
+    assert "render_environment" in steps
+    assert state["status"] == "completed"

@@ -1,5 +1,6 @@
 """Render service provisioning adapter. Always requests the Free plan."""
 import os
+from urllib.parse import quote
 
 from .http import JsonApiClient, ProviderError
 
@@ -57,6 +58,30 @@ class RenderProvider:
             raise ProviderError("Render did not return the requested service")
         return service
 
+    def reconcile_environment_and_deploy(self, service_id, env_vars):
+        """Idempotently refresh required service variables, then deploy their values.
+
+        Individual variable updates preserve unrelated variables and environment
+        groups. A retry safely repeats the PUTs; an ambiguous deploy may be
+        repeated on a later retry without creating another service.
+        """
+        if not service_id:
+            raise ProviderError("Render service identifier is required")
+        for key, value in (env_vars or {}).items():
+            if not isinstance(key, str) or not key.replace("_", "").isalnum() or not key.isupper():
+                raise ProviderError("Invalid environment variable name")
+            if not isinstance(value, str) or not value:
+                raise ProviderError("Environment variable values must be non-empty strings")
+            self.client.request(
+                "PUT",
+                f"/services/{quote(service_id, safe='')}/env-vars/{quote(key, safe='')}",
+                payload={"value": value},
+            )
+        return self.client.request(
+            "POST",
+            f"/services/{quote(service_id, safe='')}/deploys",
+            payload={"clearCache": "do_not_clear", "deployMode": "build_and_deploy"},
+        )
     def ensure_web_service(self, *, name, repository_url, branch="main",
                            build_command="pip install -r requirements.txt",
                            start_command="gunicorn --workers 1 --threads 4 --timeout 60 wsgi:app",

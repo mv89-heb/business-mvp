@@ -370,3 +370,39 @@ def test_render_refuses_existing_service_when_region_is_unverified():
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
             name="app", repository_url="https://github.com/a/b"
         )
+
+
+def test_github_publish_reconciles_ambiguous_ref_update_without_name_error(tmp_path):
+    from business_app.provisioning.providers.github import GitHubProvider
+
+    (tmp_path / "README.md").write_text("# starter\\n", encoding="utf-8")
+    opener = FakeOpener([
+        {"object": {"sha": "parent"}},
+        {"tree": {"sha": "tree0"}},
+        {"tree": [], "truncated": False},
+        {"sha": "blob-readme"},
+        {"sha": "tree-new"},
+        {"sha": "commit-new"},
+        URLError("timeout after GitHub accepted ref update"),
+        {"object": {"sha": "commit-new"}},
+    ])
+    result = GitHubProvider("token", opener=opener).publish_directory(
+        "developer", "new-app", tmp_path
+    )
+    assert result["commit_sha"] == "commit-new"
+    assert result["published"] is True
+    assert opener.requests[-1][0].get_method() == "GET"
+
+
+def test_render_reconciles_existing_service_env_vars_without_replacing_other_vars():
+    opener = FakeOpener([{}, {}, {}, {"id": "deploy-1", "status": "created"}])
+    provider = RenderProvider("token", workspace_id="tea-1", opener=opener)
+    deploy = provider.reconcile_environment_and_deploy(
+        "srv-1",
+        {"DATABASE_URL": "postgresql://db", "ADMIN_PASSWORD_HASH": "pbkdf2:hash", "SECRET_KEY": "key"},
+    )
+    assert deploy["id"] == "deploy-1"
+    assert [request.get_method() for request, _ in opener.requests] == ["PUT", "PUT", "PUT", "POST"]
+    assert opener.requests[0][0].full_url.endswith("/services/srv-1/env-vars/DATABASE_URL")
+    assert json.loads(opener.requests[0][0].data) == {"value": "postgresql://db"}
+    assert opener.requests[-1][0].full_url.endswith("/services/srv-1/deploys")

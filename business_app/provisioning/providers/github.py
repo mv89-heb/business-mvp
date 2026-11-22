@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 
-from .http import JsonApiClient, ProviderConfigurationError, ProviderError, ProviderHTTPError
+from .http import JsonApiClient, ProviderConfigurationError, ProviderError, ProviderHTTPError, ProviderOperationUnknown
 
 
 class GitHubProvider:
