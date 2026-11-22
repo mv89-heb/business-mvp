@@ -279,11 +279,12 @@ def create_app(test_config=None):
             lead_id=lead.id, event_type="lead.created", source="website",
             description="פנייה חדשה התקבלה מטופס האתר",
         ))
-        _enqueue_outbox(lead, "lead.created", {
-            "lead_id": lead.id, "source": "website", "service": lead.service,
-            "area": lead.area, "budget": lead.budget,
-            "details_redacted": redact_for_ai(lead.details or ""),
-        })
+        if app.config["BUSINESS_CONFIG"].get("modules", {}).get("automation_webhooks", False):
+            _enqueue_outbox(lead, "lead.created", {
+                "lead_id": lead.id, "source": "website", "service": lead.service,
+                "area": lead.area, "budget": lead.budget,
+                "details_redacted": redact_for_ai(lead.details or ""),
+            })
         db.session.commit()
         app.logger.info("Lead %s stored successfully", lead.id)
         _notify_lead_webhook(lead, app)
@@ -410,9 +411,11 @@ def create_app(test_config=None):
     @csrf.exempt
     @limiter.limit("120 per minute")
     def whatsapp_webhook_receive():
-        whatsapp_config = app.config["BUSINESS_CONFIG"].get("integrations", {}).get("whatsapp_cloud_api", {})
-        if not whatsapp_config.get("enabled", False):
+        business_config = app.config["BUSINESS_CONFIG"]
+        whatsapp_config = business_config.get("integrations", {}).get("whatsapp_cloud_api", {})
+        if not business_config.get("modules", {}).get("whatsapp_inbound", False) or not whatsapp_config.get("enabled", False):
             abort(404)
+        automation_enabled = business_config.get("modules", {}).get("automation_webhooks", False)
         app_secret = os.getenv("WHATSAPP_APP_SECRET", "").strip()
         if not app_secret:
             return jsonify(error="WhatsApp webhook is not configured"), 503
@@ -455,10 +458,11 @@ def create_app(test_config=None):
                         lead_id=lead.id, event_type="lead.created", source="whatsapp",
                         description="ליד חדש נוצר מהודעת WhatsApp נכנסת",
                     ))
-                    _enqueue_outbox(lead, "lead.created", {
-                        "lead_id": lead.id, "source": "whatsapp", "service": "WhatsApp",
-                        "details_redacted": message["ai_text"],
-                    })
+                    if automation_enabled:
+                        _enqueue_outbox(lead, "lead.created", {
+                            "lead_id": lead.id, "source": "whatsapp", "service": "WhatsApp",
+                            "details_redacted": message["ai_text"],
+                        })
                 else:
                     metadata = db.session.get(LeadMetadata, lead.id)
                     if metadata is None:
@@ -476,13 +480,14 @@ def create_app(test_config=None):
                     lead_id=lead.id, event_type="lead.message_received", source="whatsapp",
                     description="התקבלה הודעת WhatsApp נכנסת",
                 ))
-                _enqueue_outbox(lead, "lead.message_received", {
-                    "lead_id": lead.id, "source": "whatsapp",
-                    "message_id": message["message_id"],
-                    "message_type": message["message_type"],
-                    "message_text_redacted": message["ai_text"],
-                    "message_at": message["message_at"].isoformat(),
-                })
+                if automation_enabled:
+                    _enqueue_outbox(lead, "lead.message_received", {
+                        "lead_id": lead.id, "source": "whatsapp",
+                        "message_id": message["message_id"],
+                        "message_type": message["message_type"],
+                        "message_text_redacted": message["ai_text"],
+                        "message_at": message["message_at"].isoformat(),
+                    })
                 processed += 1
             db.session.commit()
         except Exception:
@@ -495,6 +500,8 @@ def create_app(test_config=None):
     @csrf.exempt
     @limiter.limit("60 per minute")
     def integration_outbox():
+        if not app.config["BUSINESS_CONFIG"].get("modules", {}).get("automation_webhooks", False):
+            abort(404)
         if not _automation_authorized():
             return jsonify(error="Unauthorized"), 401
         limit = min(max(request.args.get("limit", 25, type=int), 1), 50)
@@ -520,6 +527,8 @@ def create_app(test_config=None):
     @csrf.exempt
     @limiter.limit("60 per minute")
     def integration_outbox_ack(event_id):
+        if not app.config["BUSINESS_CONFIG"].get("modules", {}).get("automation_webhooks", False):
+            abort(404)
         if not _automation_authorized():
             return jsonify(error="Unauthorized"), 401
         event = db.session.scalar(
@@ -537,6 +546,9 @@ def create_app(test_config=None):
     @csrf.exempt
     @limiter.limit("60 per minute")
     def lead_enrichment_callback(lead_id):
+        modules = app.config["BUSINESS_CONFIG"].get("modules", {})
+        if not modules.get("automation_webhooks", False) or not modules.get("ai_lead_enrichment", False):
+            abort(404)
         if not _automation_authorized():
             return jsonify(error="Unauthorized"), 401
         lead = db.get_or_404(Lead, lead_id)
