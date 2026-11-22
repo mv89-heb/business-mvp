@@ -31,7 +31,7 @@
     <label>שם מלא<input name="name" required minlength="2" maxlength="120" autocomplete="name"></label>
     <label>טלפון<input name="phone" required inputmode="tel" autocomplete="tel" placeholder="050-0000000"></label>
     <label>דוא״ל (לא חובה)<input name="email" type="email" maxlength="254" autocomplete="email"></label>
-    <div class="form-row"><label>עיר / יישוב<input name="city" maxlength="100"></label><label>סוג השירות<select id="service-select" name="service">{% for service in content.services %}<option value="{{ service.form_value }}">{{ service.name }}</option>{% endfor %}<option value="אחר">אחר</option></select></label></div>
+    <div class="form-row"><label>עיר / יישוב<input name="city" maxlength="100"></label><label>סוג השירות<select id="service-select" name="service">{% for service in content.services %}<option value="{{ service.form_value }}" data-prompt="{{ service.prompt|default('') }}">{{ service.name }}</option>{% endfor %}<option value="אחר">אחר</option></select></label></div>
     <label>שטח / כמות (אם ידוע)<input name="area" type="number" min="1" max="100000"></label>
     {% if content.budget_options %}<label>תקציב משוער (לא חובה)<select name="budget"><option value="">לא צוין</option>{% for option in content.budget_options %}<option>{{ option }}</option>{% endfor %}</select></label>{% endif %}
     <label>פרטים נוספים<textarea id="project-details" name="details" rows="4" maxlength="4000"></textarea></label>
