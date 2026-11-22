@@ -77,7 +77,7 @@ def test_neon_creates_project_with_scale_to_zero_defaults():
     result = provider.ensure_project("app")
     assert result["created"] is True
     payload = json.loads(opener.requests[-1][0].data)
-    assert payload["org_id"] == "org-1"
+    assert payload["project"]["org_id"] == "org-1"
     assert payload["project"]["default_endpoint_settings"]["autoscaling_limit_min_cu"] == 0.25
     assert payload["project"]["default_endpoint_settings"]["suspend_timeout_seconds"] == 300
 
