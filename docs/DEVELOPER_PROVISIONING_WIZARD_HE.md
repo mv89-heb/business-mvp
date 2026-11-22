@@ -56,14 +56,22 @@ py -m business_app.provisioning_web
 - ברירת מחדל ל־Render Free בפרנקפורט ול־Neon באזור aws-eu-central-1.
 - מניעת הכללת סודות או נתוני לקוחות בתוכנית ובלוגי שגיאה.
 
-## ביצוע הקמה מקצה לקצה
+## בדיקת היתכנות והקמה מקצה לקצה
 
 לאחר יצירת תוכנית Dry Run יש לבצע תחילה בדיקת Preflight לקריאה בלבד. בממשק המקומי משתמשים בכפתור „בצע בדיקת היתכנות לקריאה בלבד”. ב־CLI מריצים:
+
+```powershell
+py -m business_app.provisioning.execute --plan .\\work\\new-business-plan.json --preflight-only
+```
+
+ה־Preflight מבצע קריאות GET בלבד: מאמת גישה לחשבונות, בודק אם Repository פרטי / פרויקט Neon / שירות Render בשם המבוקש כבר קיימים, ומוודא התאמת אזור, מקור, branch ותוכנית Render. הבדיקה נכשלת במצב של משאב ציבורי, כפילות או תצורה לא תואמת. היא אינה יוצרת, מעדכנת או מוחקת משאבים, אינה מבצעת deploy ואינה מאמתת בפועל זכאות Free או מחיר עדכני.
+
+רק לאחר עיון בדוח ואימות ידני של עלות אפס ניתן להפעיל את פקודת הביצוע ללא `--preflight-only`. זהו שלב שיוצר משאבים אמיתיים ולכן דורש אישור מפורש:
 
 1. להגדיר משתני סביבה במחשב המפתח בלבד: `GITHUB_TOKEN`, `GITHUB_OWNER`, `NEON_API_KEY`, `RENDER_API_KEY`, `RENDER_WORKSPACE_ID` (ו־`NEON_ORG_ID` אם נדרש).
 2. לוודא ש־Render מחובר לחשבון GitHub ושנבחרה סביבת העבודה הנכונה.
 3. לוודא מול חשבון Neon שהפרויקט זכאי למסלול Free ושלא צפוי חיוב. אם אי אפשר לאמת עלות אפס — לא ממשיכים.
-4. להפעיל:
+4. להפעיל את פקודת הביצוע:
    ```powershell
    py -m business_app.provisioning.execute --plan .\\work\\new-business-plan.json
    ```
