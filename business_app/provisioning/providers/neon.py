@@ -47,7 +47,7 @@ class NeonProvider:
         return {"provider": "neon", "connected": True, "visible_projects": len(projects)}
 
     def ensure_project(self, name, *, region_id="aws-eu-central-1", pg_version=17,
-                       free_tier_verified=False):
+                       free_tier_verified=False, expected_project_id=None):
         if not self.org_id:
             raise ProviderConfigurationError("NEON_ORG_ID is required before provisioning a customer database")
         matches = [item for item in self.list_projects() if item.get("name", "").casefold() == name.casefold()]
@@ -59,6 +59,8 @@ class NeonProvider:
                 raise ProviderError("A Neon project with this name exists in a different region")
             if project.get("org_id") and project.get("org_id") != self.org_id:
                 raise ProviderError("A Neon project with this name belongs to a different organization")
+            if not expected_project_id or str(project.get("id")) != str(expected_project_id):
+                raise ProviderError("An existing Neon project is not registered to this provisioning workflow")
             return {"created": False, "project": project}
 
         if free_tier_verified is not True:
