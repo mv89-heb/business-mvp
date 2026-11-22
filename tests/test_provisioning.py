@@ -142,6 +142,7 @@ def test_plan_identity_changes_when_modules_change():
         {"accent_color": "#123"},
         {"font_family": "Comic Sans"},
         {"phone": "call me"},
+        {"phone": "050+1234567"},
         {"services": ["שירות"] * 7},
     ],
 )
