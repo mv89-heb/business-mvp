@@ -1,0 +1,73 @@
+{
+  "id": "replace-with-unique-business-slug",
+  "name": "שם העסק",
+  "tagline": "תחום הפעילות",
+  "locale": {
+    "language": "he",
+    "direction": "rtl"
+  },
+  "branding": {
+    "theme_color": "#172b25",
+    "primary_color": "#172b25",
+    "accent_color": "#b88a54",
+    "font_family": "Heebo"
+  },
+  "contact": {
+    "phone_display": "",
+    "phone_href": "",
+    "whatsapp_url": "",
+    "address": "",
+    "service_area": ""
+  },
+  "modules": {
+    "lead_capture": true,
+    "lead_management": true,
+    "estimate_calculator": false
+  },
+  "integrations": {
+    "google_sheets_webhook": {
+      "enabled": false
+    },
+    "whatsapp_cloud_api": {
+      "enabled": false
+    },
+    "email": {
+      "enabled": false
+    }
+  },
+  "content": {
+    "hero": {
+      "eyebrow": "שם העסק ותחום הפעילות",
+      "title_line_1": "כותרת ראשית",
+      "title_line_2": "הבטחה עסקית ברורה.",
+      "description": "תיאור קצר של העסק והשירותים.",
+      "primary_cta": "יצירת קשר",
+      "whatsapp_cta": "שלחו הודעה",
+      "proof_points": [],
+      "art_caption": ""
+    },
+    "services_heading": "השירותים שלנו",
+    "services_description": "תיאור השירותים.",
+    "services": [],
+    "process_heading": "איך מתקדמים?",
+    "process_steps": [],
+    "estimate": {
+      "eyebrow": "מידע נוסף",
+      "title": "אומדן ראשוני",
+      "description": "",
+      "label": "כמות / שטח",
+      "button": "בדיקה",
+      "notice": "הבדיקה אינה הצעת מחיר מחייבת."
+    },
+    "contact": {
+      "eyebrow": "יצירת קשר",
+      "title": "ספרו לנו על הצורך שלכם",
+      "description": "השאירו פרטים ונחזור אליכם.",
+      "whatsapp_button": "WhatsApp",
+      "form_submit": "שליחה",
+      "consent": "אני מאשר/ת ליצור איתי קשר בנוגע לפנייה זו.",
+      "privacy_note": "הפרטים ישמשו לטיפול בפנייה בלבד."
+    },
+    "budget_options": []
+  }
+}

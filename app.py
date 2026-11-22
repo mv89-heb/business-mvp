@@ -2,7 +2,6 @@ import os
 import re
 import json
 import urllib.request
-import urllib.error
 import csv
 import io
 from datetime import datetime, timezone
@@ -15,6 +14,9 @@ from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import desc, func, or_
 from werkzeug.security import check_password_hash
+
+from business_app.config import load_business_config
+from business_app.integrations.google_sheets import send_lead_created
 
 db = SQLAlchemy()
 limiter = Limiter(key_func=get_remote_address, storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://"), default_limits=["200 per day", "50 per hour"])
@@ -61,51 +63,8 @@ def _estimate(area):
 
 
 def _notify_lead_webhook(lead, app):
-    webhook_url = os.getenv("LEAD_WEBHOOK_URL", "").strip()
-    if not webhook_url:
-        return
-    webhook_secret = os.getenv("LEAD_WEBHOOK_SECRET", "").strip()
-    if not webhook_secret:
-        app.logger.warning("Lead webhook URL is configured but LEAD_WEBHOOK_SECRET is missing; delivery skipped")
-        return
-    payload = {
-        "event": "lead.created",
-        "token": webhook_secret,
-        "lead": {
-            "id": lead.id,
-            "created_at": lead.created_at.isoformat() if lead.created_at else None,
-            "name": lead.name,
-            "phone": lead.phone,
-            "email": lead.email,
-            "city": lead.city,
-            "service": lead.service,
-            "area_sqm": lead.area,
-            "budget": lead.budget,
-            "details": lead.details,
-            "status": lead.status,
-        },
-    }
-    request_data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    webhook_request = urllib.request.Request(
-        webhook_url, data=request_data,
-        headers={"Content-Type": "application/json", "User-Agent": "EliCohenBusinessMVP/1.0"},
-        method="POST",
-    )
-    try:
-        with urllib.request.urlopen(webhook_request, timeout=8) as response:
-            if not 200 <= response.status < 300:
-                app.logger.warning("Lead webhook returned HTTP %s", response.status)
-                return
-            try:
-                result = json.loads(response.read(4096).decode("utf-8"))
-            except (ValueError, UnicodeDecodeError):
-                app.logger.warning("Lead webhook returned an unreadable response")
-                return
-            if result.get("ok") is not True:
-                app.logger.warning("Lead webhook rejected the event; check its shared secret and Apps Script logs")
-    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
-        app.logger.exception("Lead webhook delivery failed; lead remains saved")
-
+    integrations = app.config['BUSINESS_CONFIG'].get('integrations', {})
+    send_lead_created(lead, app, integrations.get('google_sheets_webhook', {}))
 
 def admin_required(fn):
     @wraps(fn)
@@ -118,8 +77,10 @@ def admin_required(fn):
 
 def create_app(test_config=None):
     app = Flask(__name__)
+    business_config = load_business_config()
     app.config.update(
         SECRET_KEY=os.getenv("SECRET_KEY", "local-development-only-change-me"),
+        BUSINESS_CONFIG=business_config,
         SQLALCHEMY_DATABASE_URI=_database_url(),
         SQLALCHEMY_TRACK_MODIFICATIONS=False,
         SESSION_COOKIE_HTTPONLY=True,
@@ -132,6 +93,10 @@ def create_app(test_config=None):
     db.init_app(app)
     limiter.init_app(app)
     csrf.init_app(app)
+
+    @app.context_processor
+    def inject_business_config():
+        return {'business': app.config['BUSINESS_CONFIG']}
 
     with app.app_context():
         db.create_all()
@@ -148,12 +113,14 @@ def create_app(test_config=None):
 
     @app.get("/")
     def index():
-        return render_template("index.html", preset=request.args.get("preset", "contractor"))
+        return render_template("index.html", preset=request.args.get("preset", app.config['BUSINESS_CONFIG']['id']))
 
     @app.post("/estimate")
     @csrf.exempt  # Public read-only calculation; no state change.
     @limiter.limit("20 per hour")
     def estimate():
+        if not app.config['BUSINESS_CONFIG'].get('modules', {}).get('estimate_calculator', True):
+            abort(404)
         try:
             area = int(request.form.get("area", "0"))
         except (TypeError, ValueError):
@@ -168,6 +135,8 @@ def create_app(test_config=None):
     @app.post("/leads")
     @limiter.limit("5 per hour")
     def create_lead():
+        if not app.config['BUSINESS_CONFIG'].get('modules', {}).get('lead_capture', True):
+            abort(404)
         # Honeypot field: silently accept bots without storing junk.
         if request.form.get("website", "").strip():
             return redirect(url_for("thanks"))
@@ -250,6 +219,8 @@ def create_app(test_config=None):
     @app.get("/admin")
     @admin_required
     def admin_dashboard():
+        if not app.config['BUSINESS_CONFIG'].get('modules', {}).get('lead_management', True):
+            abort(404)
         status = request.args.get("status", "").strip()
         search = request.args.get("q", "").strip()[:120]
         leads = db.session.execute(_filtered_leads_query().limit(300)).scalars().all()

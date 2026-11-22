@@ -1,0 +1,1 @@
+"""Reusable business application foundation."""

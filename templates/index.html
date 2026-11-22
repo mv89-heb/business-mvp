@@ -1,52 +1,44 @@
 {% extends "base.html" %}
-{% block title %}אלי כהן בניה ועץ | דקים, פרגולות וחיפויי עץ בבית שמש{% endblock %}
+{% set content = business.content %}
+{% block title %}{{ business.name }} {{ business.tagline }} | {{ business.contact.service_area }}{% endblock %}
 {% block content %}
 <section class="hero">
   <div class="hero-copy">
-    <span class="eyebrow">אלי כהן · בניה ועץ · בית שמש והסביבה</span>
-    <h1>הופכים את החוץ<br><em>למקום שרוצים להיות בו.</em></h1>
-    <p>דקים, פרגולות, חיפויי עץ ותיקונים — פתרונות עץ בהתאמה לבית, לחצר ולצרכים שלכם. מתחילים בשיחה, ממשיכים בתכנון ומתקדמים לביצוע.</p>
-    <div class="hero-actions"><a class="button primary" href="#contact">בואו נדבר על הפרויקט</a><a class="text-link" href="https://wa.me/972507208386" target="_blank" rel="noopener">שלחו הודעה ב־WhatsApp ←</a></div>
-    <div class="hero-proof"><span>✓ התאמה לצורך ולשטח</span><span>✓ תיאום ציפיות לפני ביצוע</span></div>
+    <span class="eyebrow">{{ content.hero.eyebrow }}</span>
+    <h1>{{ content.hero.title_line_1 }}<br><em>{{ content.hero.title_line_2 }}</em></h1>
+    <p>{{ content.hero.description }}</p>
+    <div class="hero-actions"><a class="button primary" href="#contact">{{ content.hero.primary_cta }}</a>{% if business.contact.whatsapp_url %}<a class="text-link" href="{{ business.contact.whatsapp_url }}" target="_blank" rel="noopener">{{ content.hero.whatsapp_cta }} ←</a>{% endif %}</div>
+    {% if content.hero.proof_points %}<div class="hero-proof">{% for point in content.hero.proof_points %}<span>✓ {{ point }}</span>{% endfor %}</div>{% endif %}
   </div>
-  <div class="hero-art" aria-label="המחשה עיצובית של עבודות עץ"><div class="art-panel"><span>דקים</span><span>פרגולות</span><span>חיפויים</span></div><div class="art-caption">עבודות עץ בהתאמה אישית · בית שמש והסביבה</div></div>
+  <div class="hero-art" aria-label="{{ business.name }}"><div class="art-panel">{% for service in content.services[:3] %}<span>{{ service.name }}</span>{% endfor %}</div><div class="art-caption">{{ content.hero.art_caption }}</div></div>
 </section>
-<section class="services section" id="services">
-  <div class="section-heading"><span class="eyebrow">השירותים שלנו</span><h2>עבודות עץ שמתחילות בתכנון נכון</h2><p>בוחרים את סוג העבודה, מבינים את השטח ואת הצורך — ומתאימים את הפתרון לפרויקט.</p></div>
-  <div class="service-grid">
-    <article class="service-card"><span class="service-number">01</span><h3>דקים</h3><p>הקמת משטחי דק לחצר, לגינה ולמרפסת, בהתאמה למידות ולשימוש המתוכנן.</p><a href="#contact" class="service-link" data-service="דק">לפרטים על דק ←</a></article>
-    <article class="service-card"><span class="service-number">02</span><h3>פרגולות</h3><p>פתרונות הצללה מעץ, בתכנון שמתחשב במיקום, במידות ובמראה המבוקש.</p><a href="#contact" class="service-link" data-service="פרגולה">לפרטים על פרגולה ←</a></article>
-    <article class="service-card"><span class="service-number">03</span><h3>חיפויי עץ</h3><p>חיפוי קירות ומשטחים בעץ לשדרוג המראה וליצירת קו עיצובי אחיד.</p><a href="#contact" class="service-link" data-service="חיפוי עץ">לפרטים על חיפוי ←</a></article>
-    <article class="service-card"><span class="service-number">04</span><h3>תיקונים וחידוש</h3><p>תיקוני עץ, תחזוקה וחידוש של משטחים ואלמנטים קיימים.</p><a href="#contact" class="service-link" data-service="תיקונים וחידוש">לפרטים על תיקון ←</a></article>
-  </div>
-</section>
-<section class="process section">
-  <div class="section-heading"><span class="eyebrow">איך מתקדמים?</span><h2>מתחילים ברור. מתקדמים מסודר.</h2></div>
-  <div class="process-grid">
-    <article><span>01</span><h3>משאירים פרטים</h3><p>מספרים לנו מה רוצים לבנות, לחדש או לתקן.</p></article>
-    <article><span>02</span><h3>מתאמים ומבררים</h3><p>משוחחים על המידות, המיקום, החומרים והציפיות.</p></article>
-    <article><span>03</span><h3>מתקדמים להצעה</h3><p>לאחר בירור פרטי העבודה, מתאמים את המשך התהליך והצעת המחיר.</p></article>
-  </div>
-</section>
-<section class="estimate section">
-  <div><span class="eyebrow">מתחילים להבין את היקף העבודה</span><h2>בדיקת אומדן ראשוני</h2><p>אפשר להזין שטח משוער כדי להתחיל לאפיין את הפרויקט. בשלב זה לא מוצג מחיר אוטומטי — הצעת מחיר תינתן לאחר בירור פרטי העבודה.</p></div>
-  <div class="estimate-box"><label for="area-estimate">שטח משוער במ״ר</label><input id="area-estimate" type="number" min="1" max="100000" placeholder="לדוגמה: 25"><button class="button dark" id="estimate-button" type="button">בדיקת אומדן</button><p id="estimate-result" class="estimate-result" aria-live="polite">הבדיקה אינה הצעת מחיר מחייבת.</p></div>
-</section>
-<section class="contact section" id="contact">
-  <div><span class="eyebrow">הפרויקט הבא מתחיל בשיחה</span><h2>מה תרצו לבנות או לחדש?</h2><p>השאירו פרטים ותיאור קצר. אלי יחזור אליכם כדי להבין את הצורך ולתאם את הצעד הבא.</p><a class="contact-phone" href="tel:0507208386">050-720-8386</a><p class="muted">ז׳בוטינסקי 14ב, בית שמש</p><a class="button outline" href="https://wa.me/972507208386" target="_blank" rel="noopener">או פנו ישירות ב־WhatsApp</a></div>
+{% if content.services %}<section class="services section" id="services">
+  <div class="section-heading"><span class="eyebrow">השירותים שלנו</span><h2>{{ content.services_heading }}</h2><p>{{ content.services_description }}</p></div>
+  <div class="service-grid">{% for service in content.services %}<article class="service-card"><span class="service-number">{{ service.number or '%02d'|format(loop.index) }}</span><h3>{{ service.name }}</h3><p>{{ service.description }}</p><a href="#contact" class="service-link" data-service="{{ service.form_value }}">{{ service.link_text }} ←</a></article>{% endfor %}</div>
+</section>{% endif %}
+{% if content.process_steps %}<section class="process section">
+  <div class="section-heading"><span class="eyebrow">איך מתקדמים?</span><h2>{{ content.process_heading }}</h2></div>
+  <div class="process-grid">{% for step in content.process_steps %}<article><span>{{ step.number or '%02d'|format(loop.index) }}</span><h3>{{ step.title }}</h3><p>{{ step.description }}</p></article>{% endfor %}</div>
+</section>{% endif %}
+{% if business.modules.get('estimate_calculator', true) %}<section class="estimate section">
+  <div><span class="eyebrow">{{ content.estimate.eyebrow }}</span><h2>{{ content.estimate.title }}</h2><p>{{ content.estimate.description }}</p></div>
+  <div class="estimate-box"><label for="area-estimate">{{ content.estimate.label }}</label><input id="area-estimate" type="number" min="1" max="100000" placeholder="לדוגמה: 25"><button class="button dark" id="estimate-button" type="button">{{ content.estimate.button }}</button><p id="estimate-result" class="estimate-result" aria-live="polite">{{ content.estimate.notice }}</p></div>
+</section>{% endif %}
+{% if business.modules.get('lead_capture', true) %}<section class="contact section" id="contact">
+  <div><span class="eyebrow">{{ content.contact.eyebrow }}</span><h2>{{ content.contact.title }}</h2><p>{{ content.contact.description }}</p>{% if business.contact.phone_display %}<a class="contact-phone" href="{{ business.contact.phone_href }}">{{ business.contact.phone_display }}</a>{% endif %}{% if business.contact.address %}<p class="muted">{{ business.contact.address }}</p>{% endif %}{% if business.contact.whatsapp_url %}<a class="button outline" href="{{ business.contact.whatsapp_url }}" target="_blank" rel="noopener">{{ content.contact.whatsapp_button }}</a>{% endif %}</div>
   <form class="lead-form" action="/leads" method="post">
     <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
     <label>שם מלא<input name="name" required minlength="2" maxlength="120" autocomplete="name"></label>
     <label>טלפון<input name="phone" required inputmode="tel" autocomplete="tel" placeholder="050-0000000"></label>
     <label>דוא״ל (לא חובה)<input name="email" type="email" maxlength="254" autocomplete="email"></label>
-    <div class="form-row"><label>עיר / יישוב<input name="city" maxlength="100" placeholder="לדוגמה: בית שמש"></label><label>סוג העבודה<select id="service-select" name="service"><option value="דק">דק</option><option value="פרגולה">פרגולה</option><option value="חיפוי עץ">חיפוי עץ</option><option value="תיקונים וחידוש">תיקונים וחידוש</option><option value="עבודת עץ אחרת">עבודת עץ אחרת</option></select></label></div>
-    <label>שטח משוער במ״ר (אם ידוע)<input name="area" type="number" min="1" max="100000" placeholder="אפשר להשאיר ריק"></label>
-    <label>תקציב משוער (לא חובה)<select name="budget"><option value="">לא צוין</option><option>עד 10,000 ₪</option><option>10,000–30,000 ₪</option><option>30,000–70,000 ₪</option><option>מעל 70,000 ₪</option><option>טרם הוגדר</option></select></label>
-    <label>פרטים על הפרויקט<textarea id="project-details" name="details" rows="4" maxlength="4000" placeholder="ספרו לנו על המיקום, המידות, סוג העץ או הגימור הרצוי, ומה תרצו לבצע..."></textarea></label>
+    <div class="form-row"><label>עיר / יישוב<input name="city" maxlength="100"></label><label>סוג השירות<select id="service-select" name="service">{% for service in content.services %}<option value="{{ service.form_value }}">{{ service.name }}</option>{% endfor %}<option value="אחר">אחר</option></select></label></div>
+    <label>שטח / כמות (אם ידוע)<input name="area" type="number" min="1" max="100000"></label>
+    {% if content.budget_options %}<label>תקציב משוער (לא חובה)<select name="budget"><option value="">לא צוין</option>{% for option in content.budget_options %}<option>{{ option }}</option>{% endfor %}</select></label>{% endif %}
+    <label>פרטים נוספים<textarea id="project-details" name="details" rows="4" maxlength="4000"></textarea></label>
     <input type="hidden" name="preset" value="{{ preset }}">
     <div class="hp" aria-hidden="true"><label>אין למלא שדה זה<input name="website" tabindex="-1" autocomplete="off"></label></div>
-    <label class="consent"><input type="checkbox" name="contact_consent" required> אני מאשר/ת ליצור איתי קשר בנוגע לפנייה זו.</label>
-    <button class="button primary full" type="submit">שליחת פרטי הפרויקט</button><small>הפרטים ישמשו לחזרה אליכם בקשר לפנייה בלבד.</small>
+    <label class="consent"><input type="checkbox" name="contact_consent" required> {{ content.contact.consent }}</label>
+    <button class="button primary full" type="submit">{{ content.contact.form_submit }}</button><small>{{ content.contact.privacy_note }}</small>
   </form>
-</section>
+</section>{% endif %}
 {% endblock %}
