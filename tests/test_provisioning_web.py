@@ -308,3 +308,78 @@ def test_web_wizard_session_cookie_is_http_only_and_strict():
     assert "HttpOnly" in cookie
     assert "SameSite=Strict" in cookie
     assert "Secure" not in cookie  # Localhost HTTP is required by the local-only tool.
+
+
+def test_totp_matches_rfc6238_six_digit_vector():
+    from business_app.provisioning_web import _totp_code, _verify_totp
+
+    secret = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ"
+    assert _totp_code(secret, timestamp=59) == "287082"
+    assert _verify_totp(secret, "287082", timestamp=59)
+    assert not _verify_totp(secret, "000000", timestamp=59)
+
+
+def test_hosted_mode_requires_mfa_and_exact_host(monkeypatch):
+    import pytest
+
+    monkeypatch.setenv("PROVISIONING_DEPLOYMENT_MODE", "hosted")
+    with pytest.raises(RuntimeError, match="PROVISIONING_TOTP_SECRET"):
+        create_provisioning_app({
+            "TESTING": True,
+            "SECRET_KEY": "hosted-session-secret-that-is-longer-than-32-characters",
+            "PROVISIONING_PASSWORD": "hosted-developer-password-with-more-than-24",
+            "PROVISIONING_ALLOWED_HOST": "studio.example.test",
+        })
+
+
+def test_hosted_mode_requires_https_and_exact_hostname(monkeypatch):
+    monkeypatch.setenv("PROVISIONING_DEPLOYMENT_MODE", "hosted")
+    app = create_provisioning_app({
+        "TESTING": True,
+        "SECRET_KEY": "hosted-session-secret-that-is-longer-than-32-characters",
+        "PROVISIONING_PASSWORD": "hosted-developer-password-with-more-than-24",
+        "PROVISIONING_TOTP_SECRET": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+        "PROVISIONING_ALLOWED_HOST": "studio.example.test",
+        "WTF_CSRF_ENABLED": False,
+    })
+    client = app.test_client()
+    assert client.get("/login", base_url="http://studio.example.test").status_code == 400
+    assert client.get("/login", base_url="https://attacker.example.test").status_code == 404
+    assert client.get("/health", base_url="https://studio.example.test").status_code == 200
+    login_page = client.get("/login", base_url="https://studio.example.test")
+    assert login_page.status_code == 200
+    assert "קוד אימות" in login_page.get_data(as_text=True)
+
+
+def test_hosted_login_requires_password_and_valid_totp(monkeypatch):
+    import business_app.provisioning_web as provisioning_web
+
+    monkeypatch.setenv("PROVISIONING_DEPLOYMENT_MODE", "hosted")
+    monkeypatch.setattr(provisioning_web.time, "time", lambda: 59)
+    app = create_provisioning_app({
+        "TESTING": True,
+        "SECRET_KEY": "hosted-session-secret-that-is-longer-than-32-characters",
+        "PROVISIONING_PASSWORD": "hosted-developer-password-with-more-than-24",
+        "PROVISIONING_TOTP_SECRET": "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ",
+        "PROVISIONING_ALLOWED_HOST": "studio.example.test",
+        "WTF_CSRF_ENABLED": False,
+    })
+    client = app.test_client()
+    bad = client.post("/login", base_url="https://studio.example.test", data={
+        "password": "hosted-developer-password-with-more-than-24",
+        "otp": "000000",
+    })
+    assert bad.status_code == 200
+    assert "פרטי ההתחברות" in bad.get_data(as_text=True)
+
+    good = client.post("/login", base_url="https://studio.example.test", data={
+        "password": "hosted-developer-password-with-more-than-24",
+        "otp": "287082",
+    })
+    assert good.status_code == 302
+    cookie = good.headers.get("Set-Cookie", "")
+    assert "__Host-devstudio=" in cookie
+    assert "Secure" in cookie
+    assert "HttpOnly" in cookie
+    assert "SameSite=Strict" in cookie
+    assert client.get("/wizard", base_url="https://studio.example.test").status_code == 200
