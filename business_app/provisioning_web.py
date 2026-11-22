@@ -3,12 +3,16 @@
 This application is deliberately separate from the customer-facing Flask app.
 """
 import hmac
+import ipaddress
 import os
+from urllib.parse import urlsplit
 from datetime import timedelta
 from functools import wraps
 
 from flask import Flask, abort, flash, redirect, render_template, request, session, url_for
 from flask_wtf.csrf import CSRFProtect
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
 
 from business_app.provisioning.providers import GitHubProvider, NeonProvider, RenderProvider
 from business_app.provisioning.providers.http import ProviderError
@@ -28,10 +32,10 @@ def create_provisioning_app(test_config=None):
     config = test_config or {}
     session_secret = os.getenv("PROVISIONING_SESSION_SECRET", "").strip() or config.get("SECRET_KEY")
     access_password = os.getenv("PROVISIONING_PASSWORD", "") or config.get("PROVISIONING_PASSWORD")
-    if not session_secret or not access_password:
-        raise RuntimeError(
-            "Set PROVISIONING_SESSION_SECRET and PROVISIONING_PASSWORD before starting the developer wizard."
-        )
+    if not session_secret or len(session_secret) < 32:
+        raise RuntimeError("PROVISIONING_SESSION_SECRET must contain at least 32 characters.")
+    if not access_password or len(access_password) < 16:
+        raise RuntimeError("PROVISIONING_PASSWORD must contain at least 16 characters.")
 
     app = Flask(__name__, template_folder="../templates")
     app.config.update(
@@ -46,6 +50,21 @@ def create_provisioning_app(test_config=None):
     if test_config:
         app.config.update(test_config)
     csrf.init_app(app)
+    limiter = Limiter(key_func=get_remote_address, default_limits=[], storage_uri="memory://")
+    limiter.init_app(app)
+
+    @app.before_request
+    def enforce_loopback_only():
+        # Host and peer checks are enforced by the app as well as by the
+        # localhost bind in main(), so importing this factory into a public
+        # WSGI server cannot accidentally expose the developer control plane.
+        try:
+            peer = ipaddress.ip_address(request.remote_addr or "")
+        except ValueError:
+            abort(404)
+        host = (urlsplit(f"//{request.host}").hostname or "").lower()
+        if not peer.is_loopback or host not in {"localhost", "127.0.0.1", "::1"}:
+            abort(404)
 
     def developer_required(view):
         @wraps(view)
@@ -62,6 +81,7 @@ def create_provisioning_app(test_config=None):
         return redirect(url_for("wizard"))
 
     @app.route("/login", methods=["GET", "POST"])
+    @limiter.limit("5 per minute", methods=["POST"])
     def login():
         if request.method == "POST":
             supplied = request.form.get("password", "")

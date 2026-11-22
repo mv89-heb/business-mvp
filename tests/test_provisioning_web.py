@@ -4,7 +4,7 @@ from business_app.provisioning_web import create_provisioning_app
 def make_client():
     app = create_provisioning_app({
         "TESTING": True,
-        "SECRET_KEY": "test-session-secret",
+        "SECRET_KEY": "test-session-secret-that-is-at-least-32-chars",
         "PROVISIONING_PASSWORD": "developer-test-password",
         "WTF_CSRF_ENABLED": False,
     })
@@ -151,3 +151,50 @@ def test_execution_route_runs_workflow_only_after_explicit_approval(monkeypatch)
     assert captured["admin_password"] == "a-very-long-test-password"
     assert captured["plan"]["business"]["slug"] == "test-business"
     assert "a-very-long-test-password" not in page
+
+
+
+def test_web_wizard_rejects_non_loopback_clients():
+    client = make_client()
+    response = client.get("/login", environ_base={"REMOTE_ADDR": "192.0.2.25"})
+    assert response.status_code == 404
+
+
+def test_web_wizard_rejects_non_loopback_host():
+    client = make_client()
+    response = client.get("/login", base_url="http://attacker.example")
+    assert response.status_code == 404
+
+
+def test_web_wizard_rate_limits_failed_login_attempts():
+    client = make_client()
+    responses = [
+        client.post("/login", data={"password": "wrong"})
+        for _ in range(6)
+    ]
+    assert [response.status_code for response in responses[:5]] == [200] * 5
+    assert responses[5].status_code == 429
+
+
+def test_web_wizard_requires_strong_startup_secrets():
+    import pytest
+
+    with pytest.raises(RuntimeError, match="at least 32 characters"):
+        create_provisioning_app({
+            "SECRET_KEY": "too-short",
+            "PROVISIONING_PASSWORD": "developer-test-password",
+        })
+    with pytest.raises(RuntimeError, match="at least 16 characters"):
+        create_provisioning_app({
+            "SECRET_KEY": "test-session-secret-that-is-at-least-32-chars",
+            "PROVISIONING_PASSWORD": "short",
+        })
+
+
+def test_web_wizard_session_cookie_is_http_only_and_strict():
+    client = make_client()
+    response = client.post("/login", data={"password": "developer-test-password"})
+    cookie = response.headers.get("Set-Cookie", "")
+    assert "HttpOnly" in cookie
+    assert "SameSite=Strict" in cookie
+    assert "Secure" not in cookie  # Localhost HTTP is required by the local-only tool.
