@@ -132,13 +132,27 @@ class ProvisioningWorkflow:
 
     def preflight(self, plan, *, github_owner, known_resources=None):
         """Inspect provider access and require identity matches for previously created resources."""
-        known_resources = known_resources if isinstance(known_resources, dict) else {}
         if not isinstance(plan, dict) or plan.get("mode") != "dry_run":
             raise ProviderError("Preflight requires a dry-run provisioning plan")
         business = plan.get("business") or {}
         slug = business.get("slug")
         if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
             raise ProviderError("Provisioning plan is missing a valid business slug")
+        if known_resources is None:
+            known_resources = {}
+            plan_id = plan.get("plan_id")
+            if isinstance(plan_id, str) and re.fullmatch(r"[a-f0-9]{20}", plan_id):
+                state_path = Path.home() / ".business-app-provisioner" / "runs" / f"{plan_id}.json"
+                if state_path.is_file():
+                    try:
+                        saved_state = json.loads(state_path.read_text(encoding="utf-8"))
+                    except (OSError, json.JSONDecodeError):
+                        raise ProviderError("Local provisioning state could not be verified; refusing to reuse existing cloud resources") from None
+                    if saved_state.get("plan_id") != plan_id or saved_state.get("business_slug") != slug:
+                        raise ProviderError("Local provisioning state does not match this business plan")
+                    known_resources = saved_state.get("resources") or {}
+        if not isinstance(known_resources, dict):
+            raise ProviderError("Provisioning resource ownership state is invalid")
         if not github_owner or not isinstance(github_owner, str):
             raise ProviderError("GITHUB_OWNER is required")
         if not getattr(self.render, "workspace_id", None):
