@@ -711,3 +711,41 @@ def test_storage_round_trip_route_requires_login_and_preserves_form_values(monke
     assert calls == [True]
     assert "בדיקת Neon הצליחה" in page
     assert 'value="עסק בדיקה"' in page
+
+
+
+def test_remote_render_loopback_head_probe_returns_200():
+    config = {
+        "TESTING": True,
+        "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
+        "PROVISIONING_PASSWORD": "a-remote-password-with-at-least-32-characters",
+        "PROVISIONING_PUBLIC_ACCESS": True,
+        "PROVISIONING_ALLOWED_HOSTS": ["wizard.example.test"],
+        "WTF_CSRF_ENABLED": False,
+    }
+    client = create_provisioning_app(config).test_client()
+    response = client.head("/", base_url="http://127.0.0.1")
+    assert response.status_code == 200
+    assert response.data == b""
+
+
+def test_remote_healthz_is_public_but_https_only_for_non_loopback_clients():
+    config = {
+        "TESTING": True,
+        "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
+        "PROVISIONING_PASSWORD": "a-remote-password-with-at-least-32-characters",
+        "PROVISIONING_PUBLIC_ACCESS": True,
+        "PROVISIONING_ALLOWED_HOSTS": ["wizard.example.test"],
+        "WTF_CSRF_ENABLED": False,
+    }
+    client = create_provisioning_app(config).test_client()
+    public_peer = {"REMOTE_ADDR": "198.51.100.24"}
+    secure = client.get(
+        "/healthz", base_url="https://unlisted.example", environ_base=public_peer
+    )
+    insecure = client.get(
+        "/healthz", base_url="http://unlisted.example", environ_base=public_peer
+    )
+    assert secure.status_code == 200
+    assert secure.get_json() == {"status": "ok"}
+    assert insecure.status_code == 404
