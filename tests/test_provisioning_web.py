@@ -360,3 +360,55 @@ def test_audit_log_records_auth_events_without_passwords(tmp_path):
     serialized = audit_path.read_text(encoding="utf-8")
     assert "wrong-secret-value" not in serialized
     assert "developer-test-password" not in serialized
+
+
+def test_execution_preserves_brand_profile_after_preflight(monkeypatch):
+    import business_app.provisioning_web as provisioning_web
+    from business_app.provisioning import build_provisioning_plan
+    from business_app.provisioning_web import _plan_fingerprint
+
+    captured = {}
+
+    class FakeWorkflow:
+        def run(self, plan, **kwargs):
+            captured["plan"] = plan
+            return {"workflow_id": "profile-plan", "status": "completed"}
+
+    monkeypatch.setattr(provisioning_web, "ProvisioningWorkflow", FakeWorkflow)
+    monkeypatch.setenv("GITHUB_OWNER", "developer")
+    profile = {
+        "business_name": "עסק בדיקה",
+        "slug": "test-business",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "tagline": "פתרונות מקצועיים לבית",
+        "phone": "050-123-4567",
+        "whatsapp_number": "050-123-4567",
+        "address": "רחוב הדוגמה 12",
+        "service_area": "בית שמש והסביבה",
+        "primary_color": "#123456",
+        "accent_color": "#abcdef",
+        "font_family": "Rubik",
+        "services": ["פרגולות", "דקים"],
+    }
+    plan = build_provisioning_plan(**profile)
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    with client.session_transaction() as session:
+        session["preflight_fingerprint"] = _plan_fingerprint(plan)
+
+    response = client.post("/execute", data={
+        **{key: value for key, value in profile.items() if key != "services"},
+        "services": "פרגולות, דקים",
+        "approval": "CREATE",
+        "confirm_zero_cost": "yes",
+        "admin_password": "a-very-long-test-password",
+    })
+
+    assert response.status_code == 200
+    assert "PROVISIONING RESULT" in response.get_data(as_text=True)
+    assert captured["plan"]["business"]["tagline"] == profile["tagline"]
+    assert captured["plan"]["business"]["contact"]["phone_href"] == "tel:0501234567"
+    assert captured["plan"]["business"]["contact"]["whatsapp_url"] == "https://wa.me/972501234567"
+    assert captured["plan"]["business"]["branding"]["font_family"] == "Rubik"
+    assert captured["plan"]["business"]["services"] == ["פרגולות", "דקים"]
