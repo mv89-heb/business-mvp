@@ -99,7 +99,6 @@ def test_admin_login_accepts_hash_and_prefers_it_over_plaintext(monkeypatch, cli
     assert accepted.status_code == 302
     assert accepted.location.endswith("/admin")
 
-    client.get("/admin/logout", follow_redirects=True)  # logout is POST-only; use a fresh client below
     with client.application.test_client() as fresh_client:
         rejected = fresh_client.post("/admin/login", data={"password": "legacy-plaintext-password"})
         assert rejected.status_code == 200
