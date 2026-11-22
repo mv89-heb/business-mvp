@@ -333,7 +333,12 @@ class ProvisioningWorkflow:
             record("starter_export", "running")
             with tempfile.TemporaryDirectory(prefix="business-app-export-") as temporary:
                 export_path = Path(temporary) / slug
-                export_starter(export_path, business_name=business.get("name", slug), slug=slug)
+                export_starter(
+                    export_path,
+                    business_name=business.get("name", slug),
+                    slug=slug,
+                    modules=(plan.get("application") or {}).get("modules", []),
+                )
 
                 record("github_repository", "running")
                 repo_result = self.github.ensure_private_repository(
