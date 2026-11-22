@@ -12,9 +12,9 @@
 
 ```powershell
 py -m venv .venv
-.\.venv\Scripts\Activate.ps1
+.\\.venv\\Scripts\\Activate.ps1
 pip install -r requirements.txt
-py -m business_app.provisioning --output .\work\new-business-plan.json
+py -m business_app.provisioning --output .\\work\\new-business-plan.json
 ```
 
 האשף מבקש שם עסק, slug, קטגוריה ומודולים. קובץ התוכנית נוצר רק אם נתיב הפלט אינו קיים; אין דריסה שקטה של תוכנית קודמת.
@@ -108,3 +108,111 @@ py -m pytest -q
 ```
 
 הכלי אינו מיובא על ידי `app.py`, אינו מוסיף route לאפליקציה העסקית ואינו משנה את מסד הנתונים או את שירות Render הקיים.
+
+## תוכנית בדיקות מעשית — מתי ואיך מתחילים
+
+### מצב מוכנות נוכחי
+
+אפשר להתחיל בבדיקות המקומיות וב־Preflight לקריאה בלבד על בסיס `main`. ב־22.11.2026 ריצת GitHub Actions האחרונה על commit `b30eddebbc767216cf732da13a7bb93a1bfa06dd` הסתיימה בהצלחה: `140 passed`. בדיקות אלה משתמשות ב־mocks בלבד; הן אינן מוכיחות עדיין הקמה אמיתית בחשבונות הספקים.
+
+### שלב 1 — בדיקה מקומית ללא חשבונות ענן
+
+1. שכפל את המאגר למחשב Windows או עדכן עותק קיים ל־`main`.
+2. פתח PowerShell בתיקיית המאגר והריץ:
+
+   ```powershell
+   py -3.11 -m venv .venv
+   .\\.venv\\Scripts\\Activate.ps1
+   python -m pip install -r requirements.txt
+   python -m pytest -q
+   ```
+
+3. ודא שכל הבדיקות עוברות.
+4. הפק תוכנית בדיקה עם שם עסק ו־slug ייחודיים שאינם שייכים ללקוח אמיתי:
+
+   ```powershell
+   New-Item -ItemType Directory -Force .\\work | Out-Null
+   py -m business_app.provisioning --output .\\work\\test-business-plan.json
+   ```
+
+5. פתח את קובץ ה־JSON ובדוק שהשם, ה־slug, הקטגוריה והמודולים נכונים. בשלב זה לא נוצרים משאבים ולא נדרשים מפתחות API.
+
+### שלב 2 — בדיקות חיבור ו־Preflight לקריאה בלבד
+
+נדרשים חשבונות פעילים ב־GitHub, Neon ו־Render, ומפתחות API בעלי הרשאות מתאימות. הגדר את הערכים רק בחלון PowerShell הנוכחי; אל תשלח אותם בצ'אט, אל תכניס אותם לקובץ ואל תשמור אותם ב־Git.
+
+```powershell
+$env:GITHUB_OWNER = "your-github-owner"
+
+function Set-ProcessSecret {
+    param([string]$Name, [string]$Prompt)
+    $secure = Read-Host $Prompt -AsSecureString
+    $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
+    try {
+        [Environment]::SetEnvironmentVariable(
+            $Name,
+            [Runtime.InteropServices.Marshal]::PtrToStringBSTR($ptr),
+            "Process"
+        )
+    } finally {
+        [Runtime.InteropServices.Marshal]::ZeroFreeBSTR($ptr)
+        $secure.Dispose()
+    }
+}
+
+Set-ProcessSecret "GITHUB_TOKEN" "GitHub API token"
+Set-ProcessSecret "NEON_API_KEY" "Neon API key"
+Set-ProcessSecret "RENDER_API_KEY" "Render API key"
+
+$env:NEON_ORG_ID = "your-approved-neon-organization-id"
+$env:RENDER_WORKSPACE_ID = "your-approved-render-workspace-id"
+```
+
+לאחר מכן הרץ:
+
+```powershell
+py -m business_app.provisioning.execute --plan .\\work\\test-business-plan.json --preflight-only
+```
+
+תוצאה תקינה צריכה להראות חיבור מאומת לכל שלושת הספקים, סביבת Render תואמת, ארגון Neon מוגדר, וללא התנגשויות או משאבים קיימים שלא שייכים לתוכנית. Preflight הוא לקריאה בלבד: הוא אינו יוצר, מעדכן, מוחק או פורס משאבים.
+
+אם מתקבלת שגיאה — עוצרים ומתקנים אותה. אין לעקוף בדיקת הרשאות, בעלות, ארגון או התאמת משאב.
+
+### שלב 3 — הקמה חיה של עסק בדיקה מבודד
+
+שלב זה יוצר משאבים אמיתיים בחשבונות שלך. לא מתחילים בו לפני שכל התנאים הבאים מתקיימים:
+
+- GitHub token מסוגל ליצור Repository פרטי תחת ה־owner שנבחר.
+- Render API key יכול לגשת בדיוק ל־workspace שנבחר, וחשבון Render מחובר ל־GitHub כ־Git Provider.
+- `NEON_ORG_ID` הוא מזהה הארגון המיועד בלבד.
+- בדקת בחשבון Neon את תנאי התוכנית, המכסות והחיוב בפועל, ווידאת שהפעולה המסוימת זכאית לעלות אפס. אישור `ZERO-COST` הוא הצהרת המפתח בלבד, לא בדיקת מחיר אוטומטית.
+- ה־slug ייחודי לחלוטין לעסק הבדיקה, ואין משאבים קיימים באותו שם שאינך מזהה.
+- Preflight עבר מיד לפני ההקמה.
+
+רק אז הרץ:
+
+```powershell
+py -m business_app.provisioning.execute --plan .\\work\\test-business-plan.json
+```
+
+הקלד `CREATE`, אשר `ZERO-COST`, והזן סיסמת מנהל ייעודית לבדיקה. אין להשתמש בסיסמת המנהל של עסק קיים. האשף ינסה ליצור Repository פרטי, פרויקט Neon ושירות Render Free, לפרסם Starter נקי, להגדיר סודות ולהמתין ל־`/health`.
+
+### שלב 4 — בדיקות קבלה לאחר הפריסה
+
+רק לאחר שה־workflow דיווח על הצלחה ובידך כתובת Render:
+
+1. פתח את כתובת השירות ובדוק שהאתר נטען.
+2. פתח את `/health` וודא שמתקבלת תשובת HTTP תקינה.
+3. פתח את מסך הניהול והתחבר עם סיסמת הבדיקה.
+4. שלח ליד בדיקה עם פרטי דמה, וודא שהוא נשמר במסד Neon החדש ומופיע במסך הניהול.
+5. ודא שה־Repository החדש פרטי, מכיל Starter נקי ואינו מכיל סודות או נתוני עסק אחר.
+6. ודא ב־Render שהשירות נמצא ב־Free ובאזור Frankfurt, וב־Neon שהפרויקט נמצא בארגון ובתוכנית שאישרת.
+7. בדוק שאין חיבור למסד הנתונים או לשירות של עסק קיים.
+
+### עצירה, כשל וניקוי
+
+- אם שלב נכשל, אל תריץ שוב את ההקמה באופן עיוור. בדוק קודם את מצב התהליך המקומי ואת המשאבים שנוצרו בכל ספק. שימוש חוזר מותר רק עם מזהי המשאבים שנשמרו לאותה תוכנית.
+- אין מחיקה אוטומטית במקרה כשל, כדי לא לפגוע במשאב או בנתונים קיימים.
+- בסיום בדיקות הקבלה, אם אין צורך להשאיר את סביבת הבדיקה, מחק ידנית ורק לאחר אימות בעלות את שירות Render, פרויקט Neon וה־Repository הייעודיים לבדיקה. ודא תחילה שאין בהם מידע שצריך לשמור.
+- סגור את חלון PowerShell שבו הוגדרו מפתחות ה־API; משתני הסביבה הוגדרו ל־Process בלבד ואינם אמורים להישמר מעבר לתהליך.
+- אין לבצע בדיקת הקמה ראשונה על Repository, Neon project או Render service של לקוח אמיתי.
