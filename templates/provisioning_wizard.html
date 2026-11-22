@@ -103,9 +103,25 @@
           <div class="eyebrow">04 · REVIEW</div><h2>תוכנית ההקמה</h2>
           <div class="notice">עדיין לא נוצרו משאבים. בדוק את פרטי העסק והמודולים לפני מעבר לביצוע.</div>
           <pre>{{ plan|tojson(indent=2) }}</pre>
+          <form method="post" action="{{ url_for('preflight_provisioning') }}">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+            <input type="hidden" name="business_name" value="{{ form_values.business_name }}">
+            <input type="hidden" name="slug" value="{{ form_values.slug }}">
+            <input type="hidden" name="category" value="{{ form_values.category }}">
+            {% for selected_module in form_values.modules %}
+              <input type="hidden" name="modules" value="{{ selected_module }}">
+            {% endfor %}
+            <div class="actions"><button class="button" type="submit">בצע בדיקת היתכנות לקריאה בלבד</button></div>
+          </form>
         </section>
-        <section class="panel">
-          <div class="eyebrow">05 · EXECUTION · EXPLICIT APPROVAL</div><h2>ביצוע הקמה אמיתית</h2>
+        {% if preflight_report %}
+          <section class="panel">
+            <div class="eyebrow">PREFLIGHT · READ ONLY</div><h2>דוח בדיקת היתכנות</h2>
+            <div class="notice">הבדיקה הסתיימה ללא יצירה או שינוי של משאבים. יש לבדוק ידנית זכאות Neon Free ועלויות עדכניות לפני כל ביצוע.</div>
+            <pre>{{ preflight_report|tojson(indent=2) }}</pre>
+          </section>
+          <section class="panel">
+            <div class="eyebrow">05 · EXECUTION · EXPLICIT APPROVAL</div><h2>ביצוע הקמה אמיתית</h2>
           <div class="notice error">הפעולה הבאה יוצרת Repository פרטי, פרויקט Neon ושירות Render אמיתיים. היא אינה מוחקת משאבים קיימים ואינה מפעילה תוכנית Render בתשלום.</div>
           <form method="post" action="{{ url_for('execute_provisioning') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -132,7 +148,8 @@
             <p class="hint">נדרשים גם GITHUB_TOKEN, GITHUB_OWNER, NEON_API_KEY, RENDER_API_KEY ו־RENDER_WORKSPACE_ID בסביבת המפתח. הסיסמה וכתובת מסד הנתונים מועברות לספקים בזיכרון בלבד ואינן נשמרות בקובץ מצב.</p>
             <div class="actions"><button class="button" type="submit">אשר ובצע הקמה</button></div>
           </form>
-        </section>
+          </section>
+        {% endif %}
       {% endif %}
       {% if execution_result %}
         <section class="panel">

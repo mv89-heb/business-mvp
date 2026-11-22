@@ -2,8 +2,10 @@
 
 This application is deliberately separate from the customer-facing Flask app.
 """
+import hashlib
 import hmac
 import ipaddress
+import json
 import os
 from urllib.parse import urlsplit
 from datetime import timedelta
@@ -26,6 +28,17 @@ from business_app.provisioning import (
 )
 
 csrf = CSRFProtect()
+
+
+def _plan_fingerprint(plan):
+    """Bind approval to the exact business, module and infrastructure choices."""
+    relevant = {
+        "business": plan.get("business"),
+        "application": plan.get("application"),
+        "infrastructure": plan.get("infrastructure"),
+    }
+    payload = json.dumps(relevant, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def create_provisioning_app(test_config=None):
@@ -139,6 +152,41 @@ def create_provisioning_app(test_config=None):
         )
 
 
+    @app.post("/preflight")
+    @developer_required
+    def preflight_provisioning():
+        form_values = {
+            "business_name": request.form.get("business_name", ""),
+            "slug": request.form.get("slug", ""),
+            "category": request.form.get("category", "services"),
+            "modules": request.form.getlist("modules"),
+        }
+        plan = None
+        report = None
+        error = None
+        try:
+            plan = build_provisioning_plan(**form_values)
+            owner = os.getenv("GITHUB_OWNER", "").strip()
+            report = ProvisioningWorkflow().preflight(plan, github_owner=owner)
+            session["preflight_fingerprint"] = _plan_fingerprint(plan)
+        except (ProvisioningInputError, ProviderError) as exc:
+            session.pop("preflight_fingerprint", None)
+            error = str(exc)
+        except Exception:
+            session.pop("preflight_fingerprint", None)
+            error = "בדיקת ההיתכנות נכשלה. פרטי שגיאה ונתוני אימות לא נחשפו."
+        return render_template(
+            "provisioning_wizard.html",
+            login_required=False,
+            categories=BUSINESS_CATEGORIES,
+            modules=SUPPORTED_MODULES,
+            form_values=form_values,
+            plan=plan,
+            preflight_report=report,
+            error=error,
+            connection_results=None,
+        )
+
     @app.post("/execute")
     @developer_required
     def execute_provisioning():
@@ -153,6 +201,11 @@ def create_provisioning_app(test_config=None):
         error = None
         try:
             plan = build_provisioning_plan(**form_values)
+            if session.get("preflight_fingerprint") != _plan_fingerprint(plan):
+                raise ProviderError("יש להריץ Preflight מוצלח לתוכנית הנוכחית לפני ביצוע.")
+            # Treat a successful preflight as a one-time execution gate; a retry
+            # must run a fresh read-only check before attempting provider writes.
+            session.pop("preflight_fingerprint", None)
             if request.form.get("confirm_zero_cost") != "yes":
                 raise ProviderError("לא התקבל אישור מפורש לכך שעלות Neon תהיה אפס.")
             result = ProvisioningWorkflow().run(
@@ -190,6 +243,7 @@ def create_provisioning_app(test_config=None):
             "modules": ["lead_capture", "lead_management"],
         }
         if request.method == "POST":
+            session.pop("preflight_fingerprint", None)
             form_values = {
                 "business_name": request.form.get("business_name", ""),
                 "slug": request.form.get("slug", ""),

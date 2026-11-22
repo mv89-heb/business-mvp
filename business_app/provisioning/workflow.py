@@ -97,7 +97,7 @@ class ProvisioningWorkflow:
         self.github = github or GitHubProvider()
         self.neon = neon or NeonProvider()
         self.render = render or RenderProvider()
-        self.state_store = state_store or WorkflowStateStore()
+        self.state_store = state_store
         self.health_checker = health_checker or self._http_health_check
         self.sleep = sleep
         self.health_timeout = health_timeout
@@ -126,6 +126,107 @@ class ProvisioningWorkflow:
                 raise ProviderError("Render service did not pass its /health check before the timeout")
             self.sleep(self.health_interval)
 
+    @staticmethod
+    def _normalize_repository_url(value):
+        return (value or "").strip().rstrip("/").removesuffix(".git").casefold()
+
+    def preflight(self, plan, *, github_owner):
+        """Inspect provider access and resource-name collisions using read-only API calls only."""
+        if not isinstance(plan, dict) or plan.get("mode") != "dry_run":
+            raise ProviderError("Preflight requires a dry-run provisioning plan")
+        business = plan.get("business") or {}
+        slug = business.get("slug")
+        if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+            raise ProviderError("Provisioning plan is missing a valid business slug")
+        if not github_owner or not isinstance(github_owner, str):
+            raise ProviderError("GITHUB_OWNER is required")
+        if not getattr(self.render, "workspace_id", None):
+            raise ProviderError("RENDER_WORKSPACE_ID must identify the approved workspace")
+
+        connections = {
+            "github": self.github.check_connection(),
+            "neon": self.neon.check_connection(),
+            "render": self.render.check_connection(),
+        }
+
+        repository = self.github.get_repository(github_owner, slug)
+        if repository and repository.get("private") is not True:
+            raise ProviderError("A repository with this name already exists but is not private")
+        repository_url = (
+            (repository or {}).get("html_url")
+            or f"https://github.com/{github_owner}/{slug}"
+        )
+
+        region = (plan.get("infrastructure") or {}).get("region", "frankfurt")
+        if region != "frankfurt":
+            raise ProviderError("The requested deployment region is not supported by this provisioning workflow")
+        neon_region = "aws-eu-central-1"
+        projects = [
+            item for item in self.neon.list_projects()
+            if (item.get("name") or "").casefold() == slug.casefold()
+        ]
+        if len(projects) > 1:
+            raise ProviderError("Multiple Neon projects have this name; choose the intended project explicitly")
+        project = projects[0] if projects else None
+        if project and project.get("region_id") != neon_region:
+            raise ProviderError("A Neon project with this name exists in a different region")
+
+        services = [
+            item for item in self.render.list_services()
+            if (item.get("name") or "").casefold() == slug.casefold()
+        ]
+        if len(services) > 1:
+            raise ProviderError("Multiple Render services have this name; choose the intended service explicitly")
+        service = services[0] if services else None
+        if service:
+            details = service.get("serviceDetails") or {}
+            if self._normalize_repository_url(service.get("repo")) != self._normalize_repository_url(repository_url):
+                raise ProviderError("A Render service with this name exists but has a different source repository")
+            if service.get("type") != "web_service" or service.get("branch") != "main":
+                raise ProviderError("A Render service with this name exists but has a different type or branch")
+            if details.get("plan") != "free" or details.get("region") != "frankfurt":
+                raise ProviderError("Existing Render service is not configured for the requested Free Frankfurt target")
+            if service.get("autoDeployTrigger") != "checksPass":
+                raise ProviderError("Existing Render service does not use CI-gated auto-deploy")
+
+        return {
+            "mode": "read_only_preflight",
+            "plan_id": plan.get("plan_id"),
+            "business_slug": slug,
+            "read_only": True,
+            "writes_performed": False,
+            "provider_connections": {
+                name: {
+                    "connected": bool(result.get("connected")),
+                    "account": result.get("account"),
+                    "workspace_selected": result.get("workspace_selected"),
+                }
+                for name, result in connections.items()
+            },
+            "resources": {
+                "github": {
+                    "status": "existing_private" if repository else "would_create_private",
+                    "repository": repository.get("full_name") if repository else f"{github_owner}/{slug}",
+                },
+                "neon": {
+                    "status": "existing" if project else "would_create",
+                    "region": neon_region,
+                },
+                "render": {
+                    "status": "existing" if service else "would_create",
+                    "plan": "free",
+                    "region": "frankfurt",
+                    "workspace_selected": True,
+                },
+            },
+            "cost_policy": {
+                "paid_resources_allowed": False,
+                "neon_free_tier_verified": False,
+                "manual_zero_cost_verification_required_before_execution": True,
+            },
+            "next_step": "Review this report and verify current Neon free-tier eligibility and provider pricing before any separately approved CREATE operation.",
+        }
+
     def run(self, plan, *, github_owner, admin_password, approval,
             neon_free_tier_verified=False, workflow_url=None):
         if approval != "CREATE":
@@ -144,6 +245,10 @@ class ProvisioningWorkflow:
             raise ProviderError("GITHUB_OWNER is required")
         if not getattr(self.render, "workspace_id", None):
             raise ProviderError("RENDER_WORKSPACE_ID must identify the approved workspace")
+
+        # Keep read-only preflight free of local filesystem side effects.
+        if self.state_store is None:
+            self.state_store = WorkflowStateStore()
 
         workflow_id = plan.get("plan_id") or slug
         state = self.state_store.load(workflow_id) or {
@@ -168,15 +273,11 @@ class ProvisioningWorkflow:
 
         try:
             record("preflight", "running")
-            connections = {
-                "github": self.github.check_connection(),
-                "neon": self.neon.check_connection(),
-                "render": self.render.check_connection(),
-            }
+            preflight_report = self.preflight(plan, github_owner=github_owner)
             record("preflight", "completed", {
-                "github_account": connections["github"].get("account"),
-                "neon_visible_projects": connections["neon"].get("visible_projects"),
-                "render_workspace_selected": connections["render"].get("workspace_selected"),
+                "read_only": preflight_report["read_only"],
+                "writes_performed": preflight_report["writes_performed"],
+                "resources": preflight_report["resources"],
             })
 
             record("starter_export", "running")

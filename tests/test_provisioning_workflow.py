@@ -11,11 +11,16 @@ from business_app.provisioning.providers.http import ProviderError
 class FakeGitHub:
     def __init__(self):
         self.published = False
+        self.ensure_calls = 0
 
     def check_connection(self):
         return {"provider": "github", "connected": True, "account": "developer"}
 
+    def get_repository(self, owner, name):
+        return None
+
     def ensure_private_repository(self, owner, name):
+        self.ensure_calls += 1
         return {"created": True, "repository": {
             "id": 1, "private": True, "full_name": f"{owner}/{name}",
             "html_url": f"https://github.com/{owner}/{name}",
@@ -28,6 +33,9 @@ class FakeGitHub:
 
 
 class FakeNeon:
+    def list_projects(self):
+        return []
+
     def check_connection(self):
         return {"provider": "neon", "connected": True, "visible_projects": 0}
 
@@ -51,6 +59,9 @@ class FakeRender:
 
     def check_connection(self):
         return {"provider": "render", "connected": True, "workspace_selected": True}
+
+    def list_services(self):
+        return []
 
     def ensure_web_service(self, **kwargs):
         assert kwargs["env_vars"]["DATABASE_URL"].startswith("postgresql://")
@@ -256,3 +267,106 @@ def test_retry_reconciles_existing_render_service_environment_before_health_chec
     steps = [entry["step"] for entry in state["history"]]
     assert "render_environment" in steps
     assert state["status"] == "completed"
+
+
+def test_preflight_is_read_only_and_reports_planned_resources(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+
+    report = workflow.preflight(make_plan(), github_owner="developer")
+
+    assert report["mode"] == "read_only_preflight"
+    assert report["read_only"] is True
+    assert report["writes_performed"] is False
+    assert report["resources"]["github"]["status"] == "would_create_private"
+    assert report["resources"]["neon"]["status"] == "would_create"
+    assert report["resources"]["render"]["status"] == "would_create"
+    assert report["cost_policy"]["neon_free_tier_verified"] is False
+    assert github.published is False
+
+
+def test_preflight_reuses_only_an_existing_private_github_repository(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    workflow.github.get_repository = lambda owner, name: {
+        "private": True, "full_name": f"{owner}/{name}",
+        "html_url": f"https://github.com/{owner}/{name}",
+    }
+
+    report = workflow.preflight(make_plan(), github_owner="developer")
+
+    assert report["resources"]["github"]["status"] == "existing_private"
+
+
+def test_preflight_rejects_public_repository_without_writing(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    workflow.github.get_repository = lambda owner, name: {
+        "private": False, "full_name": f"{owner}/{name}",
+    }
+
+    with pytest.raises(ProviderError, match="not private"):
+        workflow.preflight(make_plan(), github_owner="developer")
+    assert github.published is False
+
+
+def test_preflight_rejects_neon_project_in_wrong_region(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    workflow.neon.list_projects = lambda: [{
+        "id": "existing", "name": "test-business", "region_id": "aws-us-east-1",
+    }]
+
+    with pytest.raises(ProviderError, match="different region"):
+        workflow.preflight(make_plan(), github_owner="developer")
+
+
+def test_preflight_rejects_render_service_with_paid_plan(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    workflow.render.list_services = lambda: [{
+        "id": "srv-existing", "name": "test-business",
+        "repo": "https://github.com/developer/test-business",
+        "type": "web_service", "branch": "main", "autoDeployTrigger": "checksPass",
+        "serviceDetails": {"plan": "starter", "region": "frankfurt"},
+    }]
+
+    with pytest.raises(ProviderError, match="Free Frankfurt"):
+        workflow.preflight(make_plan(), github_owner="developer")
+
+
+def test_workflow_rechecks_read_only_preflight_before_any_write(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    workflow.github.get_repository = lambda owner, name: {
+        "private": False, "full_name": f"{owner}/{name}",
+    }
+
+    with pytest.raises(ProviderError, match="not private"):
+        workflow.run(
+            make_plan(),
+            github_owner="developer",
+            admin_password="a-very-long-test-password",
+            approval="CREATE",
+            neon_free_tier_verified=True,
+        )
+
+    assert github.ensure_calls == 0
+    assert github.published is False
+
+
+def test_preflight_rejects_unsupported_region(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    plan = make_plan()
+    plan["infrastructure"] = {"region": "oregon"}
+
+    with pytest.raises(ProviderError, match="region is not supported"):
+        workflow.preflight(plan, github_owner="developer")
+
+
+def test_preflight_does_not_create_local_workflow_state_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    workflow = ProvisioningWorkflow(
+        github=FakeGitHub(),
+        neon=FakeNeon(),
+        render=FakeRender(),
+    )
+
+    report = workflow.preflight(make_plan(), github_owner="developer")
+
+    assert report["writes_performed"] is False
+    assert not (tmp_path / ".business-app-provisioner" / "runs").exists()
