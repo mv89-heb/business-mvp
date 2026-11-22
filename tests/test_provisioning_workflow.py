@@ -19,7 +19,7 @@ class FakeGitHub:
     def get_repository(self, owner, name):
         return None
 
-    def ensure_private_repository(self, owner, name):
+    def ensure_private_repository(self, owner, name, expected_repository_id=None):
         self.ensure_calls += 1
         return {"created": True, "repository": {
             "id": 1, "private": True, "full_name": f"{owner}/{name}",
@@ -41,7 +41,7 @@ class FakeNeon:
     def check_connection(self):
         return {"provider": "neon", "connected": True, "visible_projects": 0}
 
-    def ensure_project(self, name, *, free_tier_verified=False):
+    def ensure_project(self, name, *, free_tier_verified=False, expected_project_id=None):
         assert free_tier_verified is True
         return {"created": True, "project": {
             "id": "neon-project-1", "name": name, "region_id": "aws-eu-central-1"
