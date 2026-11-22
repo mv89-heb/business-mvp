@@ -224,8 +224,9 @@ def test_execution_route_runs_workflow_only_after_explicit_approval(monkeypatch)
         business_name="עסק בדיקה", slug="test-business", category="services",
         modules=["lead_capture", "lead_management"],
     )
+    from business_app.provisioning_web import _plan_fingerprint
     with client.session_transaction() as session:
-        session["preflight_plan_id"] = plan["plan_id"]
+        session["preflight_fingerprint"] = _plan_fingerprint(plan)
     response = client.post("/execute", data={
         "business_name": "עסק בדיקה",
         "slug": "test-business",
