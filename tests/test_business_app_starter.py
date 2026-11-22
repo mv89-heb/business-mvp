@@ -45,7 +45,7 @@ def test_whatsapp_sender_is_not_available():
     with pytest.raises(RuntimeError):
         send_message("+972500000000", "template")
 
-def test_clean_export_excludes_live_customer_configuration(tmp_path):
+def test_clean_export_excludes_live_customer_configuration_and_developer_tools(tmp_path):
     from business_app.export_starter import export_starter
 
     target = tmp_path / "clean-starter"
@@ -65,6 +65,20 @@ def test_clean_export_excludes_live_customer_configuration(tmp_path):
     render_template = (exported / "render.yaml").read_text(encoding="utf-8")
     assert "ADMIN_PASSWORD_HASH" in render_template
     assert "key: ADMIN_PASSWORD\n" not in render_template
+
+    # The developer wizard, provider provisioning adapters and their private docs/tests
+    # belong only in the source repository, never in a customer clone.
+    assert not (exported / "business_app" / "provisioning").exists()
+    assert not (exported / "business_app" / "provisioning_web.py").exists()
+    assert not (exported / "templates" / "provisioning_wizard.html").exists()
+    assert not (exported / "docs" / "DEVELOPER_PROVISIONING_WIZARD_HE.md").exists()
+    assert not (exported / "docs" / "PROVIDER_INTEGRATIONS_HE.md").exists()
+    assert not (exported / "tests" / "test_provisioning.py").exists()
+    assert not (exported / "tests" / "test_provisioning_web.py").exists()
+    assert not (exported / "tests" / "test_provisioning_workflow.py").exists()
+    assert not (exported / "tests" / "test_provider_adapters.py").exists()
+    assert (exported / "tests" / "test_app.py").is_file()
+    assert (exported / "tests" / "test_business_app_starter.py").is_file()
 
 
 def test_clean_export_refuses_nonempty_destination(tmp_path):
