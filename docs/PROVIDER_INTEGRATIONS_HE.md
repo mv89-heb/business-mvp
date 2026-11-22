@@ -32,7 +32,7 @@ Canva מנוהלת דרך חיבור Canva המאומת ב-ChatGPT (Canva MCP) �
 4. Neon Free eligibility ומחירים/מכסות משתנים לפי החשבון והתנאים. יצירת פרויקט מחייבת להעביר free_tier_verified=True רק לאחר בדיקה חיה ואישור שהעלות הצפויה אפס. ברירת המחדל היא חסימה; אם לא ניתן לאמת עלות אפס — עוצרים.
 5. אין ליצור או לשנות משאבי ענן כחלק מבדיקות אוטומטיות. הבדיקות משתמשות ב-mocks בלבד.
 6. יצירת שירות Render דורשת ש-GitHub repository כבר מחובר לחשבון Git Provider ב-Render. אם לא, יש לבצע חיבור ידני בלוח הבקרה לפני יצירת השירות.
-7. מתאם GitHub יוצר Repository ריק עם README ראשוני. שכפול קוד נקי, push, בדיקת health ואימות deploy הם שלבי workflow נפרדים שטרם אוטומטו במתאם זה.
+7. מתאם GitHub יוצר Repository פרטי ומפרסם אליו את ה־Starter הנקי באמצעות Git Data API. ה־workflow ממשיך ליצירת Neon ו־Render, וממתין לאימות `/health` לפני סימון הצלחה.
 
 ## בדיקת חיבור מתוך Python
 
@@ -49,7 +49,7 @@ Canva מנוהלת דרך חיבור Canva המאומת ב-ChatGPT (Canva MCP) �
 - Preflight לפני כל יצירת משאב.
 - ייצוא Starter נקי ופרסום GitHub דרך Git Data API.
 - יצירה/איתור של Neon והעברת connection URI ל־Render בזיכרון בלבד.
-- יצירה/איתור של Render Free בפרנקפורט והמתנה ל־`/health`.
+- יצירה/איתור של Render Free בפרנקפורט, העברת `ADMIN_PASSWORD_HASH` במקום סיסמה גלויה והמתנה ל־`/health`.
 - מצב workflow מקומי אטומי, ללא סודות, ועדכון התקדמות בכל שלב.
 - עצירה בטוחה בכשל; אין מחיקה אוטומטית של משאבים שנוצרו.
 
