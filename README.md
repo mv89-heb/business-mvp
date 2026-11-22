@@ -36,14 +36,10 @@ python -m flask --app wsgi run
 ## גבולות MVP ואבטחה
 אין כרגע שליחת WhatsApp אוטומטית, סליקה או חיבור לכלי צד שלישי. הטפסים מוגנים ב-CSRF. הגבלת הקצב נשמרת בזיכרון של תהליך האפליקציה (מתאים ל-MVP חד-מופעי, לא להגנה מבוזרת). לפני הרחבה יש לחבר אחסון משותף כמו Redis ולהוסיף אימות מנהל מתקדם, מדיניות פרטיות וגיבויים.
 
-
-
 ### מדריך הקמת עסק חדש
-
 למדריך המלא לשכפול נקי והקמת שירותים נפרדים ב־GitHub, Neon ו־Render, כולל PowerShell, משתני סביבה, אבטחה ובדיקות: [docs/NEW_CUSTOMER_INSTALLATION_HE.md](docs/NEW_CUSTOMER_INSTALLATION_HE.md).
 
 ## Business App Starter
-
 This repository is structured as a reusable **single-customer** application starter, not a multi-tenant SaaS product. Business identity, content, branding, feature switches and integration enablement live in `config/business.json`. Credentials remain environment secrets.
 
 - Architecture: `docs/ARCHITECTURE.md`
@@ -54,3 +50,6 @@ This repository is structured as a reusable **single-customer** application star
 - Validate required environment variables: `python -m business_app.bootstrap --check-env`
 
 The live source repository contains customer-specific configuration and must not be marked as a GitHub template. Export a clean project with `business_app.export_starter`; only the exported project may become a template after a clean clone, CI and deployment review. The Google Apps Script webhook contract is retained. WhatsApp is disabled and sending is deliberately blocked pending explicit business-owner approval and official API setup.
+
+## כלי מפתח פנימי — אשף הקמת עסקים
+אשף התכנון הפנימי מיועד למפתח בלבד ואינו חלק מאפליקציות הלקוחות. בשלב הנוכחי הוא מפיק תוכנית Dry Run ליצירת Repository פרטי, פרויקט Neon ושירות Render נפרדים; הוא עדיין אינו יוצר משאבי ענן. הוראות הפעלה, יכולות ומגבלות: [docs/DEVELOPER_PROVISIONING_WIZARD_HE.md](docs/DEVELOPER_PROVISIONING_WIZARD_HE.md).
