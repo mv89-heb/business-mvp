@@ -70,14 +70,14 @@ class RenderProvider:
             service = matches[0]
             if service.get("repo") != repository_url or service.get("type") != "web_service":
                 raise ProviderError("A Render service with this name exists but has a different source or type")
-            if service.get("branch") not in (None, branch):
+            if service.get("branch") != branch:
                 raise ProviderError("Existing Render service is connected to a different Git branch")
             details = service.get("serviceDetails", {})
             if details.get("plan") != "free":
                 raise ProviderError("Existing Render service is not on the Free plan; no changes were made")
-            if details.get("region") not in (None, "frankfurt"):
+            if details.get("region") != "frankfurt":
                 raise ProviderError("Existing Render service is in a different region; no changes were made")
-            if service.get("autoDeployTrigger") not in (None, "checksPass"):
+            if service.get("autoDeployTrigger") != "checksPass":
                 raise ProviderError("Existing Render service does not use CI-gated auto-deploy")
             return {"created": False, "service": service}
 
@@ -103,6 +103,20 @@ class RenderProvider:
         service = response.get("service", response)
         if not service.get("id"):
             raise ProviderError("Render did not return a service identifier")
-        if service.get("serviceDetails", {}).get("plan") not in (None, "free"):
-            raise ProviderError("Render did not confirm the requested Free plan")
+        details = service.get("serviceDetails") or {}
+        if (
+            details.get("plan") != "free"
+            or details.get("region") != "frankfurt"
+            or service.get("autoDeployTrigger") != "checksPass"
+        ):
+            # Creation responses may omit fields. Refresh once, then fail closed if
+            # Render still cannot confirm the exact no-paid, Frankfurt, CI-gated setup.
+            service = self.get_service(service["id"])
+            details = service.get("serviceDetails") or {}
+        if details.get("plan") != "free":
+            raise ProviderError("Render did not confirm the Free plan; refusing to report a verified service")
+        if details.get("region") != "frankfurt":
+            raise ProviderError("Render did not confirm the Frankfurt region; refusing to report a verified service")
+        if service.get("autoDeployTrigger") != "checksPass":
+            raise ProviderError("Render did not confirm CI-gated auto-deploy; refusing to report a verified service")
         return {"created": True, "service": service}
