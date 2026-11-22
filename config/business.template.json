@@ -22,7 +22,10 @@
   "modules": {
     "lead_capture": true,
     "lead_management": true,
-    "estimate_calculator": false
+    "estimate_calculator": false,
+    "whatsapp_inbound": false,
+    "automation_webhooks": false,
+    "ai_lead_enrichment": false
   },
   "integrations": {
     "google_sheets_webhook": {
@@ -32,6 +35,9 @@
       "enabled": false
     },
     "email": {
+      "enabled": false
+    },
+    "automation_webhook": {
       "enabled": false
     }
   },

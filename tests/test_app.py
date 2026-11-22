@@ -1,5 +1,6 @@
 import os
 import pytest
+from business_app.config import load_business_config
 from werkzeug.security import generate_password_hash
 from app import create_app, db
 
@@ -7,8 +8,12 @@ from app import create_app, db
 @pytest.fixture()
 def client(tmp_path):
     os.environ["ADMIN_PASSWORD"] = "test-admin-password"
+    business_config = load_business_config()
+    business_config["modules"]["estimate_calculator"] = True
+    business_config["integrations"]["google_sheets_webhook"]["enabled"] = True
     app = create_app({
         "TESTING": True,
+        "BUSINESS_CONFIG": business_config,
         "SECRET_KEY": "test-secret",
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test.db'}",
         "WTF_CSRF_ENABLED": False,

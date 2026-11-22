@@ -86,7 +86,7 @@ def _validate_export_tree(source_root):
                     raise ValueError(f"Starter source contains a symbolic link: {relative.as_posix()}")
 
 
-def export_starter(target, business_name, slug):
+def export_starter(target, business_name, slug, modules=None):
     if not isinstance(business_name, str) or not business_name.strip():
         raise ValueError("Business name must not be empty.")
     if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
@@ -130,6 +130,25 @@ def export_starter(target, business_name, slug):
     # The export deliberately does not copy the live customer's business.json or render.yaml.
     from business_app.bootstrap import bootstrap
     bootstrap(destination, business_name=business_name, slug=slug)
+    if modules is not None:
+        selected = set(modules)
+        config_path = destination / "config" / "business.json"
+        config_data = json.loads(config_path.read_text(encoding="utf-8"))
+        for module_name in (
+            "lead_capture", "lead_management", "estimate_calculator",
+            "whatsapp_inbound", "automation_webhooks", "ai_lead_enrichment",
+        ):
+            config_data.setdefault("modules", {})[module_name] = module_name in selected
+        config_data.setdefault("integrations", {}).setdefault("whatsapp_cloud_api", {})["enabled"] = (
+            "whatsapp_inbound" in selected
+        )
+        config_data.setdefault("integrations", {}).setdefault("automation_webhook", {})["enabled"] = (
+            "automation_webhooks" in selected
+        )
+        config_path.write_text(
+            json.dumps(config_data, ensure_ascii=False, indent=2) + "\n",
+            encoding="utf-8",
+        )
     return destination
 
 

@@ -22,8 +22,8 @@
 פתח PowerShell בתיקייה שבה תרצה לשמור את הפרויקטים והריץ:
 
 ```powershell
-git clone https://github.com/mv89-heb/eli-cohen-business-mvp.git
-Set-Location .\eli-cohen-business-mvp
+git clone https://github.com/mv89-heb/business-mvp.git
+Set-Location .\business-mvp
 git switch main
 git pull
 ```

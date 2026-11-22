@@ -5,14 +5,18 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CONFIG_PATH = ROOT / "config" / "business.json"
+STARTER_CONFIG_PATH = ROOT / "config" / "business.template.json"
 
 class BusinessConfigError(ValueError):
     pass
 
 def load_business_config(path=None):
-    config_path = Path(path or os.getenv("BUSINESS_CONFIG_PATH") or DEFAULT_CONFIG_PATH)
+    explicit_path = path or os.getenv("BUSINESS_CONFIG_PATH")
+    config_path = Path(explicit_path) if explicit_path else DEFAULT_CONFIG_PATH
     if not config_path.is_absolute():
         config_path = ROOT / config_path
+    if not explicit_path and not config_path.is_file():
+        config_path = STARTER_CONFIG_PATH
     try:
         data = json.loads(config_path.read_text(encoding="utf-8"))
     except FileNotFoundError as exc:

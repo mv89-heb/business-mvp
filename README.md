@@ -1,55 +1,101 @@
-# אלי כהן בניה ועץ — MVP
+# Business App Starter — Developer Studio
 
-אתר תדמית ומערכת לידים בעברית (RTL), מותאמים למובייל.
+סביבת עבודה פרטית למפתח לצורך תכנון, הקמה וניהול של אתרים ומערכות עסקיות נפרדות.
 
-## יכולות
-- דף נחיתה ופרטי קשר של העסק.
-- טופס פנייה עם בדיקות קלט, הסכמה מפורשת ליצירת קשר, שמירת מועד ההסכמה, הגבלת קצב ו-honeypot.
-- שמירת פניות ב-Neon PostgreSQL.
-- מסך ניהול מוגן בסיסמה, סינון פניות ועדכון סטטוסים.
-- מחשבון אומדן המציג טווח רק לאחר הגדרת תעריפים שאושרו על ידי בעל העסק. כברירת מחדל לא מומצאים מחירים.
-- נקודת health check ב-`/health` ובדיקות אוטומטיות ב-GitHub Actions.
+המאגר הזה מיועד **לכלי הפיתוח ולאתרי/מערכות הלקוחות שנוצרים באמצעותו**. הוא אינו אתר של לקוח מסוים ואינו מערכת SaaS רב־דיירית.
 
-## הרצה מקומית ב-Windows PowerShell
-```powershell
-py -m venv .venv
-.\.venv\Scripts\Activate.ps1
-pip install -r requirements.txt
-$env:SECRET_KEY="local-development-secret"
-$env:ADMIN_PASSWORD="choose-a-local-password"
-$env:DATABASE_URL="sqlite:///local.db"
-python -m flask --app wsgi run
-```
+## מטרת הפרויקט
 
-## משתני סביבה ב-Render
-- `DATABASE_URL`: כתובת החיבור ל-Neon, לשמור כ-Secret.
-- `SECRET_KEY`: מפתח אקראי ארוך.
-- `ADMIN_PASSWORD`: סיסמת מנהל חזקה, או `ADMIN_PASSWORD_HASH` עם hash של Werkzeug.
-- `ESTIMATE_BASE_RATE` ו-`ESTIMATE_RATE_PER_SQM`: להשאיר 0 עד לקבלת תעריפים אמיתיים ואישור בעל העסק.
-- `LEAD_WEBHOOK_URL` (אופציונלי): כתובת Web App של Google Apps Script או Webhook תואם לקבלת פניות חדשות כ-JSON.
-- `LEAD_WEBHOOK_SECRET` (חובה כאשר מוגדר URL): סוד משותף הנשלח בגוף הבקשה. אין לשמור אותו ב-GitHub; יש להגדיר אותו ב-Render וב-Script Properties. כשל בשליחה אינו מונע שמירת פנייה.
-- מדריך חיבור חינמי ל-Google Sheets: `integrations/google-apps-script/SETUP.md`.
+היישום העסקי שנוצר מה־Starter הוא בראש ובראשונה **מערכת לקליטה ולניהול לידים**: פניות מטופס האתר ומ־WhatsApp נכנסות למאגר Neon אחד לכל לקוח, מנוהלות במסך CRM, ויכולות לעבור עיבוד אוטומטי מבוקר באמצעות Gemini ו־Make או n8n.
 
-## פריסה
-`render.yaml` מגדיר Web Service בתוכנית Free. יש לחבר את המאגר ל-Render ולהגדיר את `DATABASE_URL` ואת סיסמת המנהל לפני הפעלה ציבורית. אין להכניס סודות ל-Git.
+לספק למפתח אשף אחד שמאפשר להקים פרויקט עסקי חדש בצורה עקבית, בטוחה וחסכונית:
 
-## גבולות MVP ואבטחה
-אין כרגע שליחת WhatsApp אוטומטית, סליקה או חיבור לכלי צד שלישי. הטפסים מוגנים ב-CSRF. הגבלת הקצב נשמרת בזיכרון של תהליך האפליקציה (מתאים ל-MVP חד-מופעי, לא להגנה מבוזרת). לפני הרחבה יש לחבר אחסון משותף כמו Redis ולהוסיף אימות מנהל מתקדם, מדיניות פרטיות וגיבויים.
+- הגדרת עסק, קטגוריה, תכונות ומודולים.
+- יצירת אתר עם טופס לידים ומסך CRM לניהול הפניות.
+- חיבור ערוצי קליטה: אתר, ובהמשך WhatsApp Cloud API מאומת.
+- תיעוד מקור ליד, היסטוריית תקשורת, סטטוסים, משימות ומעקב טיפול.
+- יצירת תוכנית הקמה (Dry Run) לפני ביצוע.
+- בדיקת חיבורים והרשאות מול ספקים.
+- Preflight לקריאה בלבד לפני פעולות שמשנות תשתית.
+- יצירה מבוקרת של Repository נפרד ב־GitHub, מסד נתונים ב־Neon ושירות ב־Render.
+- הפקת פרויקט Starter נקי ומבודד לכל לקוח.
+- בדיקות Health ו־CI לפני מסירה או פריסה.
 
-### מדריך הקמת עסק חדש
-למדריך המלא לשכפול נקי והקמת שירותים נפרדים ב־GitHub, Neon ו־Render, כולל PowerShell, משתני סביבה, אבטחה ובדיקות: [docs/NEW_CUSTOMER_INSTALLATION_HE.md](docs/NEW_CUSTOMER_INSTALLATION_HE.md).
+## הפרדה בין סביבת הפיתוח לפרויקטי לקוחות
 
-## Business App Starter
-This repository is structured as a reusable **single-customer** application starter, not a multi-tenant SaaS product. Business identity, content, branding, feature switches and integration enablement live in `config/business.json`. Credentials remain environment secrets.
+- **Developer Studio** הוא כלי פרטי למפתח בלבד.
+- כל אתר או מערכת לקוח נוצרים כפרויקט עצמאי עם קוד, הגדרות, סודות, מסד נתונים ופריסה נפרדים.
+- אין לערבב נתוני לקוחות, מפתחות API או משתני סביבה בין פרויקטים.
+- פרויקט לקוח אינו מקבל גישה לאשף הפיתוח.
+- אין ליצור משאבי ענן או לבצע פעולות כתיבה בלי אישור מפורש.
 
-- Architecture: `docs/ARCHITECTURE.md`
-- New installation: `docs/CLONING.md`
-- Ownership transfer: `docs/HANDOVER.md`
-- GitHub template setup: `docs/GITHUB_TEMPLATE_REPOSITORY.md`
-- Initialize a clean project: `python -m business_app.bootstrap --target . --business-name "New Business" --slug "new-business"`
-- Validate required environment variables: `python -m business_app.bootstrap --check-env`
+## מצב המימוש הנוכחי
 
-The live source repository contains customer-specific configuration and must not be marked as a GitHub template. Export a clean project with `business_app.export_starter`; only the exported project may become a template after a clean clone, CI and deployment review. The Google Apps Script webhook contract is retained. WhatsApp is disabled and sending is deliberately blocked pending explicit business-owner approval and official API setup.
+המאגר מכיל כיום:
+- אשף Web מקומי מוגן בסיסמה, המוגבל ל־loopback (127.0.0.1).
+- מנגנון תכנון הקמה ו־Dry Run.
+- בדיקות Preflight מול מתאמי GitHub, Neon ו־Render.
+- מנגנון ביצוע נפרד שמחייב אישור מפורש ובדיקת עלות.
+- כלי CLI ו־PowerShell להפעלה ובדיקות.
+- בדיקות אוטומטיות ב־pytest וב־GitHub Actions.
 
-## כלי מפתח פנימי — אשף הקמת עסקים
-אשף ההקמה המקומי מיועד למפתח בלבד, כולל ממשק עברי רספונסיבי שמאזין ל־127.0.0.1 ומוגן בסיסמה. הוא מפיק תוכנית Dry Run, ומנגנון ביצוע נפרד מאפשר הקמה מאושרת של Repository פרטי, פרויקט Neon ושירות Render, פרסום Starter נקי ובדיקת health. יצירה בפועל מחייבת אישור מפורש ובדיקת עלות אפס ל־Neon. הוראות הפעלה, יכולות ומגבלות: [docs/DEVELOPER_PROVISIONING_WIZARD_HE.md](docs/DEVELOPER_PROVISIONING_WIZARD_HE.md). מדריך מתאמי הספקים: [docs/PROVIDER_INTEGRATIONS_HE.md](docs/PROVIDER_INTEGRATIONS_HE.md).
+**חשוב:** האשף הקיים מוגבל במכוון למחשב המקומי. אין לפרסם אותו ישירות לאינטרנט או לפרוס אותו כשירות ציבורי לפני השלמת שכבת אבטחה ייעודית לגישה מרחוק, אימות משתמש, ניהול סודות, הגנת CSRF, הרשאות, Audit Log ובדיקות אבטחה.
+
+## ספקים ואינטגרציות
+
+המתאמים הקיימים מיועדים לאינטגרציה מבוקרת עם:
+- GitHub — מאגרים, ענפים וקוד.
+- Neon — מסדי PostgreSQL.
+- Render — שירותים ופריסות.
+
+אינטגרציות נוספות, כגון Canva וכלי אוטומציה, יתווספו רק לאחר בדיקת API, הרשאות, תנאי שימוש ועלויות. יש להעדיף מסלולים חינמיים; אין להניח ששירות או פעולה הם ללא עלות בלי לאמת זאת בחשבון ובתנאי הספק.
+
+## הפעלה מקומית ב־Windows PowerShell
+
+דרישות: Python 3.11 ומעלה ו־Git.
+
+    py -m venv .venv
+    .\.venv\Scripts\Activate.ps1
+    pip install -r requirements.txt
+    .\RUN-BUSINESS-STARTER.ps1
+
+בתפריט ניתן לבחור:
+1. הכנה מלאה, בדיקות אוטומטיות ותוכנית בדיקה.
+2. הפעלת אשף ההקמה הגרפי המקומי.
+3. הגדרת ספקים והרצת Preflight לקריאה בלבד.
+4. הקמה חיה — רק לאחר אימות עלויות ואישור מפורש.
+5. יציאה.
+
+## הגדרת סודות
+
+אין לשמור מפתחות API, סיסמאות, מחרוזות חיבור או קבצי .env ב־Git.
+
+יש להשתמש במשתני סביבה מקומיים או במנגנון Secrets של סביבת ההרצה. קובץ .env.example מכיל שמות משתנים ודוגמאות לא רגישות בלבד. אין להדפיס ערכי סודות ללוגים, לדוחות Preflight או למסכי UI.
+
+## בדיקות
+
+    python -m pytest -q
+
+GitHub Actions מריץ את בדיקות Python וכן בדיקת תחביר וקידוד ל־Windows PowerShell 5.1.
+
+## עקרונות עבודה
+
+1. לבדוק את המאגר, השירותים והמצב הקיים לפני שינוי.
+2. לעבוד בענף פיתוח נפרד ולפתוח Pull Request.
+3. לשמור על הפרדה בין פרויקטים ונתונים.
+4. להריץ בדיקות ולבדוק את תוצאות ה־CI לפני מיזוג.
+5. לא לבצע פעולות ענן, מחיקה או חיוב ללא אישור מפורש.
+6. לא לדווח על הצלחה בלי אימות בפועל.
+
+## תיעוד
+
+- [ארכיטקטורת המערכת](docs/ARCHITECTURE.md)
+- [אשף הקמת עסקים למפתח](docs/DEVELOPER_PROVISIONING_WIZARD_HE.md)
+- [אינטגרציות ספקים](docs/PROVIDER_INTEGRATIONS_HE.md)
+- [ארכיטקטורת מערכת הלידים והאוטומציה](docs/LEAD_MANAGEMENT_ARCHITECTURE_HE.md)
+- [שכפול Starter לפרויקט חדש](docs/CLONING.md)
+- [תבנית GitHub](docs/GITHUB_TEMPLATE_REPOSITORY.md)
+
+## רישיון ומדיניות שימוש
+
+המאגר הוא סביבת פיתוח פרטית. לפני הפיכתו לתבנית ציבורית או שיתוף עם צד שלישי יש לוודא שלא נותרו בו קוד, הגדרות, מסמכים או נתונים ייחודיים ללקוח.

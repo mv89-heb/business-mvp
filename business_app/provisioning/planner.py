@@ -33,6 +33,21 @@ SUPPORTED_MODULES = {
         "description": "מחשבון אומדן בסיסי לפי תעריפים מוגדרים",
         "status": "available",
     },
+    "whatsapp_inbound": {
+        "label": "קליטת לידים מ־WhatsApp",
+        "description": "Meta Cloud API webhook מאומת, מניעת כפילויות ושמירת הודעות נכנסות",
+        "status": "available",
+    },
+    "automation_webhooks": {
+        "label": "אוטומציות Make / n8n",
+        "description": "Outbox עמיד, אימות Bearer ו־callback לעדכון תוצאות",
+        "status": "available",
+    },
+    "ai_lead_enrichment": {
+        "label": "סיווג לידים באמצעות Gemini",
+        "description": "עיבוד דרך Make או n8n עם השחרת מידע אישי ועדכון CRM",
+        "status": "available",
+    },
 }
 
 FUTURE_MODULES = {
@@ -44,6 +59,7 @@ FUTURE_MODULES = {
     "projects": "ניהול פרויקטים",
     "finance": "כספים וגבייה",
     "analytics": "אנליטיקה מתקדמת",
+    "canva_branding": "עיצוב ומיתוג באמצעות Canva",
 }
 
 SUPPORTED_REGIONS = {
@@ -75,6 +91,8 @@ def _normalize_modules(modules: Iterable[str]) -> list[str]:
         raise ProvisioningInputError(
             "Requested modules are not implemented in this starter: " + ", ".join(labels)
         )
+    if "ai_lead_enrichment" in normalized and "automation_webhooks" not in normalized:
+        raise ProvisioningInputError("Gemini lead enrichment requires the automation_webhooks module")
     return normalized
 
 

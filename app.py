@@ -4,6 +4,8 @@ import json
 import urllib.request
 import csv
 import io
+import hmac
+import uuid
 from datetime import datetime, timezone
 from functools import wraps
 
@@ -17,6 +19,10 @@ from werkzeug.security import check_password_hash
 
 from business_app.config import load_business_config
 from business_app.integrations.google_sheets import send_lead_created
+from business_app.integrations.whatsapp_cloud import (
+    extract_inbound_messages, normalize_phone, redact_for_ai,
+    verify_signature, verify_webhook_challenge,
+)
 
 db = SQLAlchemy()
 limiter = Limiter(key_func=get_remote_address, storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://"), default_limits=["200 per day", "50 per hour"])
@@ -44,6 +50,89 @@ class Lead(db.Model):
 class Setting(db.Model):
     key = db.Column(db.String(80), primary_key=True)
     value = db.Column(db.Text, nullable=False)
+
+
+class LeadMetadata(db.Model):
+    """Additive CRM metadata; existing lead rows remain valid without a row here."""
+    lead_id = db.Column(db.BigInteger().with_variant(db.Integer, "sqlite"),
+                        db.ForeignKey("lead.id", ondelete="CASCADE"), primary_key=True)
+    source = db.Column(db.String(32), nullable=False, default="website")
+    source_external_id = db.Column(db.String(160))
+    assigned_to = db.Column(db.String(120))
+    priority = db.Column(db.String(16), nullable=False, default="normal")
+    ai_summary = db.Column(db.Text)
+    ai_category = db.Column(db.String(80))
+    ai_tags = db.Column(db.JSON, nullable=False, default=list)
+    next_follow_up_at = db.Column(db.DateTime(timezone=True))
+    last_contact_at = db.Column(db.DateTime(timezone=True))
+    updated_at = db.Column(db.DateTime(timezone=True), nullable=False,
+                           default=lambda: datetime.now(timezone.utc))
+
+
+class LeadMessage(db.Model):
+    id = db.Column(db.BigInteger().with_variant(db.Integer, "sqlite"), primary_key=True)
+    lead_id = db.Column(db.BigInteger().with_variant(db.Integer, "sqlite"),
+                        db.ForeignKey("lead.id", ondelete="CASCADE"), nullable=False, index=True)
+    provider = db.Column(db.String(32), nullable=False, default="whatsapp")
+    provider_message_id = db.Column(db.String(180), nullable=False, unique=True)
+    direction = db.Column(db.String(16), nullable=False, default="inbound")
+    message_type = db.Column(db.String(32), nullable=False, default="text")
+    body = db.Column(db.Text, nullable=False, default="")
+    message_at = db.Column(db.DateTime(timezone=True), nullable=False)
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False,
+                           default=lambda: datetime.now(timezone.utc))
+
+
+class LeadEvent(db.Model):
+    id = db.Column(db.BigInteger().with_variant(db.Integer, "sqlite"), primary_key=True)
+    lead_id = db.Column(db.BigInteger().with_variant(db.Integer, "sqlite"),
+                        db.ForeignKey("lead.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_type = db.Column(db.String(48), nullable=False)
+    source = db.Column(db.String(32), nullable=False)
+    description = db.Column(db.String(500), nullable=False, default="")
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False,
+                           default=lambda: datetime.now(timezone.utc))
+
+
+class IntegrationOutbox(db.Model):
+    """Durable, retryable hand-off queue for Make/n8n integrations."""
+    id = db.Column(db.BigInteger().with_variant(db.Integer, "sqlite"), primary_key=True)
+    event_id = db.Column(db.String(40), nullable=False, unique=True, index=True)
+    lead_id = db.Column(db.BigInteger().with_variant(db.Integer, "sqlite"),
+                        db.ForeignKey("lead.id", ondelete="CASCADE"), nullable=False, index=True)
+    event_type = db.Column(db.String(48), nullable=False)
+    payload = db.Column(db.JSON, nullable=False)
+    status = db.Column(db.String(16), nullable=False, default="pending", index=True)
+    attempts = db.Column(db.Integer, nullable=False, default=0)
+    last_error = db.Column(db.String(500))
+    created_at = db.Column(db.DateTime(timezone=True), nullable=False,
+                           default=lambda: datetime.now(timezone.utc))
+    delivered_at = db.Column(db.DateTime(timezone=True))
+
+
+def _enqueue_outbox(lead, event_type, payload):
+    db.session.add(IntegrationOutbox(
+        event_id=uuid.uuid4().hex, lead_id=lead.id,
+        event_type=event_type, payload=payload, status="pending",
+    ))
+
+
+def _automation_authorized():
+    expected = os.getenv("AUTOMATION_WEBHOOK_SECRET", "").strip()
+    authorization = request.headers.get("Authorization", "")
+    supplied = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
+    return bool(expected and supplied and hmac.compare_digest(supplied, expected))
+
+
+def _find_lead_by_phone(phone):
+    normalized = normalize_phone(phone)
+    if len(normalized) < 7:
+        return None
+    candidates = db.session.execute(
+        db.select(Lead).where(Lead.phone.endswith(normalized[-8:]))
+        .order_by(desc(Lead.created_at)).limit(20)
+    ).scalars().all()
+    return next((item for item in candidates if normalize_phone(item.phone) == normalized), None)
 
 
 def _is_production():
@@ -184,6 +273,18 @@ def create_app(test_config=None):
                     preset=request.form.get("preset", "contractor")[:40],
                     consent_at=datetime.now(timezone.utc))
         db.session.add(lead)
+        db.session.flush()
+        db.session.add(LeadMetadata(lead_id=lead.id, source="website"))
+        db.session.add(LeadEvent(
+            lead_id=lead.id, event_type="lead.created", source="website",
+            description="פנייה חדשה התקבלה מטופס האתר",
+        ))
+        if app.config["BUSINESS_CONFIG"].get("modules", {}).get("automation_webhooks", False):
+            _enqueue_outbox(lead, "lead.created", {
+                "lead_id": lead.id, "source": "website", "service": lead.service,
+                "area": lead.area, "budget": lead.budget,
+                "details_redacted": redact_for_ai(lead.details or ""),
+            })
         db.session.commit()
         app.logger.info("Lead %s stored successfully", lead.id)
         _notify_lead_webhook(lead, app)
@@ -242,8 +343,12 @@ def create_app(test_config=None):
         leads = db.session.execute(_filtered_leads_query().limit(300)).scalars().all()
         total = db.session.scalar(db.select(func.count(Lead.id))) or 0
         new_count = db.session.scalar(db.select(func.count(Lead.id)).where(Lead.status == "חדש")) or 0
+        metadata_rows = db.session.execute(
+            db.select(LeadMetadata).where(LeadMetadata.lead_id.in_([lead.id for lead in leads]))
+        ).scalars().all() if leads else []
+        metadata_by_lead = {item.lead_id: item for item in metadata_rows}
         return render_template("admin.html", leads=leads, total=total, new_count=new_count,
-                               selected=status, search=search)
+                               selected=status, search=search, metadata_by_lead=metadata_by_lead)
 
     @app.get("/admin/export.csv")
     @admin_required
@@ -274,9 +379,205 @@ def create_app(test_config=None):
         status = request.form.get("status", "")
         if status not in {"חדש", "בטיפול", "נשלחה הצעה", "נסגר", "לא רלוונטי"}:
             abort(400)
+        previous_status = lead.status
         lead.status = status
+        db.session.add(LeadEvent(
+            lead_id=lead.id, event_type="lead.status_changed", source="admin",
+            description=f"סטטוס עודכן מ־{previous_status} ל־{status}",
+        ))
         db.session.commit()
         flash("הסטטוס עודכן.", "success")
         return redirect(url_for("admin_dashboard", status=request.form.get("return_status", ""), q=request.form.get("q", "")))
+
+
+    @app.get("/webhooks/whatsapp")
+    @csrf.exempt
+    @limiter.exempt
+    def whatsapp_webhook_verify():
+        expected_token = os.getenv("WHATSAPP_VERIFY_TOKEN", "").strip()
+        if not expected_token:
+            return jsonify(error="WhatsApp webhook is not configured"), 503
+        challenge = verify_webhook_challenge(
+            request.args.get("hub.mode", ""),
+            request.args.get("hub.verify_token", ""),
+            expected_token,
+            request.args.get("hub.challenge", ""),
+        )
+        if challenge is None:
+            return "Forbidden", 403
+        return challenge, 200, {"Content-Type": "text/plain; charset=utf-8"}
+
+    @app.post("/webhooks/whatsapp")
+    @csrf.exempt
+    @limiter.limit("120 per minute")
+    def whatsapp_webhook_receive():
+        business_config = app.config["BUSINESS_CONFIG"]
+        whatsapp_config = business_config.get("integrations", {}).get("whatsapp_cloud_api", {})
+        if not business_config.get("modules", {}).get("whatsapp_inbound", False) or not whatsapp_config.get("enabled", False):
+            abort(404)
+        automation_enabled = business_config.get("modules", {}).get("automation_webhooks", False)
+        app_secret = os.getenv("WHATSAPP_APP_SECRET", "").strip()
+        if not app_secret:
+            return jsonify(error="WhatsApp webhook is not configured"), 503
+        raw_body = request.get_data(cache=True)
+        if not verify_signature(raw_body, request.headers.get("X-Hub-Signature-256", ""), app_secret):
+            return jsonify(error="Invalid webhook signature"), 403
+        payload = request.get_json(silent=True)
+        if not isinstance(payload, dict):
+            return jsonify(error="Invalid JSON payload"), 400
+
+        processed = 0
+        try:
+            for message in extract_inbound_messages(payload):
+                duplicate = db.session.scalar(
+                    db.select(LeadMessage.id).where(
+                        LeadMessage.provider_message_id == message["message_id"]
+                    )
+                )
+                if duplicate:
+                    continue
+                lead = _find_lead_by_phone(message["phone"])
+                if lead is None:
+                    lead = Lead(
+                        name=message["name"] or message["phone"],
+                        phone=message["phone"],
+                        service="WhatsApp",
+                        details=message["body"][:4000],
+                        status="חדש",
+                        preset=app.config["BUSINESS_CONFIG"].get("id", "business")[:40],
+                    )
+                    db.session.add(lead)
+                    db.session.flush()
+                    metadata = LeadMetadata(
+                        lead_id=lead.id, source="whatsapp",
+                        source_external_id=message["phone"],
+                        last_contact_at=message["message_at"],
+                    )
+                    db.session.add(metadata)
+                    db.session.add(LeadEvent(
+                        lead_id=lead.id, event_type="lead.created", source="whatsapp",
+                        description="ליד חדש נוצר מהודעת WhatsApp נכנסת",
+                    ))
+                    if automation_enabled:
+                        _enqueue_outbox(lead, "lead.created", {
+                            "lead_id": lead.id, "source": "whatsapp", "service": "WhatsApp",
+                            "details_redacted": message["ai_text"],
+                        })
+                else:
+                    metadata = db.session.get(LeadMetadata, lead.id)
+                    if metadata is None:
+                        metadata = LeadMetadata(lead_id=lead.id, source="website")
+                        db.session.add(metadata)
+                    metadata.last_contact_at = message["message_at"]
+
+                db.session.add(LeadMessage(
+                    lead_id=lead.id, provider="whatsapp",
+                    provider_message_id=message["message_id"], direction="inbound",
+                    message_type=message["message_type"], body=message["body"],
+                    message_at=message["message_at"],
+                ))
+                db.session.add(LeadEvent(
+                    lead_id=lead.id, event_type="lead.message_received", source="whatsapp",
+                    description="התקבלה הודעת WhatsApp נכנסת",
+                ))
+                if automation_enabled:
+                    _enqueue_outbox(lead, "lead.message_received", {
+                        "lead_id": lead.id, "source": "whatsapp",
+                        "message_id": message["message_id"],
+                        "message_type": message["message_type"],
+                        "message_text_redacted": message["ai_text"],
+                        "message_at": message["message_at"].isoformat(),
+                    })
+                processed += 1
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
+            app.logger.exception("WhatsApp webhook processing failed")
+            return jsonify(error="Webhook processing failed"), 500
+        return jsonify(ok=True, processed=processed), 200
+
+    @app.get("/api/integrations/outbox")
+    @csrf.exempt
+    @limiter.limit("60 per minute")
+    def integration_outbox():
+        if not app.config["BUSINESS_CONFIG"].get("modules", {}).get("automation_webhooks", False):
+            abort(404)
+        if not _automation_authorized():
+            return jsonify(error="Unauthorized"), 401
+        limit = min(max(request.args.get("limit", 25, type=int), 1), 50)
+        events = db.session.execute(
+            db.select(IntegrationOutbox)
+            .where(IntegrationOutbox.status == "pending")
+            .order_by(IntegrationOutbox.created_at)
+            .limit(limit)
+        ).scalars().all()
+        response_events = []
+        for event in events:
+            event.attempts += 1
+            response_events.append({
+                "event_id": event.event_id, "event_type": event.event_type,
+                "lead_id": event.lead_id, "payload": event.payload,
+                "created_at": event.created_at.isoformat() if event.created_at else None,
+                "attempt": event.attempts,
+            })
+        db.session.commit()
+        return jsonify(events=response_events), 200
+
+    @app.post("/api/integrations/outbox/<event_id>/ack")
+    @csrf.exempt
+    @limiter.limit("60 per minute")
+    def integration_outbox_ack(event_id):
+        if not app.config["BUSINESS_CONFIG"].get("modules", {}).get("automation_webhooks", False):
+            abort(404)
+        if not _automation_authorized():
+            return jsonify(error="Unauthorized"), 401
+        event = db.session.scalar(
+            db.select(IntegrationOutbox).where(IntegrationOutbox.event_id == event_id)
+        )
+        if event is None:
+            return jsonify(error="Event not found"), 404
+        event.status = "delivered"
+        event.delivered_at = datetime.now(timezone.utc)
+        event.last_error = None
+        db.session.commit()
+        return jsonify(ok=True, event_id=event.event_id, status=event.status), 200
+
+    @app.post("/api/integrations/leads/<int:lead_id>/enrichment")
+    @csrf.exempt
+    @limiter.limit("60 per minute")
+    def lead_enrichment_callback(lead_id):
+        modules = app.config["BUSINESS_CONFIG"].get("modules", {})
+        if not modules.get("automation_webhooks", False) or not modules.get("ai_lead_enrichment", False):
+            abort(404)
+        if not _automation_authorized():
+            return jsonify(error="Unauthorized"), 401
+        lead = db.get_or_404(Lead, lead_id)
+        data = request.get_json(silent=True)
+        if not isinstance(data, dict):
+            return jsonify(error="Invalid JSON payload"), 400
+        summary = str(data.get("summary") or "").strip()[:1000]
+        category = str(data.get("category") or "").strip()[:80]
+        priority = str(data.get("priority") or "normal").strip().lower()
+        if priority not in {"low", "normal", "high", "urgent"}:
+            return jsonify(error="Invalid priority"), 400
+        tags = data.get("tags") or []
+        if not isinstance(tags, list) or len(tags) > 10:
+            return jsonify(error="Invalid tags"), 400
+        tags = [str(tag).strip()[:40] for tag in tags if str(tag).strip()][:10]
+        metadata = db.session.get(LeadMetadata, lead.id)
+        if metadata is None:
+            metadata = LeadMetadata(lead_id=lead.id, source="website")
+            db.session.add(metadata)
+        metadata.ai_summary = summary or None
+        metadata.ai_category = category or None
+        metadata.priority = priority
+        metadata.ai_tags = tags
+        metadata.updated_at = datetime.now(timezone.utc)
+        db.session.add(LeadEvent(
+            lead_id=lead.id, event_type="lead.ai_enriched", source="automation",
+            description="פרטי הליד סווגו באמצעות אוטומציה",
+        ))
+        db.session.commit()
+        return jsonify(ok=True, lead_id=lead.id, priority=metadata.priority), 200
 
     return app
