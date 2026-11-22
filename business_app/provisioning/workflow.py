@@ -507,15 +507,90 @@ class ProvisioningWorkflow:
                 }
                 record("github_repository", "completed", state["resources"]["github"])
 
+                branch_name = f"provisioning/{plan.get('plan_id')}"
+                record("github_branch", "running", {"branch": branch_name})
+                branch_result = self.github.ensure_branch(
+                    github_owner, slug, branch_name, base_branch="main"
+                )
+                record("github_branch", "completed", {
+                    "branch": branch_name,
+                    "created": branch_result.get("created", False),
+                })
+
                 record("github_publish", "running")
-                publish_result = self.github.publish_directory(github_owner, slug, export_path)
+                publish_result = self.github.publish_directory(
+                    github_owner, slug, export_path, branch=branch_name,
+                    commit_message=f"Provision {business.get('name', slug)} starter",
+                )
                 state["resources"]["github"]["published_commit"] = publish_result.get("commit_sha")
                 state["resources"]["github"]["file_count"] = publish_result.get("file_count")
                 record("github_publish", "completed", {
                     "commit": publish_result.get("commit_sha"),
                     "file_count": publish_result.get("file_count"),
                     "changed": publish_result.get("published"),
+                    "branch": branch_name,
                 })
+
+                record("github_pull_request", "running", {"branch": branch_name})
+                pr_result = self.github.create_or_get_pull_request(
+                    github_owner, slug, branch_name, base="main",
+                    title=f"Provision {business.get('name', slug)} starter",
+                    body=(
+                        "Automated provisioning change. The starter is published to an isolated branch. "
+                        "The provisioning workflow will continue only after all GitHub Actions checks pass."
+                    ),
+                )
+                pull_request = pr_result["pull_request"]
+                pr_number = pull_request.get("number")
+                if not pr_number:
+                    raise ProviderError("GitHub did not return the provisioning pull request number")
+                state["resources"]["github"]["pull_request"] = {
+                    "number": pr_number,
+                    "url": pull_request.get("html_url"),
+                    "branch": branch_name,
+                }
+                record("github_pull_request", "completed", {
+                    "number": pr_number,
+                    "url": pull_request.get("html_url"),
+                    "merged": pr_result.get("merged", False),
+                })
+
+                if not pr_result.get("merged", False):
+                    record("github_ci", "running", {"pull_request": pr_number})
+                    checks = self.github.get_pull_request_checks(github_owner, slug, pr_number)
+                    if not checks.get("ready"):
+                        reason = checks.get("reason", "checks_pending")
+                        record("github_ci", "waiting", {
+                            "pull_request": pr_number,
+                            "reason": reason,
+                            "checks": checks.get("checks", []),
+                        })
+                        raise ProviderError(
+                            f"GitHub PR #{pr_number} is awaiting successful CI checks ({reason}). "
+                            "Run Preflight and Execute again after GitHub Actions completes."
+                        )
+                    record("github_ci", "completed", {
+                        "pull_request": pr_number,
+                        "head_sha": checks.get("head_sha"),
+                        "checks": checks.get("checks", []),
+                    })
+                    record("github_merge", "running", {"pull_request": pr_number})
+                    merge_result = self.github.merge_pull_request(
+                        github_owner, slug, pr_number,
+                        expected_head_sha=checks["head_sha"],
+                    )
+                    state["resources"]["github"]["merge_commit"] = merge_result.get("sha")
+                    record("github_merge", "completed", {
+                        "pull_request": pr_number,
+                        "merge_commit": merge_result.get("sha"),
+                    })
+                else:
+                    state["resources"]["github"]["merge_commit"] = pull_request.get("merge_commit_sha")
+                    record("github_merge", "completed", {
+                        "pull_request": pr_number,
+                        "already_merged": True,
+                        "merge_commit": pull_request.get("merge_commit_sha"),
+                    })
 
             record("neon_project", "running")
             project_result = self.neon.ensure_project(
