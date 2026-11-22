@@ -35,3 +35,16 @@ python -m flask --app wsgi run
 
 ## גבולות MVP ואבטחה
 אין כרגע שליחת WhatsApp אוטומטית, סליקה או חיבור לכלי צד שלישי. הטפסים מוגנים ב-CSRF. הגבלת הקצב נשמרת בזיכרון של תהליך האפליקציה (מתאים ל-MVP חד-מופעי, לא להגנה מבוזרת). לפני הרחבה יש לחבר אחסון משותף כמו Redis ולהוסיף אימות מנהל מתקדם, מדיניות פרטיות וגיבויים.
+
+## Business App Starter
+
+This repository is structured as a reusable **single-customer** application starter, not a multi-tenant SaaS product. Business identity, content, branding, feature switches and integration enablement live in `config/business.json`. Credentials remain environment secrets.
+
+- Architecture: `docs/ARCHITECTURE.md`
+- New installation: `docs/CLONING.md`
+- Ownership transfer: `docs/HANDOVER.md`
+- GitHub template setup: `docs/GITHUB_TEMPLATE_REPOSITORY.md`
+- Initialize a clean project: `python -m business_app.bootstrap --target . --business-name "New Business" --slug "new-business"`
+- Validate required environment variables: `python -m business_app.bootstrap --check-env`
+
+The existing Google Apps Script webhook contract and current deployment configuration are retained. WhatsApp is disabled and sending is deliberately blocked pending explicit business-owner approval and official API setup.
