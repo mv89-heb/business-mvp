@@ -739,8 +739,13 @@ def test_remote_healthz_is_public_but_https_only_for_non_loopback_clients():
         "WTF_CSRF_ENABLED": False,
     }
     client = create_provisioning_app(config).test_client()
-    secure = client.get("/healthz", base_url="https://unlisted.example")
-    insecure = client.get("/healthz", base_url="http://unlisted.example")
+    public_peer = {"REMOTE_ADDR": "198.51.100.24"}
+    secure = client.get(
+        "/healthz", base_url="https://unlisted.example", environ_base=public_peer
+    )
+    insecure = client.get(
+        "/healthz", base_url="http://unlisted.example", environ_base=public_peer
+    )
     assert secure.status_code == 200
     assert secure.get_json() == {"status": "ok"}
     assert insecure.status_code == 404
