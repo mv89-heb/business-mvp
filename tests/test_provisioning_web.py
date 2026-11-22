@@ -678,3 +678,36 @@ def test_audit_events_use_postgres_when_database_is_configured(tmp_path, monkeyp
     assert captured[0][1] == "developer"
     assert captured[0][2]["reason"] == "invalid_password"
     assert not audit_path.exists()
+
+
+
+def test_storage_round_trip_route_requires_login_and_preserves_form_values(monkeypatch):
+    import business_app.provisioning.workflow as workflow_module
+
+    calls = []
+
+    def successful_round_trip(self):
+        calls.append(True)
+        return True
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test-user:test-password@localhost/testdb")
+    monkeypatch.setattr(workflow_module.WorkflowStateStore, "check_round_trip", successful_round_trip)
+    client = make_client()
+
+    denied = client.post("/storage/check", data={"business_name": "לא אמור להישמר"})
+    assert denied.status_code == 302
+    assert calls == []
+
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.post("/storage/check", data={
+        "business_name": "עסק בדיקה",
+        "slug": "test-business",
+        "category": "services",
+        "modules": ["lead_capture"],
+    })
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert calls == [True]
+    assert "בדיקת Neon הצליחה" in page
+    assert 'value="עסק בדיקה"' in page
