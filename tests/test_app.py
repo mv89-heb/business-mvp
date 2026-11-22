@@ -154,6 +154,7 @@ def test_lead_webhook_is_optional_and_sends_saved_lead(monkeypatch, client):
         return response
 
     monkeypatch.setenv("LEAD_WEBHOOK_URL", "https://automation.example.test/lead")
+    monkeypatch.setenv("LEAD_WEBHOOK_SECRET", "test-shared-secret")
     monkeypatch.setattr(app_module.urllib.request, "urlopen", fake_urlopen)
     response = client.post("/leads", data={
         "name": "לקוח webhook",
@@ -164,8 +165,9 @@ def test_lead_webhook_is_optional_and_sends_saved_lead(monkeypatch, client):
     assert response.status_code == 302
     assert response.location.startswith("/thanks?lead_id=")
     assert captured["url"] == "https://automation.example.test/lead"
-    assert captured["timeout"] == 3
+    assert captured["timeout"] == 8
     assert captured["body"]["event"] == "lead.created"
+    assert captured["body"]["token"] == "test-shared-secret"
     assert captured["body"]["lead"]["name"] == "לקוח webhook"
     assert captured["body"]["lead"]["service"] == "דק"
 
