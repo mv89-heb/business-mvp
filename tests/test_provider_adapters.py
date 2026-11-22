@@ -233,3 +233,95 @@ def test_render_refuses_existing_service_on_wrong_branch():
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
             name="app", repository_url="https://github.com/a/b", branch="main"
         )
+
+
+def test_github_publish_skips_identical_clean_export(tmp_path):
+    from business_app.provisioning.providers.github import GitHubProvider
+
+    content = b"# clean starter\\n"
+    (tmp_path / "README.md").write_bytes(content)
+    blob_sha = GitHubProvider._git_blob_sha(content)
+    opener = FakeOpener([
+        {"object": {"sha": "parent"}},
+        {"tree": {"sha": "tree0"}},
+        {"tree": [{"path": "README.md", "type": "blob", "sha": blob_sha}], "truncated": False},
+    ])
+    result = GitHubProvider("token", opener=opener).publish_directory(
+        "developer", "new-app", tmp_path
+    )
+    assert result["published"] is False
+    assert result["commit_sha"] == "parent"
+    assert len(opener.requests) == 3
+
+
+def test_github_publish_writes_blobs_tree_commit_and_updates_ref(tmp_path):
+    from business_app.provisioning.providers.github import GitHubProvider
+
+    (tmp_path / "README.md").write_text("# clean starter\\n", encoding="utf-8")
+    (tmp_path / "app.py").write_text("app = None\\n", encoding="utf-8")
+    opener = FakeOpener([
+        {"object": {"sha": "parent"}},
+        {"tree": {"sha": "tree0"}},
+        {"tree": [], "truncated": False},
+        {"sha": "blob-readme"},
+        {"sha": "blob-app"},
+        {"sha": "tree-new"},
+        {"sha": "commit-new"},
+        {},
+    ])
+    result = GitHubProvider("token", opener=opener).publish_directory(
+        "developer", "new-app", tmp_path
+    )
+    assert result["published"] is True
+    assert result["commit_sha"] == "commit-new"
+    assert result["file_count"] == 2
+    assert opener.requests[-1][0].get_method() == "PATCH"
+    tree_payload = json.loads(opener.requests[-3][0].data)
+    assert {item["path"] for item in tree_payload["tree"]} == {"README.md", "app.py"}
+
+
+def test_github_publish_refuses_environment_secrets_before_network_call(tmp_path):
+    from business_app.provisioning.providers.github import GitHubProvider
+
+    (tmp_path / ".env").write_text("DATABASE_URL=postgresql://secret", encoding="utf-8")
+    opener = FakeOpener([])
+    with pytest.raises(Exception, match="environment file"):
+        GitHubProvider("token", opener=opener).publish_directory(
+            "developer", "new-app", tmp_path
+        )
+    assert opener.requests == []
+
+
+def test_github_publish_refuses_unexpected_existing_repository_files(tmp_path):
+    from business_app.provisioning.providers.github import GitHubProvider
+
+    (tmp_path / "README.md").write_text("# clean starter\\n", encoding="utf-8")
+    opener = FakeOpener([
+        {"object": {"sha": "parent"}},
+        {"tree": {"sha": "tree0"}},
+        {"tree": [
+            {"path": "README.md", "type": "blob", "sha": "old"},
+            {"path": "private.txt", "type": "blob", "sha": "unexpected"},
+        ], "truncated": False},
+    ])
+    with pytest.raises(Exception, match="outside the clean export"):
+        GitHubProvider("token", opener=opener).publish_directory(
+            "developer", "new-app", tmp_path
+        )
+    assert len(opener.requests) == 3
+
+
+def test_github_git_blob_hash_uses_git_object_header():
+    from business_app.provisioning.providers.github import GitHubProvider
+
+    assert GitHubProvider._git_blob_sha(b"hello\n") == "ce013625030ba8dba906f756967f9e9ca394464a"
+
+
+def test_render_fetch_service_returns_current_public_url():
+    opener = FakeOpener([
+        {"service": {"id": "srv-1", "name": "app",
+                     "serviceDetails": {"url": "https://app.onrender.com"}}}
+    ])
+    service = RenderProvider("token", workspace_id="tea-1", opener=opener).get_service("srv-1")
+    assert service["serviceDetails"]["url"] == "https://app.onrender.com"
+    assert opener.requests[0][0].full_url.endswith("/services/srv-1")

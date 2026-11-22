@@ -20,7 +20,7 @@ Canva מנוהלת דרך חיבור Canva המאומת ב-ChatGPT (Canva MCP) �
 
 ## יכולות המתאמים
 
-- GitHub: בדיקת זהות, בדיקת Repository קיים, יצירת Repository פרטי בלבד. המתאם אינו מעתיק קוד ואינו מבצע push.
+- GitHub: בדיקת זהות, איתור/יצירת Repository פרטי, פרסום Starter נקי דרך Git Data API, והשוואת עץ הקבצים למניעת פרסום כפול.
 - Neon: בדיקת חיבור, איתור פרויקט קיים לפי שם, יצירת פרויקט עם compute מינימלי והחזרת URI לחיבור. ה-URI הוא סוד; אין לכתוב אותו ללוגים או לקובצי מצב.
 - Render: בדיקת סביבת עבודה, איתור שירות קיים ויצירת Web Service בתוכנית Free בלבד, בפרנקפורט, עם deploy רק לאחר מעבר בדיקות CI (checksPass).
 
@@ -43,6 +43,16 @@ Canva מנוהלת דרך חיבור Canva המאומת ב-ChatGPT (Canva MCP) �
     print(NeonProvider().check_connection())
     print(RenderProvider().check_connection())
 
-## מגבלת שלב נוכחי
+## שכבת Orchestration
 
-הוספת המתאמים מאפשרת בדיקת חיבור ופעולות יצירה מבוקרות ברמת ספק, אך עדיין אינה workflow מלא שמבצע את כל השלבים ברצף. אין לסמן התקנה כ"הושלמה" עד להוספת שכבת orchestration, publishing של קוד ה-Starter, טיפול בהתאוששות, הזנת סודות ל-Render ובדיקת health של הפריסה.
+הקובץ `business_app/provisioning/workflow.py` מחבר את המתאמים לזרימת הקמה אחת:
+- Preflight לפני כל יצירת משאב.
+- ייצוא Starter נקי ופרסום GitHub דרך Git Data API.
+- יצירה/איתור של Neon והעברת connection URI ל־Render בזיכרון בלבד.
+- יצירה/איתור של Render Free בפרנקפורט והמתנה ל־`/health`.
+- מצב workflow מקומי אטומי, ללא סודות, ועדכון התקדמות בכל שלב.
+- עצירה בטוחה בכשל; אין מחיקה אוטומטית של משאבים שנוצרו.
+
+להפעלה, שמירת תוכנית Dry Run תחילה ואז הרצת `py -m business_app.provisioning.execute --plan <path>`. ההפעלה דורשת הקלדה מפורשת של `CREATE`, אישור `ZERO-COST` והזנת סיסמת מנהל ללקוח. כל הבדיקות משתמשות ב־mocks בלבד.
+
+ה־workflow אינו מבצע OAuth עצמאי ל־Canva. יצירת נכסי עיצוב נעשית דרך חיבור Canva המאומת ב־ChatGPT; שילוב עצמאי באשף דורש הרשאת API/OAuth נפרדת.
