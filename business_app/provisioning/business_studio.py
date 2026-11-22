@@ -11,6 +11,7 @@ import hmac
 import json
 import os
 import re
+import threading
 from datetime import datetime, timezone
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
@@ -437,6 +438,37 @@ class BusinessStudioStore:
 
 COMMAND_AAD = b"business-studio-command:v1"
 RESPONSE_AAD = b"business-studio-response:v1"
+_COMMAND_PRIVATE_KEY = None
+_COMMAND_PRIVATE_KEY_LOCK = threading.Lock()
+
+
+def _get_command_private_key():
+    """Use an explicitly configured Render secret, or a per-process key on the single Render worker."""
+    from cryptography.hazmat.primitives import serialization
+    global _COMMAND_PRIVATE_KEY
+    encoded = os.getenv("STUDIO_COMMAND_PRIVATE_KEY_B64", "").strip()
+    if encoded:
+        return serialization.load_pem_private_key(base64.b64decode(encoded, validate=True), password=None)
+    if _COMMAND_PRIVATE_KEY is None:
+        with _COMMAND_PRIVATE_KEY_LOCK:
+            if _COMMAND_PRIVATE_KEY is None:
+                from cryptography.hazmat.primitives.asymmetric import rsa
+                _COMMAND_PRIVATE_KEY = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+    return _COMMAND_PRIVATE_KEY
+
+
+def _command_public_key_pem(private_key=None):
+    from cryptography.hazmat.primitives import serialization
+    key = private_key or _get_command_private_key()
+    return key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode("ascii")
+
+
+def _command_key_id(public_key_pem):
+    return hashlib.sha256(public_key_pem.encode("ascii")).hexdigest()[:24]
+
+
 GITHUB_REPOSITORY = "mv89-heb/business-mvp"
 GITHUB_WORKFLOW_REF = "mv89-heb/business-mvp/.github/workflows/studio-command.yml@refs/heads/main"
 
@@ -471,11 +503,10 @@ def decrypt_github_command(envelope):
 
     if not isinstance(envelope, dict) or envelope.get("schema") != "business-studio-command/v1":
         raise ValueError("Unsupported command envelope.")
-    encoded_key = os.getenv("STUDIO_COMMAND_PRIVATE_KEY_B64", "").strip()
-    if not encoded_key:
-        raise RuntimeError("STUDIO_COMMAND_PRIVATE_KEY_B64 is not configured.")
-    private_pem = base64.b64decode(encoded_key, validate=True)
-    private_key = serialization.load_pem_private_key(private_pem, password=None)
+    private_key = _get_command_private_key()
+    public_key_pem = _command_public_key_pem(private_key)
+    if envelope.get("keyId") and envelope["keyId"] != _command_key_id(public_key_pem):
+        raise ValueError("Command was encrypted for a stale Render key.")
     aes_key = private_key.decrypt(
         base64.b64decode(envelope["encryptedKey"], validate=True),
         padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
@@ -575,7 +606,7 @@ def create_business_studio_blueprint(store_factory=None):
 
     @bp.before_request
     def require_developer():
-        if request.path == "/internal/github/commands":
+        if request.path in {"/internal/github/commands", "/internal/github/command-public-key"}:
             return None
         if not session.get("developer"):
             if request.path.startswith("/api/"):
@@ -583,6 +614,15 @@ def create_business_studio_blueprint(store_factory=None):
             from flask import redirect, url_for
             return redirect(url_for("login"))
 
+
+    @bp.get("/internal/github/command-public-key")
+    def github_command_public_key():
+        try:
+            public_key = _command_public_key_pem()
+            return jsonify({"keyId": _command_key_id(public_key), "publicKey": public_key})
+        except Exception:
+            current_app.logger.exception("GitHub command public key initialization failed")
+            return jsonify({"error": "command_key_unavailable"}), 503
 
     @bp.post("/internal/github/commands")
     def github_command_ingest():

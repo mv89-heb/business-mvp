@@ -24,11 +24,11 @@ Use RSA-OAEP-SHA256 to wrap a random 256-bit AES key and AES-256-GCM to encrypt 
 
 Command JSON: {type: get_businesses | create_business_proposal | create_task, payload: {...}}.
 
-The envelope schema is business-studio-command/v1 and contains commandId, issuedAt, encryptedKey, nonce, ciphertext and responsePublicKey. The response uses business-studio-response/v1.
+The envelope schema is business-studio-command/v1 and contains commandId, issuedAt, keyId, encryptedKey, nonce, ciphertext and responsePublicKey. Fetch the current keyId and publicKey from Render immediately before encrypting. The response uses business-studio-response/v1.
 
 ## Render environment
 
-Set STUDIO_COMMAND_PRIVATE_KEY_B64 to the base64-encoded PKCS#8 PEM private key paired with tools/studio-command-public.pem. This is a secret and must never be committed or placed in an issue.
+By default Render creates a fresh RSA-3072 keypair in process memory. ChatGPT first reads GET /internal/github/command-public-key and encrypts the command to that key. The key ID is embedded in the envelope so a restart between key retrieval and command delivery is rejected safely. The Render service currently runs one Gunicorn worker and one instance; keep that single-worker topology for the in-memory key mode. For a stable key across restarts, an operator may set STUDIO_COMMAND_PRIVATE_KEY_B64 to a base64-encoded PKCS#8 PEM private key in Render Environment. Never commit that value or place it in a GitHub issue. The public key endpoint remains the supported discovery mechanism. The private key is generated at runtime unless a stable Render secret is explicitly supplied.
 
 ## Neon
 
