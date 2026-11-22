@@ -5,8 +5,255 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="referrer" content="same-origin" />
   <title>Business App Starter — Developer Studio</title>
-  <link rel="stylesheet" href="/static/provisioning_wizard.css" />
-  <script src="/static/provisioning_wizard.js" defer></script>
+  <style>
+    :root {
+      --bg: #f8fafc;
+      --surface: #ffffff;
+      --surface-alt: #f1f5f9;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #475569;
+      --accent: #4f46e5;
+      --accent-hover: #4338ca;
+      --accent-soft: rgba(79, 70, 229, 0.1);
+      --accent-text: #4338ca;
+      --emerald: #059669;
+      --emerald-hover: #047857;
+      --cyan-text: #0e7490;
+      --amber-bg: rgba(245, 158, 11, 0.12);
+      --amber-text: #b45309;
+      --amber-border: rgba(245, 158, 11, 0.3);
+      --ok-bg: rgba(16, 185, 129, 0.12);
+      --ok-text: #047857;
+      --ok-border: rgba(16, 185, 129, 0.3);
+      --err-bg: #fef2f2;
+      --err-text: #b91c1c;
+      --err-border: #fecaca;
+      --shadow: 0 20px 35px -15px rgba(15, 23, 42, 0.12);
+    }
+
+    html.dark {
+      --bg: #020617;
+      --surface: #0f172a;
+      --surface-alt: #1e293b;
+      --border: #1e293b;
+      --text: #f1f5f9;
+      --text-muted: #94a3b8;
+      --accent: #4f46e5;
+      --accent-hover: #6366f1;
+      --accent-soft: rgba(79, 70, 229, 0.16);
+      --accent-text: #a5b4fc;
+      --emerald: #059669;
+      --emerald-hover: #10b981;
+      --cyan-text: #67e8f9;
+      --amber-bg: rgba(245, 158, 11, 0.12);
+      --amber-text: #fcd34d;
+      --amber-border: rgba(245, 158, 11, 0.25);
+      --ok-bg: rgba(16, 185, 129, 0.12);
+      --ok-text: #6ee7b7;
+      --ok-border: rgba(16, 185, 129, 0.25);
+      --err-bg: rgba(69, 10, 10, 0.65);
+      --err-text: #fda4af;
+      --err-border: #9f1239;
+      --shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6);
+    }
+
+    *, *::before, *::after { box-sizing: border-box; }
+    .hidden { display: none !important; }
+    .ltr-input { direction: ltr; text-align: left; }
+    .mono-text { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .mono-accent { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--accent-text); }
+    .mono-ok { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--ok-text); }
+    .mono-cyan { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; color: var(--cyan-text); }
+
+    body {
+      margin: 0;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      transition: background-color 0.2s ease, color 0.2s ease;
+    }
+
+    .app-shell { min-height: 100vh; display: flex; flex-direction: column; }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 30;
+      background-color: var(--surface);
+      border-bottom: 1px solid var(--border);
+    }
+
+    .topbar-inner {
+      max-width: 72rem;
+      margin: 0 auto;
+      padding: 0 1rem;
+      height: 3.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 0.75rem;
+    }
+
+    .brand { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
+    .brand-icon {
+      width: 2rem; height: 2rem; border-radius: 0.5rem;
+      background: linear-gradient(135deg, #6366f1, #7c3aed);
+      color: #fff; display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+    }
+    .brand-title { font-weight: 700; font-size: 0.95rem; }
+
+    .badge-dev, .badge-ok, .badge-warn {
+      display: inline-flex; align-items: center; gap: 0.35rem;
+      padding: 0.2rem 0.6rem; border-radius: 9999px; font-size: 0.7rem; font-weight: 700;
+    }
+    .badge-dev, .badge-warn { background: var(--amber-bg); color: var(--amber-text); border: 1px solid var(--amber-border); }
+    .badge-ok { background: var(--ok-bg); color: var(--ok-text); border: 1px solid var(--ok-border); }
+
+    .theme-switcher {
+      display: inline-flex; background: var(--surface-alt); border: 1px solid var(--border);
+      border-radius: 0.5rem; padding: 2px; gap: 2px;
+    }
+    .theme-btn {
+      border: 0; background: transparent; color: var(--text-muted); font-size: 0.75rem;
+      font-weight: 600; padding: 0.35rem 0.6rem; border-radius: 0.375rem; cursor: pointer;
+    }
+    .theme-btn.active { background: var(--accent); color: #fff; }
+
+    .toast-container {
+      position: fixed; bottom: 1rem; left: 1rem; z-index: 50;
+      display: flex; flex-direction: column; gap: 0.5rem; max-width: 20rem;
+    }
+    .toast-item {
+      padding: 0.7rem 1rem; border-radius: 0.75rem; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); font-size: 0.75rem; font-weight: 600;
+      box-shadow: var(--shadow); transition: opacity 0.3s;
+    }
+
+    .login-main { flex: 1; display: flex; align-items: center; justify-content: center; padding: 2rem 1rem; }
+    .login-card {
+      width: 100%; max-width: 28rem; background: var(--surface); border: 1px solid var(--border);
+      border-radius: 1rem; padding: 2rem; box-shadow: var(--shadow); position: relative; overflow: hidden;
+    }
+    .card-accent { position: absolute; top: 0; left: 0; right: 0; height: 4px; background: linear-gradient(to left, #6366f1, #8b5cf6, #22d3ee); }
+    .card-top-row { display: flex; align-items: center; justify-content: space-between; margin-bottom: 1.5rem; }
+    .route-tag { font-family: ui-monospace, monospace; font-size: 0.75rem; color: var(--text-muted); direction: ltr; }
+    .login-title { margin: 0 0 0.5rem 0; font-size: 1.5rem; font-weight: 800; }
+    .login-subtitle { margin: 0 0 1.5rem 0; font-size: 0.875rem; line-height: 1.6; color: var(--text-muted); }
+    .error-box { margin-bottom: 1rem; padding: 0.75rem; border-radius: 0.75rem; background: var(--err-bg); border: 1px solid var(--err-border); color: var(--err-text); font-size: 0.8rem; }
+    .login-form { display: flex; flex-direction: column; gap: 1rem; }
+
+    .field-label { display: block; font-size: 0.8rem; font-weight: 600; margin-bottom: 0.4rem; color: var(--text); }
+    .input-wrap { position: relative; }
+    .field-input {
+      width: 100%; padding: 0.65rem 0.9rem; border-radius: 0.75rem; border: 1px solid var(--border);
+      background: var(--bg); color: var(--text); font-size: 0.875rem; outline: none;
+    }
+    .field-input.has-icon { padding-left: 2.5rem; }
+    .field-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.2); }
+    .pwd-toggle { position: absolute; left: 0.65rem; top: 50%; transform: translateY(-50%); border: 0; background: transparent; color: var(--text-muted); cursor: pointer; padding: 0.25rem; display: flex; }
+
+    .btn-primary, .btn-emerald, .btn-secondary {
+      border-radius: 0.75rem; font-size: 0.85rem; font-weight: 700; cursor: pointer;
+      padding: 0.65rem 1.15rem; display: inline-flex; align-items: center; justify-content: center; gap: 0.45rem;
+    }
+    .btn-primary { border: 0; background: var(--accent); color: #fff; }
+    .btn-primary:hover { background: var(--accent-hover); }
+    .btn-primary.full-width { width: 100%; padding: 0.8rem 1rem; }
+    .btn-emerald { border: 0; background: var(--emerald); color: #fff; }
+    .btn-emerald:hover { background: var(--emerald-hover); }
+    .btn-secondary { border: 1px solid var(--border); background: var(--surface-alt); color: var(--text); }
+
+    .card-footer {
+      margin-top: 1.5rem; padding-top: 1.25rem; border-top: 1px solid var(--border);
+      display: flex; align-items: center; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted);
+    }
+
+    .wizard-main { max-width: 72rem; width: 100%; margin: 0 auto; padding: 1.5rem 1rem; display: flex; flex-direction: column; gap: 1.5rem; }
+    .card, .wizard-banner { background: var(--surface); border: 1px solid var(--border); border-radius: 1rem; padding: 1.35rem; }
+    .wizard-banner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 1rem; }
+    .wizard-heading-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; margin-bottom: 0.3rem; }
+    .wizard-title { margin: 0; font-size: 1.35rem; font-weight: 800; }
+    .wizard-subtitle { margin: 0; font-size: 0.875rem; color: var(--text-muted); }
+    .banner-actions { display: flex; align-items: center; gap: 0.75rem; }
+    .session-box { padding: 0.45rem 0.75rem; border-radius: 0.75rem; background: var(--bg); border: 1px solid var(--border); font-size: 0.75rem; }
+    .session-label { color: var(--text-muted); }
+    .session-timer { font-family: ui-monospace, monospace; font-weight: 700; color: var(--accent-text); direction: ltr; }
+
+    .stepper-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.75rem; }
+    @media (min-width: 1024px) { .stepper-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+    .step-tab {
+      text-align: right; border-radius: 0.85rem; padding: 0.9rem; border: 1px solid var(--border);
+      background: var(--surface); color: var(--text); cursor: pointer;
+    }
+    .step-tab.active { background: var(--accent-soft); border-color: var(--accent); }
+    .step-tab-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.25rem; font-size: 0.75rem; font-family: ui-monospace, monospace; color: var(--accent-text); }
+    .step-dot { width: 8px; height: 8px; border-radius: 9999px; background: var(--border); }
+    .step-tab.active .step-dot { background: var(--accent); }
+    .step-tab-title { font-size: 0.875rem; font-weight: 700; }
+    .step-tab-sub { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; }
+
+    .step1-layout { display: grid; grid-template-columns: 1fr; gap: 1.5rem; }
+    @media (min-width: 1024px) { .step1-layout { grid-template-columns: 2fr 1fr; } }
+    .panel-main, .panel-side { display: flex; flex-direction: column; gap: 1.25rem; }
+    .panel-header, .panel-header-wrap { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; margin-bottom: 1rem; }
+    .panel-title { margin: 0; font-size: 1.1rem; font-weight: 700; }
+    .panel-subtitle { margin: 0.2rem 0 0 0; font-size: 0.85rem; color: var(--text-muted); }
+    .muted-note { font-size: 0.75rem; color: var(--text-muted); }
+
+    .form-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+    @media (min-width: 640px) { .form-grid { grid-template-columns: repeat(2, 1fr); } }
+    .modules-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+    @media (min-width: 640px) { .modules-grid { grid-template-columns: repeat(3, 1fr); } }
+    .module-card {
+      display: flex; align-items: flex-start; gap: 0.65rem; padding: 0.85rem;
+      border-radius: 0.75rem; background: var(--bg); border: 1px solid var(--border); cursor: pointer;
+    }
+    .module-title { font-size: 0.85rem; font-weight: 700; }
+    .module-desc { font-size: 0.75rem; color: var(--text-muted); margin-top: 0.15rem; }
+
+    .side-title { margin: 0; font-size: 0.85rem; font-weight: 700; }
+    .preview-list { display: flex; flex-direction: column; gap: 0.75rem; font-size: 0.78rem; }
+    .preview-item { padding: 0.75rem; border-radius: 0.75rem; background: var(--bg); border: 1px solid var(--border); }
+    .preview-label { color: var(--text-muted); margin-bottom: 0.25rem; }
+    .preview-val { font-weight: 600; word-break: break-all; }
+
+    .panel-actions { display: flex; gap: 0.75rem; margin-top: 1.25rem; }
+    .panel-actions.end { justify-content: flex-end; }
+    .panel-actions.start { justify-content: flex-start; }
+    .panel-actions.between { justify-content: space-between; }
+
+    .preflight-grid { display: grid; grid-template-columns: 1fr; gap: 1rem; }
+    @media (min-width: 768px) { .preflight-grid { grid-template-columns: repeat(3, 1fr); } }
+    .subcard { padding: 1rem; border-radius: 0.85rem; background: var(--bg); border: 1px solid var(--border); display: flex; flex-direction: column; gap: 0.75rem; }
+    .subcard-header { display: flex; justify-content: space-between; align-items: center; }
+    .subcard-title { margin: 0; font-size: 0.9rem; font-weight: 700; }
+    .link-btn { border: 0; background: transparent; color: var(--accent-text); font-size: 0.75rem; font-weight: 600; cursor: pointer; }
+
+    .dryrun-grid { display: grid; grid-template-columns: 1fr; gap: 1.25rem; }
+    @media (min-width: 1024px) { .dryrun-grid { grid-template-columns: repeat(2, 1fr); } }
+    .dryrun-list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.65rem; font-size: 0.85rem; }
+    .dryrun-item { display: flex; align-items: flex-start; gap: 0.6rem; }
+    .dryrun-num { width: 1.25rem; height: 1.25rem; border-radius: 9999px; background: var(--accent-soft); color: var(--accent-text); font-size: 0.75rem; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+    .env-pre { margin: 0; padding: 0.85rem; border-radius: 0.65rem; background: var(--surface); border: 1px solid var(--border); font-family: ui-monospace, monospace; font-size: 0.75rem; overflow-x: auto; line-height: 1.6; }
+
+    .stack-gap { display: flex; flex-direction: column; gap: 1.5rem; }
+    .progress-wrap { display: flex; flex-direction: column; gap: 0.45rem; margin-bottom: 1rem; }
+    .progress-meta { display: flex; justify-content: space-between; font-size: 0.75rem; color: var(--text-muted); }
+    .progress-track { width: 100%; height: 0.6rem; border-radius: 9999px; background: var(--surface-alt); overflow: hidden; }
+    .progress-fill { height: 100%; width: 0%; background: linear-gradient(to left, #10b981, #6366f1); transition: width 0.3s ease; }
+
+    .provision-grid { display: grid; grid-template-columns: 1fr; gap: 0.75rem; }
+    @media (min-width: 640px) { .provision-grid { grid-template-columns: repeat(2, 1fr); } }
+    @media (min-width: 1024px) { .provision-grid { grid-template-columns: repeat(4, 1fr); } }
+
+    .filter-select { padding: 0.35rem 0.65rem; border-radius: 0.5rem; border: 1px solid var(--border); background: var(--bg); color: var(--text); font-size: 0.75rem; }
+    .table-wrap { overflow-x: auto; }
+    .audit-table { width: 100%; border-collapse: collapse; text-align: right; font-size: 0.78rem; }
+    .audit-table th, .audit-table td { padding: 0.65rem 0.75rem; border-bottom: 1px solid var(--border); }
+    .audit-table th { color: var(--text-muted); font-weight: 600; }
+  </style>
 </head>
 <body>
   <div class="app-shell">
@@ -33,7 +280,6 @@
     <div id="toastContainer" class="toast-container"></div>
 
     {% if not session.get('developer') %}
-    <!-- LOGIN VIEW -->
     <main class="login-main">
       <div class="login-card">
         <div class="card-accent"></div>
@@ -96,7 +342,6 @@
     </main>
 
     {% else %}
-    <!-- WIZARD VIEW -->
     <main class="wizard-main">
       <section class="wizard-banner">
         <div>
@@ -120,7 +365,6 @@
         </div>
       </section>
 
-      <!-- Stepper Navigation -->
       <nav aria-label="שלבי האשף" class="stepper-grid">
         <button type="button" data-step="1" class="step-tab"></button>
         <button type="button" data-step="2" class="step-tab"></button>
@@ -128,7 +372,6 @@
         <button type="button" data-step="4" class="step-tab"></button>
       </nav>
 
-      <!-- STEP 1: PROJECT SETUP -->
       <section id="stepPanel1" class="step-panel step1-layout">
         <div class="card panel-main">
           <div class="panel-header">
@@ -214,7 +457,6 @@
         </aside>
       </section>
 
-      <!-- STEP 2: PREFLIGHT -->
       <section id="stepPanel2" class="step-panel card hidden">
         <div class="panel-header-wrap">
           <div>
@@ -232,7 +474,6 @@
         </div>
       </section>
 
-      <!-- STEP 3: DRY RUN -->
       <section id="stepPanel3" class="step-panel card hidden">
         <div class="panel-header-wrap">
           <div>
@@ -262,7 +503,6 @@
         </div>
       </section>
 
-      <!-- STEP 4: PROVISIONING & AUDIT -->
       <section id="stepPanel4" class="step-panel hidden stack-gap">
         <div class="card">
           <div class="panel-header-wrap">
@@ -318,5 +558,297 @@
     </main>
     {% endif %}
   </div>
+
+  <script>
+    (function () {
+      let currentTheme = 'system';
+      try {
+        const saved = localStorage.getItem('dev_studio_theme');
+        if (saved === 'light' || saved === 'dark' || saved === 'system') {
+          currentTheme = saved;
+        }
+      } catch (_) {}
+
+      const mq = window.matchMedia ? window.matchMedia('(prefers-color-scheme: dark)') : null;
+
+      function applyTheme() {
+        const systemDark = mq ? mq.matches : true;
+        const useDark = currentTheme === 'dark' || (currentTheme === 'system' && systemDark);
+        document.documentElement.classList.toggle('dark', useDark);
+
+        document.querySelectorAll('.theme-btn').forEach(function (btn) {
+          btn.classList.toggle('active', btn.dataset.theme === currentTheme);
+        });
+      }
+
+      document.querySelectorAll('.theme-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+          currentTheme = btn.dataset.theme;
+          try {
+            localStorage.setItem('dev_studio_theme', currentTheme);
+          } catch (_) {}
+          applyTheme();
+        });
+      });
+
+      if (mq) {
+        const onChange = function () {
+          if (currentTheme === 'system') applyTheme();
+        };
+        if (mq.addEventListener) mq.addEventListener('change', onChange);
+        else if (mq.addListener) mq.addListener(onChange);
+      }
+
+      const togglePwdBtn = document.getElementById('togglePwdBtn');
+      if (togglePwdBtn) {
+        togglePwdBtn.addEventListener('click', function () {
+          const input = document.getElementById('loginPassword');
+          if (input) input.type = input.type === 'password' ? 'text' : 'password';
+        });
+      }
+
+      applyTheme();
+
+      const stepTabs = document.querySelectorAll('.step-tab');
+      if (!stepTabs.length) return;
+
+      const state = {
+        step: 1,
+        sessionSeconds: 1200,
+        preflightAdapters: [
+          { id: 'github', name: 'GitHub API', detail: 'בדיקת PAT והרשאות יצירת מאגר', status: 'ממתין' },
+          { id: 'neon', name: 'Neon Postgres API', detail: 'בדיקת מפתח וזמינות פרויקט', status: 'ממתין' },
+          { id: 'render', name: 'Render API', detail: 'בדיקת Blueprint והרשאות שירות', status: 'ממתין' },
+        ],
+        provisionProgress: 0,
+        provisionRunning: false,
+        provisionStages: [
+          { id: 'repo', title: 'יצירת מאגר GitHub', done: false },
+          { id: 'db', title: 'הקמת מסד Neon', done: false },
+          { id: 'service', title: 'פריסת שירות Render', done: false },
+          { id: 'verify', title: 'אימות Healthz ו־CSRF', done: false },
+        ],
+        auditLogs: [
+          { time: new Date().toTimeString().slice(0, 8), category: 'auth', event: 'login_success', detail: 'התחברות מפתח אומתה', ok: true },
+        ],
+      };
+
+      let provisionInterval = null;
+
+      function showToast(msg) {
+        const container = document.getElementById('toastContainer');
+        if (!container) return;
+        const el = document.createElement('div');
+        el.className = 'toast-item';
+        el.textContent = msg;
+        container.appendChild(el);
+        setTimeout(function () {
+          el.style.opacity = '0';
+          setTimeout(function () { el.remove(); }, 300);
+        }, 3000);
+      }
+
+      function addAudit(category, event, detail, ok) {
+        state.auditLogs.unshift({ time: new Date().toTimeString().slice(0, 8), category, event, detail, ok });
+        renderAudit();
+      }
+
+      function renderStepper() {
+        const steps = [
+          { num: 1, title: 'הגדרת פרויקט', sub: 'שם, מאגר ואינטגרציות' },
+          { num: 2, title: 'בדיקות Preflight', sub: 'GitHub, Neon, Render' },
+          { num: 3, title: 'תוכנית Dry Run', sub: 'תצוגה מקדימה ו-ENV' },
+          { num: 4, title: 'הקמה ויומן Audit', sub: 'ביצוע מבוקר ומעקב' },
+        ];
+        stepTabs.forEach(function (btn, idx) {
+          const s = steps[idx];
+          btn.classList.toggle('active', state.step === s.num);
+          btn.innerHTML =
+            '<div class="step-tab-top"><span>0' + s.num + '</span><span class="step-dot"></span></div>' +
+            '<div class="step-tab-title">' + s.title + '</div>' +
+            '<div class="step-tab-sub">' + s.sub + '</div>';
+        });
+        document.querySelectorAll('.step-panel').forEach(function (panel, idx) {
+          panel.classList.toggle('hidden', state.step !== idx + 1);
+        });
+      }
+
+      function setStep(num) {
+        state.step = num;
+        renderStepper();
+        if (num === 3) renderDryRun();
+      }
+
+      function updateProjectPreview() {
+        const slug = (document.getElementById('projectSlug').value || 'client-app').trim();
+        const org = (document.getElementById('githubOrg').value || 'mv89-heb').trim();
+        document.getElementById('previewRepo').textContent = org + '/' + slug;
+        document.getElementById('previewNeon').textContent = 'neon-db-' + slug;
+        document.getElementById('previewRender').textContent = 'https://' + slug + '.onrender.com';
+
+        const mods = [];
+        if (document.getElementById('modWhatsapp').checked) mods.push('WhatsApp Cloud API');
+        if (document.getElementById('modGemini').checked) mods.push('Gemini AI');
+        if (document.getElementById('modAutomation').checked) mods.push('Make / n8n');
+        document.getElementById('previewModules').textContent = mods.length ? mods.join(', ') : 'אתר + טופס לידים בסיסי';
+      }
+
+      function renderPreflight() {
+        const grid = document.getElementById('preflightGrid');
+        grid.innerHTML = state.preflightAdapters.map(function (a) {
+          const cls = a.status === 'תקין' ? 'badge-ok' : 'badge-warn';
+          return (
+            '<div class="subcard">' +
+              '<div class="subcard-header">' +
+                '<span class="subcard-title ltr-input">' + a.name + '</span>' +
+                '<span class="' + cls + '">' + a.status + '</span>' +
+              '</div>' +
+              '<div class="muted-note">' + a.detail + '</div>' +
+            '</div>'
+          );
+        }).join('');
+      }
+
+      function renderDryRun() {
+        const slug = (document.getElementById('projectSlug').value || 'client-app').trim();
+        const org = (document.getElementById('githubOrg').value || 'mv89-heb').trim();
+        const region = document.getElementById('renderRegion').value;
+        const actions = [
+          'יצירת מאגר פרטי חדש בשם ' + org + '/' + slug + ' מתוך תבנית Starter',
+          'הקמת פרויקט ומסד נתונים מבודד ב־Neon (' + slug + ')',
+          'הגדרת שירות Web ב־Render באזור ' + region + ' עם gunicorn --workers 1',
+          'יצירת קובץ הגדרות .env מבודד ללקוח ללא שיתוף סודות בין פרויקטים',
+        ];
+        document.getElementById('dryRunActions').innerHTML = actions.map(function (item, i) {
+          return '<li class="dryrun-item"><span class="dryrun-num">' + (i + 1) + '</span><span>' + item + '</span></li>';
+        }).join('');
+
+        document.getElementById('dryRunEnvBlock').textContent =
+          'FLASK_ENV=production\n' +
+          'SECRET_KEY=<generated-64-char-secret>\n' +
+          'DATABASE_URL=postgresql://...@ep-...neon.tech/neondb\n' +
+          'ADMIN_PASSWORD_HASH=scrypt:32768:8:1$...\n' +
+          'WTF_CSRF_SSL_STRICT=False';
+      }
+
+      function renderProvision() {
+        document.getElementById('provisionBar').style.width = state.provisionProgress + '%';
+        document.getElementById('provisionPercent').textContent = state.provisionProgress + '%';
+        document.getElementById('provisionStatusText').textContent =
+          state.provisionProgress === 100 ? 'ההקמה הושלמה בהצלחה' : state.provisionRunning ? 'מריץ שלבי הקמה...' : 'ממתין להפעלה';
+
+        document.getElementById('provisionStepsList').innerHTML = state.provisionStages.map(function (st) {
+          return (
+            '<div class="subcard">' +
+              '<div class="subcard-header">' +
+                '<span class="' + (st.done ? 'badge-ok' : 'badge-warn') + '">' + (st.done ? 'הושלם' : 'ממתין') + '</span>' +
+              '</div>' +
+              '<div class="module-title">' + st.title + '</div>' +
+            '</div>'
+          );
+        }).join('');
+      }
+
+      function renderAudit() {
+        const filter = document.getElementById('auditFilter').value;
+        const rows = state.auditLogs.filter(function (l) { return filter === 'all' || l.category === filter; });
+        document.getElementById('auditTableBody').innerHTML = rows.map(function (r) {
+          return (
+            '<tr>' +
+              '<td class="mono-text">' + r.time + '</td>' +
+              '<td class="mono-accent">' + r.event + '</td>' +
+              '<td>' + r.detail + '</td>' +
+              '<td><span class="' + (r.ok ? 'badge-ok' : 'badge-warn') + '">' + (r.ok ? 'תקין' : 'שגיאה') + '</span></td>' +
+            '</tr>'
+          );
+        }).join('');
+      }
+
+      stepTabs.forEach(function (btn) {
+        btn.addEventListener('click', function () { setStep(Number(btn.dataset.step)); });
+      });
+      document.querySelectorAll('.nav-back').forEach(function (btn) {
+        btn.addEventListener('click', function () { setStep(Number(btn.dataset.goto)); });
+      });
+      document.getElementById('btnToStep2').addEventListener('click', function () { setStep(2); });
+      document.getElementById('btnToStep3').addEventListener('click', function () { setStep(3); });
+      document.getElementById('btnToStep4').addEventListener('click', function () { setStep(4); });
+
+      ['clientName', 'projectSlug', 'githubOrg', 'modWhatsapp', 'modGemini', 'modAutomation'].forEach(function (id) {
+        const el = document.getElementById(id);
+        if (el) {
+          el.addEventListener('input', updateProjectPreview);
+          el.addEventListener('change', updateProjectPreview);
+        }
+      });
+
+      document.getElementById('btnRunPreflight').addEventListener('click', function () {
+        state.preflightAdapters = state.preflightAdapters.map(function (a) { return Object.assign({}, a, { status: 'בודק...' }); });
+        renderPreflight();
+        setTimeout(function () {
+          state.preflightAdapters = state.preflightAdapters.map(function (a) { return Object.assign({}, a, { status: 'תקין' }); });
+          renderPreflight();
+          addAudit('preflight', 'preflight_ok', 'כל המתאמים תקינים', true);
+          showToast('בדיקות Preflight עברו בהצלחה');
+        }, 600);
+      });
+
+      document.getElementById('btnGenerateDryRun').addEventListener('click', function () {
+        renderDryRun();
+        addAudit('provision', 'dry_run_generated', 'תוכנית Dry Run עודכנה', true);
+        showToast('תוכנית Dry Run עודכנה');
+      });
+
+      document.getElementById('btnCopyEnv').addEventListener('click', function () {
+        const txt = document.getElementById('dryRunEnvBlock').textContent;
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(txt).catch(function () {});
+        }
+        showToast('תבנית ENV הועתקה ללוח');
+      });
+
+      document.getElementById('btnRunProvision').addEventListener('click', function () {
+        if (state.provisionRunning) return;
+        if (provisionInterval) clearInterval(provisionInterval);
+        state.provisionRunning = true;
+        state.provisionProgress = 0;
+        state.provisionStages.forEach(function (s) { s.done = false; });
+        renderProvision();
+
+        let idx = 0;
+        provisionInterval = setInterval(function () {
+          if (idx < state.provisionStages.length) {
+            state.provisionStages[idx].done = true;
+            state.provisionProgress = (idx + 1) * 25;
+            idx += 1;
+            renderProvision();
+          } else {
+            clearInterval(provisionInterval);
+            state.provisionRunning = false;
+            renderProvision();
+            addAudit('provision', 'provision_completed', 'הקמת הפרויקט הסתיימה', true);
+            showToast('ההקמה הושלמה בהצלחה');
+          }
+        }, 550);
+      });
+
+      document.getElementById('auditFilter').addEventListener('change', renderAudit);
+
+      setInterval(function () {
+        if (state.sessionSeconds > 0) state.sessionSeconds -= 1;
+        const m = String(Math.floor(state.sessionSeconds / 60)).padStart(2, '0');
+        const s = String(state.sessionSeconds % 60).padStart(2, '0');
+        const timerEl = document.getElementById('sessionTimer');
+        if (timerEl) timerEl.textContent = m + ':' + s;
+      }, 1000);
+
+      renderStepper();
+      updateProjectPreview();
+      renderPreflight();
+      renderDryRun();
+      renderProvision();
+      renderAudit();
+    })();
+  </script>
 </body>
 </html>
