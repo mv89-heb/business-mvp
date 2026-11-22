@@ -12,6 +12,8 @@ A reusable, single-customer Flask application foundation. Every customer gets an
 6. Configure a new database and hosting service. Review `render.yaml` before creating a service.
 7. Keep integrations disabled until the business owner authorizes and configures them.
 
+**Full deployment guide:** [Create a new independent business installation](docs/NEW_CUSTOMER_INSTALLATION_HE.md) — includes GitHub, Neon and Render setup with separate services and credentials.
+
 ## Windows PowerShell
 
 ```powershell
@@ -35,6 +37,7 @@ For production, use a new managed PostgreSQL database and hosting secrets. Never
 - `integrations/`: optional external integration setup material.
 - `docs/ARCHITECTURE.md`: architecture boundaries.
 - `docs/CLONING.md`: repeatable new-customer process.
+- `docs/NEW_CUSTOMER_INSTALLATION_HE.md`: complete Hebrew GitHub + Neon + Render deployment guide.
 - `docs/HANDOVER.md`: ownership and operations handover.
 
 ## Security boundaries
