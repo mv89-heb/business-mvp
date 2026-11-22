@@ -60,8 +60,15 @@ class RenderProvider:
             service = matches[0]
             if service.get("repo") != repository_url or service.get("type") != "web_service":
                 raise ProviderError("A Render service with this name exists but has a different source or type")
-            if service.get("serviceDetails", {}).get("plan") != "free":
+            if service.get("branch") not in (None, branch):
+                raise ProviderError("Existing Render service is connected to a different Git branch")
+            details = service.get("serviceDetails", {})
+            if details.get("plan") != "free":
                 raise ProviderError("Existing Render service is not on the Free plan; no changes were made")
+            if details.get("region") not in (None, "frankfurt"):
+                raise ProviderError("Existing Render service is in a different region; no changes were made")
+            if service.get("autoDeployTrigger") not in (None, "checksPass"):
+                raise ProviderError("Existing Render service does not use CI-gated auto-deploy")
             return {"created": False, "service": service}
 
         safe_env = []
