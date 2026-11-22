@@ -38,3 +38,26 @@ jobs:
               owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number,
               body: 'Business Studio: הפקודה עובדה ב-Render. התוצאה מוצפנת ומיועדת רק ליוזם הפקודה.\n\n```json\n' + JSON.stringify(data.encryptedResult) + '\n```'
             });
+
+  key-discovery:
+    if: github.event.issue.user.login == 'mv89-heb' && github.event.sender.login == 'mv89-heb' && startsWith(github.event.issue.title, '[Business Studio Key]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Read Render's current public command key
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        with:
+          script: |
+            const response = await fetch('https://business-developer-studio.onrender.com/internal/github/command-public-key', {
+              headers: { 'Accept': 'application/json' }
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.publicKey || !data.keyId) {
+              core.setFailed('Render public key discovery failed');
+              return;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.payload.issue.number,
+              body: 'Business Studio Render public key (public material):\n\n```json\n' + JSON.stringify(data) + '\n```'
+            });
