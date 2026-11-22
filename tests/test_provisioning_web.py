@@ -642,3 +642,39 @@ def test_provider_cards_reflect_connection_check_results(monkeypatch):
     assert "הבדיקה הושלמה" in page
     assert page.count("מחובר") == 3
     assert "לא נבדק" not in page
+
+
+
+
+def test_healthz_reports_unavailable_when_configured_database_is_down(monkeypatch):
+    import business_app.provisioning.workflow as workflow_module
+
+    def unavailable(self):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test-user:test-password@localhost/testdb")
+    monkeypatch.setattr(workflow_module.WorkflowStateStore, "check_connection", unavailable)
+
+    response = make_client().get("/healthz")
+    assert response.status_code == 503
+    assert response.get_json() == {"status": "unavailable"}
+
+
+def test_audit_events_use_postgres_when_database_is_configured(tmp_path, monkeypatch):
+    import business_app.provisioning.workflow as workflow_module
+
+    captured = []
+
+    def capture(self, event, actor, details):
+        captured.append((event, actor, details))
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test-user:test-password@localhost/testdb")
+    monkeypatch.setattr(workflow_module.WorkflowStateStore, "append_audit_event", capture)
+    audit_path = tmp_path / "local-audit.jsonl"
+    client = make_client(audit_path)
+    client.post("/login", data={"password": "wrong-secret-value"})
+
+    assert captured[0][0] == "login_failure"
+    assert captured[0][1] == "developer"
+    assert captured[0][2]["reason"] == "invalid_password"
+    assert not audit_path.exists()

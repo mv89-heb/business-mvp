@@ -79,15 +79,29 @@ def _audit_event(app, event, **details):
         key: value for key, value in details.items()
         if key in allowed and isinstance(value, (str, int, float, bool, type(None)))
     }
-    path = Path(app.config.get("PROVISIONING_AUDIT_PATH") or (
-        Path.home() / ".business-app-provisioner" / "audit.jsonl"
-    )).expanduser()
     record = {
         "at": datetime.now(timezone.utc).isoformat(),
         "event": str(event)[:64],
         "actor": "developer",
         "details": safe_details,
     }
+    database_url = (
+        app.config.get("PROVISIONING_DATABASE_URL")
+        or os.getenv("DATABASE_URL", "")
+    ).strip()
+    if database_url:
+        try:
+            from business_app.provisioning.workflow import WorkflowStateStore
+            WorkflowStateStore(database_url=database_url).append_audit_event(
+                record["event"], record["actor"], safe_details
+            )
+        except Exception:
+            app.logger.warning("Persistent provisioning audit record could not be written")
+        return
+
+    path = Path(app.config.get("PROVISIONING_AUDIT_PATH") or (
+        Path.home() / ".business-app-provisioner" / "audit.jsonl"
+    )).expanduser()
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
         try:
@@ -192,6 +206,17 @@ def create_provisioning_app(test_config=None):
 
     @app.get("/healthz")
     def healthz():
+        # A configured durable database is part of the service's health contract.
+        database_url = (
+            app.config.get("PROVISIONING_DATABASE_URL")
+            or os.getenv("DATABASE_URL", "")
+        ).strip()
+        if database_url:
+            try:
+                from business_app.provisioning.workflow import WorkflowStateStore
+                WorkflowStateStore(database_url=database_url).check_connection()
+            except Exception:
+                return {"status": "unavailable"}, 503
         # Deliberately disclose no configuration, provider state, or secrets.
         return {"status": "ok"}, 200
 
