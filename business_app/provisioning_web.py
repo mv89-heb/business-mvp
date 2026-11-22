@@ -149,7 +149,7 @@ def create_provisioning_app(test_config=None):
         SESSION_COOKIE_SAMESITE="Strict",
         SESSION_COOKIE_SECURE=remote_access,
         PERMANENT_SESSION_LIFETIME=timedelta(minutes=20),
-        WTF_CSRF_TIME_LIMIT=timedelta(hours=2),
+        WTF_CSRF_TIME_LIMIT=7200,
     )
     if test_config:
         app.config.update(test_config)
