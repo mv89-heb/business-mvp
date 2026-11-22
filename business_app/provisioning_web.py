@@ -31,6 +31,46 @@ from business_app.provisioning import (
 csrf = CSRFProtect()
 
 
+def _empty_form_values():
+    return {
+        "business_name": "",
+        "slug": "",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "tagline": "",
+        "phone": "",
+        "whatsapp_number": "",
+        "address": "",
+        "service_area": "",
+        "primary_color": "#172b25",
+        "accent_color": "#b88a54",
+        "font_family": "Heebo",
+        "services": [],
+    }
+
+
+def _read_form_values(form):
+    values = _empty_form_values()
+    values.update({
+        "business_name": form.get("business_name", ""),
+        "slug": form.get("slug", ""),
+        "category": form.get("category", "services"),
+        "modules": form.getlist("modules"),
+        "tagline": form.get("tagline", ""),
+        "phone": form.get("phone", ""),
+        "whatsapp_number": form.get("whatsapp_number", ""),
+        "address": form.get("address", ""),
+        "service_area": form.get("service_area", ""),
+        "primary_color": form.get("primary_color", "#172b25"),
+        "accent_color": form.get("accent_color", "#b88a54"),
+        "font_family": form.get("font_family", "Heebo"),
+        "services": [
+            item.strip() for item in form.get("services", "").split(",") if item.strip()
+        ],
+    })
+    return values
+
+
 def _audit_event(app, event, **details):
     """Append a minimal, secret-free local audit record; never block provisioning on log I/O."""
     allowed = {"provider", "connected", "plan_id", "business_slug", "status", "step", "reason"}
@@ -195,12 +235,7 @@ def create_provisioning_app(test_config=None):
             login_required=False,
             categories=BUSINESS_CATEGORIES,
             modules=SUPPORTED_MODULES,
-            form_values={
-                "business_name": "",
-                "slug": "",
-                "category": "services",
-                "modules": ["lead_capture", "lead_management"],
-            },
+            form_values=_empty_form_values(),
             connection_results=results,
         )
 
@@ -208,12 +243,7 @@ def create_provisioning_app(test_config=None):
     @app.post("/preflight")
     @developer_required
     def preflight_provisioning():
-        form_values = {
-            "business_name": request.form.get("business_name", ""),
-            "slug": request.form.get("slug", ""),
-            "category": request.form.get("category", "services"),
-            "modules": request.form.getlist("modules"),
-        }
+        form_values = _read_form_values(request.form)
         plan = None
         report = None
         error = None
@@ -296,20 +326,10 @@ def create_provisioning_app(test_config=None):
     def wizard():
         plan = None
         error = None
-        form_values = {
-            "business_name": "",
-            "slug": "",
-            "category": "services",
-            "modules": ["lead_capture", "lead_management"],
-        }
+        form_values = _empty_form_values()
         if request.method == "POST":
             session.pop("preflight_fingerprint", None)
-            form_values = {
-                "business_name": request.form.get("business_name", ""),
-                "slug": request.form.get("slug", ""),
-                "category": request.form.get("category", "services"),
-                "modules": request.form.getlist("modules"),
-            }
+            form_values = _read_form_values(request.form)
             try:
                 plan = build_provisioning_plan(**form_values)
             except ProvisioningInputError as exc:
