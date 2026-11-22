@@ -5,11 +5,13 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="{{ business.branding.theme_color }}">
   <title>{% block title %}{{ business.name }} | {{ business.tagline }}{% endblock %}</title>
+  {% if business.branding.font_family != "Arial" %}
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family={{ business.branding.font_family|urlencode }}:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  {% endif %}
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
-  <style>:root{--brand-primary:{{ business.branding.primary_color }};--brand-accent:{{ business.branding.accent_color }}}</style>
+  <style>:root{--brand-primary:{{ business.branding.primary_color }};--brand-accent:{{ business.branding.accent_color }};--brand-font:'{{ business.branding.font_family }}'}</style>
   <script defer src="{{ url_for('static', filename='js/app.js') }}"></script>
 </head>
 <body>
