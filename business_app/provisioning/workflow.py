@@ -125,7 +125,6 @@ class WorkflowStateStore:
             if not workflow_id or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in workflow_id):
                 raise ValueError("Invalid workflow identifier")
             with self._connect() as connection:
-                self._ensure_schema(connection)
                 row = connection.execute(
                     "SELECT state::text FROM provisioning_workflow_state WHERE workflow_id = %s",
                     (workflow_id,),
