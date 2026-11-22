@@ -60,7 +60,7 @@ class GitHubProvider:
 
     @staticmethod
     def _git_blob_sha(data):
-        header = f"blob {len(data)}\\0".encode("ascii")
+        header = f"blob {len(data)}\0".encode("ascii")
         return hashlib.sha1(header + data).hexdigest()
 
     def publish_directory(self, owner, name, directory, *, branch="main",
