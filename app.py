@@ -218,6 +218,8 @@ def create_app(test_config=None):
     @app.get("/admin")
     @admin_required
     def admin_dashboard():
+        if not app.config['BUSINESS_CONFIG'].get('modules', {}).get('lead_management', True):
+            abort(404)
         status = request.args.get("status", "").strip()
         search = request.args.get("q", "").strip()[:120]
         leads = db.session.execute(_filtered_leads_query().limit(300)).scalars().all()
