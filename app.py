@@ -12,12 +12,12 @@ from sqlalchemy import desc, func
 from werkzeug.security import check_password_hash
 
 db = SQLAlchemy()
-limiter = Limiter(key_func=get_remote_address, default_limits=["200 per day", "50 per hour"])
+limiter = Limiter(key_func=get_remote_address, storage_uri=os.getenv("RATELIMIT_STORAGE_URI", "memory://"), default_limits=["200 per day", "50 per hour"])
 csrf = CSRFProtect()
 
 
 class Lead(db.Model):
-    id = db.Column(db.BigInteger, primary_key=True)
+    id = db.Column(db.BigInteger().with_variant(db.Integer, "sqlite"), primary_key=True)
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     name = db.Column(db.String(120), nullable=False)
     phone = db.Column(db.String(30), nullable=False)
