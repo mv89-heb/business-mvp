@@ -1,1 +1,32 @@
-{% extends "base.html" %}{% block title %}ניהול פניות{% endblock %}{% block content %}<section class="admin-page"><div class="admin-top"><div><span class="eyebrow">לוח בקרה</span><h1>פניות לקוחות</h1><p>כל הפניות נשמרות במסד הנתונים.</p></div><form method="post" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button outline">יציאה</button></form></div><div class="stats"><article><span>סה״כ פניות</span><strong>{{ total }}</strong></article><article><span>פניות חדשות</span><strong>{{ new_count }}</strong></article></div><div class="filter-row"><a href="/admin">הכל</a>{% for s in ['חדש','בטיפול','נשלחה הצעה','נסגר','לא רלוונטי'] %}<a href="/admin?status={{ s }}">{{ s }}</a>{% endfor %}</div><div class="table-wrap"><table><thead><tr><th>תאריך</th><th>שם וטלפון</th><th>סוג עבודה</th><th>פרטים</th><th>סטטוס</th></tr></thead><tbody>{% for lead in leads %}<tr><td>{{ lead.created_at.strftime('%d/%m/%Y %H:%M') if lead.created_at else '—' }}</td><td><strong>{{ lead.name }}</strong><br><a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>{% if lead.email %}<br>{{ lead.email }}{% endif %}</td><td>{{ lead.service }}<br><small>{{ lead.city or '' }}{% if lead.area %} · {{ lead.area }} מ״ר{% endif %}</small></td><td>{{ lead.details or '—' }}</td><td><form method="post" action="/admin/leads/{{ lead.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><select name="status" onchange="this.form.submit()">{% for s in ['חדש','בטיפול','נשלחה הצעה','נסגר','לא רלוונטי'] %}<option {% if lead.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></form></td></tr>{% else %}<tr><td colspan="5">אין פניות להצגה.</td></tr>{% endfor %}</tbody></table></div></section>{% endblock %}
+{% extends "base.html" %}
+{% block title %}ניהול פניות | אלי כהן בניה ועץ{% endblock %}
+{% block content %}
+<section class="admin-page">
+  <div class="admin-top">
+    <div><span class="eyebrow">ניהול העסק</span><h1>פניות לקוחות</h1><p>מעקב אחר פרויקטים, שיחות והצעות מחיר במקום אחד.</p></div>
+    <div class="admin-actions"><a class="button dark" href="{{ url_for('export_leads', status=selected, q=search) }}">ייצוא תוצאות ל־CSV</a><form method="post" action="/admin/logout"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button outline">יציאה</button></form></div>
+  </div>
+  <div class="stats"><article><span>סה״כ פניות</span><strong>{{ total }}</strong></article><article><span>פניות חדשות</span><strong>{{ new_count }}</strong></article><article><span>מוצגות כעת</span><strong>{{ leads|length }}</strong></article></div>
+  <form class="admin-search" method="get" action="/admin">
+    <label for="lead-search">חיפוש לפי שם, טלפון, יישוב, שירות או תיאור</label>
+    <div><input id="lead-search" name="q" value="{{ search }}" placeholder="לדוגמה: ישראל, 050..., פרגולה"><input type="hidden" name="status" value="{{ selected }}"><button class="button primary">חיפוש</button>{% if search or selected %}<a class="text-link" href="/admin">ניקוי סינון</a>{% endif %}</div>
+  </form>
+  <div class="filter-row">
+    <a class="{% if not selected %}active{% endif %}" href="{{ url_for('admin_dashboard', q=search) }}">הכל</a>
+    {% for s in ['חדש','בטיפול','נשלחה הצעה','נסגר','לא רלוונטי'] %}<a class="{% if selected == s %}active{% endif %}" href="{{ url_for('admin_dashboard', status=s, q=search) }}">{{ s }}</a>{% endfor %}
+  </div>
+  <div class="table-wrap"><table><thead><tr><th>תאריך</th><th>לקוח ויצירת קשר</th><th>סוג עבודה ושטח</th><th>פרטי הפרויקט</th><th>תקציב</th><th>סטטוס טיפול</th></tr></thead><tbody>
+  {% for lead in leads %}
+  <tr>
+    <td class="date-cell">{{ lead.created_at.strftime('%d/%m/%Y<br>%H:%M')|safe if lead.created_at else '—' }}</td>
+    <td><strong>{{ lead.name }}</strong><br><a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>{% if lead.email %}<br><a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% endif %}<br><small>{{ lead.city or 'יישוב לא צוין' }}</small><div class="lead-actions"><a href="tel:{{ lead.phone }}">חיוג</a>{% set wa_phone = lead.phone|replace(' ','')|replace('-','')|replace('+','')|replace('(','')|replace(')','') %}{% if wa_phone.startswith('0') %}{% set wa_phone = '972' ~ wa_phone[1:] %}{% endif %}<a href="https://wa.me/{{ wa_phone }}" target="_blank" rel="noopener">WhatsApp</a></div></td>
+    <td><strong>{{ lead.service }}</strong>{% if lead.area %}<br><small>{{ lead.area|int }} מ״ר</small>{% endif %}</td>
+    <td class="details-cell">{{ lead.details or 'לא נמסרו פרטים נוספים' }}</td>
+    <td>{{ lead.budget or 'לא צוין' }}</td>
+    <td><form method="post" action="/admin/leads/{{ lead.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="q" value="{{ search }}"><input type="hidden" name="return_status" value="{{ selected }}"><select name="status" aria-label="עדכון סטטוס עבור {{ lead.name }}" onchange="this.form.submit()">{% for s in ['חדש','בטיפול','נשלחה הצעה','נסגר','לא רלוונטי'] %}<option value="{{ s }}" {% if lead.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></form></td>
+  </tr>
+  {% else %}<tr><td colspan="6" class="empty-state">אין פניות התואמות לסינון. אפשר לשנות את החיפוש או לנקות אותו.</td></tr>{% endfor %}
+  </tbody></table></div>
+  <p class="admin-footnote">מוצגות עד 300 פניות אחרונות. ייצוא CSV כולל עד 5,000 פניות התואמות לסינון.</p>
+</section>
+{% endblock %}
