@@ -32,7 +32,7 @@
 ## מצב המימוש הנוכחי
 
 המאגר מכיל כיום:
-- אשף Web מקומי מוגן בסיסמה, המוגבל ל־loopback (127.0.0.1).
+- אשף Web נפרד עם מצב מקומי מוגבל ל־loopback ומצב Render מרוחק מוגן בסיסמה חזקה, HTTPS, Host allowlist, cookies מאובטחים, CSRF, rate limit ו־security headers.
 - מנגנון תכנון הקמה ו־Dry Run.
 - בדיקות Preflight מול מתאמי GitHub, Neon ו־Render.
 - מנגנון ביצוע נפרד שמחייב אישור מפורש ובדיקת עלות.
@@ -40,7 +40,7 @@
 - בדיקות אוטומטיות ב־pytest וב־GitHub Actions.
 - רישום Audit מקומי מצומצם לאירועי גישה, Preflight והקמה, ללא ערכי סודות.
 
-**חשוב:** האשף הקיים מוגבל במכוון למחשב המקומי. אין לפרסם אותו ישירות לאינטרנט או לפרוס אותו כשירות ציבורי לפני השלמת שכבת אבטחה ייעודית לגישה מרחוק, אימות משתמש, ניהול סודות, הגנת CSRF, הרשאות, Audit Log ובדיקות אבטחה.
+**גישה מרחוק:** לפריסת האשף בלבד יש להשתמש ב־`provisioning_wsgi:app` ולא ב־`wsgi:app`. מצב Render דורש `PROVISIONING_PUBLIC_ACCESS=true`, סיסמה אקראית באורך 32 תווים לפחות, `PROVISIONING_SESSION_SECRET` באורך 32 תווים לפחות ו־`PROVISIONING_ALLOWED_HOSTS` עם hostname מדויק. מצב זה אוכף HTTPS, Secure/HttpOnly/SameSite cookies, CSRF, Host allowlist, rate limit של 5 לדקה ו־20 לשעה, HSTS ו־security headers. יש להפעיל worker יחיד כדי לשמור על עקביות מגבלת הניסיונות בזיכרון. אין להגדיר מפתחות ספקים עד שמוודאים את מדיניות הסודות ואת ההרשאות בחשבונות. הגנת סיסמה אינה תחליף ל־MFA או לשכבת Zero Trust; מומלץ להוסיף Cloudflare Access או VPN לפני שימוש בפעולות ענן רגישות.
 
 ## ספקים ואינטגרציות
 
