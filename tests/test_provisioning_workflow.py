@@ -550,3 +550,67 @@ def test_workflow_refuses_saved_state_for_a_different_business_plan(tmp_path, mo
 
     assert github.ensure_calls == 0
     assert github.published is False
+
+
+
+
+def test_workflow_state_store_uses_postgres_and_round_trips_state(tmp_path, monkeypatch):
+    import psycopg
+
+    database = {}
+
+    class FakeResult:
+        def __init__(self, row=None):
+            self.row = row
+
+        def fetchone(self):
+            return self.row
+
+    class FakeConnection:
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, traceback):
+            return False
+
+        def execute(self, sql, params=None):
+            if "SELECT state::text" in sql:
+                serialized = database.get(params[0])
+                return FakeResult((serialized,) if serialized is not None else None)
+            if "INSERT INTO provisioning_workflow_state" in sql:
+                database[params[0]] = params[5]
+            return FakeResult()
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test-user:test-password@localhost/testdb")
+    monkeypatch.setattr(psycopg, "connect", lambda *args, **kwargs: FakeConnection())
+
+    store = WorkflowStateStore(root=tmp_path / "must-not-be-created")
+    state = {
+        "plan_id": "a" * 20,
+        "business_slug": "durable-business",
+        "status": "running",
+        "step": "github_repository",
+        "resources": {"github": {"repository_id": 123}},
+        "history": [{"step": "github_repository", "status": "completed"}],
+        "error": None,
+    }
+
+    store.save(state["plan_id"], state)
+    restored = store.load(state["plan_id"])
+
+    assert restored["business_slug"] == "durable-business"
+    assert restored["resources"]["github"]["repository_id"] == 123
+    assert restored["history"][0]["step"] == "github_repository"
+    assert not (tmp_path / "must-not-be-created").exists()
+
+
+def test_postgres_state_store_rejects_secret_values_before_writing(monkeypatch):
+    monkeypatch.setenv("DATABASE_URL", "postgresql://test-user:test-password@localhost/testdb")
+    store = WorkflowStateStore()
+    with pytest.raises(ValueError, match="secret marker"):
+        store.save("safe-id", {
+            "plan_id": "safe-id",
+            "business_slug": "safe-business",
+            "resources": {"connection": "postgresql://user:secret@example/db"},
+            "history": [],
+        })
