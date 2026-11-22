@@ -2,7 +2,7 @@ name: Tests
 on:
   workflow_dispatch:
   push:
-    branches: [main, "feat/**", "security/**"]
+    branches: [main, "feat/**", "feature/**", "security/**"]
   pull_request:
     branches: [main]
 permissions:
