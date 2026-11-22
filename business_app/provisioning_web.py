@@ -12,6 +12,7 @@ from flask_wtf.csrf import CSRFProtect
 
 from business_app.provisioning.providers import GitHubProvider, NeonProvider, RenderProvider
 from business_app.provisioning.providers.http import ProviderError
+from business_app.provisioning.workflow import ProvisioningWorkflow
 
 from business_app.provisioning import (
     BUSINESS_CATEGORIES,
@@ -115,6 +116,46 @@ def create_provisioning_app(test_config=None):
                 "modules": ["lead_capture", "lead_management"],
             },
             connection_results=results,
+        )
+
+
+    @app.post("/execute")
+    @developer_required
+    def execute_provisioning():
+        form_values = {
+            "business_name": request.form.get("business_name", ""),
+            "slug": request.form.get("slug", ""),
+            "category": request.form.get("category", "services"),
+            "modules": request.form.getlist("modules"),
+        }
+        plan = None
+        result = None
+        error = None
+        try:
+            plan = build_provisioning_plan(**form_values)
+            if request.form.get("confirm_zero_cost") != "yes":
+                raise ProviderError("לא התקבל אישור מפורש לכך שעלות Neon תהיה אפס.")
+            result = ProvisioningWorkflow().run(
+                plan,
+                github_owner=os.getenv("GITHUB_OWNER", "").strip(),
+                admin_password=request.form.get("admin_password", ""),
+                approval=request.form.get("approval", ""),
+                neon_free_tier_verified=True,
+            )
+        except (ProvisioningInputError, ProviderError) as exc:
+            error = str(exc)
+        except Exception:
+            error = "ההקמה נעצרה. פרטי שגיאה ונתוני אימות לא נחשפו; בדוק את מצב התהליך המקומי."
+        return render_template(
+            "provisioning_wizard.html",
+            login_required=False,
+            categories=BUSINESS_CATEGORIES,
+            modules=SUPPORTED_MODULES,
+            form_values=form_values,
+            plan=plan,
+            error=error,
+            connection_results=None,
+            execution_result=result,
         )
 
     @app.route("/wizard", methods=["GET", "POST"])
