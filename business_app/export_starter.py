@@ -10,6 +10,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 FILES = (".env.example", ".gitignore", "app.py", "wsgi.py", "requirements.txt", "pytest.ini")
 DIRECTORIES = ("business_app", "integrations", "static", "templates", "tests", ".github", "docs")
+EXTRA_SOURCE_FILES = ("config/business.template.json", "render.yaml.template", "starter/README.md")
 
 # Developer-only provisioning must never enter a customer application.
 EXCLUDED_EXPORT_PATHS = (
@@ -64,6 +65,13 @@ def _ignore_export_artifacts(directory, names):
 
 def _validate_export_tree(source_root):
     """Reject symlinks instead of following paths outside the source repository."""
+    for relative in EXTRA_SOURCE_FILES:
+        candidate = source_root / relative
+        current = source_root
+        for part in Path(relative).parts:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError(f"Starter source contains a symbolic link: {relative}")
     for directory in DIRECTORIES:
         root = source_root / directory
         if root.is_symlink():
