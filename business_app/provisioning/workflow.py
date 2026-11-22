@@ -224,7 +224,7 @@ class ProvisioningWorkflow:
             database_uri = self.neon.get_connection_uri(project_id)
             if not isinstance(database_uri, str) or not database_uri.startswith(("postgres://", "postgresql://")):
                 raise ProviderError("Neon returned an invalid PostgreSQL connection URI")
-            record("neon_connection", "completed", {"connection_uri": "received; not persisted"})
+            record("neon_connection", "completed", {"database_connection": "received; not persisted"})
 
             record("render_service", "running")
             render_env = {
