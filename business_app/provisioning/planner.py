@@ -64,12 +64,11 @@ def _idempotency_key(slug: str, provider: str, resource: str) -> str:
 
 
 def _normalize_modules(modules: Iterable[str]) -> list[str]:
-    if isinstance(modules, (str, bytes)):
+    if not isinstance(modules, (list, tuple, set)):
         raise ProvisioningInputError("modules must be a list of module identifiers")
-    normalized = sorted(set(modules))
-    invalid = [item for item in normalized if not isinstance(item, str) or not MODULE_RE.fullmatch(item)]
-    if invalid:
+    if any(not isinstance(item, str) or not MODULE_RE.fullmatch(item) for item in modules):
         raise ProvisioningInputError("Invalid module identifier")
+    normalized = sorted(set(modules))
     unsupported = [item for item in normalized if item not in SUPPORTED_MODULES]
     if unsupported:
         labels = [FUTURE_MODULES.get(item, item) for item in unsupported]
@@ -95,9 +94,9 @@ def build_provisioning_plan(
         raise ProvisioningInputError("Business name must be 120 characters or fewer")
     if not isinstance(slug, str) or not SLUG_RE.fullmatch(slug):
         raise ProvisioningInputError("Slug must use lowercase letters, numbers and single hyphens")
-    if category not in BUSINESS_CATEGORIES:
+    if not isinstance(category, str) or category not in BUSINESS_CATEGORIES:
         raise ProvisioningInputError("Unknown business category")
-    if region not in SUPPORTED_REGIONS:
+    if not isinstance(region, str) or region not in SUPPORTED_REGIONS:
         raise ProvisioningInputError("Unsupported deployment region")
 
     selected_modules = _normalize_modules(modules)
