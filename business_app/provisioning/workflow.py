@@ -77,6 +77,46 @@ class WorkflowStateStore:
             connection.execute("SELECT 1")
         return True
 
+    def check_round_trip(self):
+        """Verify durable JSONB write/read/delete using a unique temporary record."""
+        if not self.database_url:
+            raise RuntimeError("PostgreSQL is not configured for persistent workflow storage")
+        workflow_id = "storage-check-" + secrets.token_hex(12)
+        state = {
+            "plan_id": workflow_id,
+            "business_slug": "storage-check",
+            "status": "diagnostic",
+            "step": "storage_check",
+            "resources": {},
+            "history": [],
+            "error": None,
+        }
+        safe_state, serialized = self._safe_state(workflow_id, state)
+        with self._connect() as connection:
+            self._ensure_schema(connection)
+            connection.execute("""
+                INSERT INTO provisioning_workflow_state
+                    (workflow_id, plan_id, business_slug, status, step, state, updated_at, error)
+                VALUES (%s, %s, %s, %s, %s, %s::jsonb, NOW(), %s)
+            """, (
+                workflow_id, safe_state["plan_id"], safe_state["business_slug"],
+                safe_state["status"], safe_state["step"], serialized, safe_state["error"],
+            ))
+            row = connection.execute(
+                "SELECT state::text FROM provisioning_workflow_state WHERE workflow_id = %s",
+                (workflow_id,),
+            ).fetchone()
+            if not row:
+                raise RuntimeError("Persistent workflow state could not be read after writing")
+            restored = json.loads(row[0])
+            if restored.get("workflow_id") != workflow_id or restored.get("status") != "diagnostic":
+                raise RuntimeError("Persistent workflow state did not match the diagnostic record")
+            connection.execute(
+                "DELETE FROM provisioning_workflow_state WHERE workflow_id = %s",
+                (workflow_id,),
+            )
+        return True
+
     def append_audit_event(self, event, actor, details):
         if not self.database_url:
             raise RuntimeError("PostgreSQL is not configured for persistent audit storage")

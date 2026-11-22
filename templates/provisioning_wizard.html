@@ -96,6 +96,9 @@
         {% if execution_result %}
           <div class="notice success"><strong>PROVISIONING RESULT</strong><span>תוצאת תהליך ההקמה התקבלה.</span></div>
         {% endif %}
+        {% if storage_check_result %}
+          <div class="notice {{ 'success' if storage_check_result.success else 'error' }}" role="status"><strong>{{ 'אחסון Neon תקין' if storage_check_result.success else 'בדיקת אחסון נכשלה' }}</strong><span>{{ storage_check_result.message }}</span></div>
+        {% endif %}
 
         <section class="wizard-intro">
           <div>
@@ -203,6 +206,7 @@
                 <button class="button button-secondary" type="submit" formaction="{{ url_for('preflight_provisioning') }}">הרץ Preflight לקריאה בלבד</button>
                 <button class="button button-primary" type="submit" formaction="{{ url_for('execute_provisioning') }}">אשר והתחל הקמה</button>
                 <button class="button button-quiet" type="submit" formaction="{{ url_for('check_connections') }}">בדוק חיבורי ספקים</button>
+                <button class="button button-quiet" type="submit" formaction="{{ url_for('storage_check') }}">בדוק שמירה וטעינה ב־Neon</button>
               </div>
             </div>
           </section>
