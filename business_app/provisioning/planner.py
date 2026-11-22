@@ -96,6 +96,47 @@ def _normalize_modules(modules: Iterable[str]) -> list[str]:
     return normalized
 
 
+def _normalize_contact_number(value: str, label: str) -> tuple[str, str]:
+    """Return a display-safe number and a digits-only tel target."""
+    if not isinstance(value, str):
+        raise ProvisioningInputError(f"{label} must be text")
+    display = value.strip()
+    if not display:
+        return "", ""
+    if len(display) > 30 or re.search(r"[^0-9+().\\s-]", display):
+        raise ProvisioningInputError(f"{label} contains unsupported characters")
+    digits = re.sub(r"\\D", "", display)
+    if not 7 <= len(digits) <= 15:
+        raise ProvisioningInputError(f"{label} must contain 7 to 15 digits")
+    return display, digits
+
+
+def _normalize_whatsapp_number(value: str) -> tuple[str, str]:
+    display, digits = _normalize_contact_number(value, "WhatsApp number")
+    if not digits:
+        return "", ""
+    if digits.startswith("00"):
+        digits = digits[2:]
+    elif digits.startswith("0"):
+        digits = "972" + digits[1:]
+    elif len(digits) == 10 and digits.startswith("5"):
+        digits = "972" + digits
+    if not 8 <= len(digits) <= 15:
+        raise ProvisioningInputError("WhatsApp number must be a valid international number")
+    return display, f"https://wa.me/{digits}"
+
+
+def _optional_text(value, label, maximum):
+    if value is None:
+        return ""
+    if not isinstance(value, str):
+        raise ProvisioningInputError(f"{label} must be text")
+    normalized = value.strip()
+    if len(normalized) > maximum:
+        raise ProvisioningInputError(f"{label} must be {maximum} characters or fewer")
+    return normalized
+
+
 def build_provisioning_plan(
     *,
     business_name: str,
@@ -103,6 +144,15 @@ def build_provisioning_plan(
     category: str,
     modules: Iterable[str],
     region: str = "frankfurt",
+    tagline: str = "",
+    phone: str = "",
+    whatsapp_number: str = "",
+    address: str = "",
+    service_area: str = "",
+    primary_color: str = "#172b25",
+    accent_color: str = "#b88a54",
+    font_family: str = "Heebo",
+    services: Iterable[str] | None = None,
 ) -> dict:
     """Build a deterministic dry-run plan; never contacts a provider or creates resources."""
     if not isinstance(business_name, str) or not business_name.strip():
@@ -118,6 +168,56 @@ def build_provisioning_plan(
         raise ProvisioningInputError("Unsupported deployment region")
 
     selected_modules = _normalize_modules(modules)
+    tagline = _optional_text(tagline, "Tagline", 160)
+    address = _optional_text(address, "Address", 160)
+    service_area = _optional_text(service_area, "Service area", 160)
+    phone_display, phone_digits = _normalize_contact_number(phone, "Phone number")
+    whatsapp_display, whatsapp_url = _normalize_whatsapp_number(whatsapp_number)
+    if not isinstance(primary_color, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", primary_color):
+        raise ProvisioningInputError("Primary color must be a six-digit hexadecimal color")
+    if not isinstance(accent_color, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", accent_color):
+        raise ProvisioningInputError("Accent color must be a six-digit hexadecimal color")
+    allowed_fonts = {"Heebo", "Assistant", "Rubik", "Arial"}
+    if not isinstance(font_family, str) or font_family not in allowed_fonts:
+        raise ProvisioningInputError("Unsupported font family")
+    if services is None:
+        services = []
+    if not isinstance(services, (list, tuple)):
+        raise ProvisioningInputError("Services must be a list")
+    if len(services) > 6:
+        raise ProvisioningInputError("A maximum of six services can be configured")
+    normalized_services = []
+    seen_services = set()
+    for item in services:
+        service = _optional_text(item, "Service name", 80)
+        if not service:
+            continue
+        key = service.casefold()
+        if key not in seen_services:
+            normalized_services.append(service)
+            seen_services.add(key)
+
+    business_profile = {
+        "name": business_name,
+        "slug": slug,
+        "category": category,
+        "category_label": BUSINESS_CATEGORIES[category],
+        "tagline": tagline,
+        "contact": {
+            "phone_display": phone_display,
+            "phone_href": f"tel:{phone_digits}" if phone_digits else "",
+            "whatsapp_number_display": whatsapp_display,
+            "whatsapp_url": whatsapp_url,
+            "address": address,
+            "service_area": service_area,
+        },
+        "branding": {
+            "primary_color": primary_color.lower(),
+            "accent_color": accent_color.lower(),
+            "font_family": font_family,
+        },
+        "services": normalized_services,
+    }
     region_config = SUPPORTED_REGIONS[region]
     resources = [
         {
@@ -146,18 +246,21 @@ def build_provisioning_plan(
             "idempotency_key": _idempotency_key(slug, "render", "web_service"),
         },
     ]
+    identity = {
+        "business": business_profile,
+        "modules": selected_modules,
+        "region": region,
+    }
+    plan_id = hashlib.sha256(
+        json.dumps(identity, ensure_ascii=False, sort_keys=True, separators=(",", ":")).encode("utf-8")
+    ).hexdigest()[:20]
     return {
         "plan_version": PLAN_VERSION,
-        "plan_id": hashlib.sha256(f"{slug}:{PLAN_VERSION}".encode("utf-8")).hexdigest()[:20],
+        "plan_id": plan_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "mode": "dry_run",
         "execution_status": "not_started",
-        "business": {
-            "name": business_name,
-            "slug": slug,
-            "category": category,
-            "category_label": BUSINESS_CATEGORIES[category],
-        },
+        "business": business_profile,
         "application": {
             "modules": selected_modules,
             "module_details": {
