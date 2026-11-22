@@ -158,7 +158,9 @@ class ProvisioningWorkflow:
         )
 
         region = (plan.get("infrastructure") or {}).get("region", "frankfurt")
-        neon_region = "aws-eu-central-1" if region == "frankfurt" else None
+        if region != "frankfurt":
+            raise ProviderError("The requested deployment region is not supported by this provisioning workflow")
+        neon_region = "aws-eu-central-1"
         projects = [
             item for item in self.neon.list_projects()
             if (item.get("name") or "").casefold() == slug.casefold()
