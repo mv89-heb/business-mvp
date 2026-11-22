@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>אשף הקמת עסקים | כלי מפתח</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/provisioning.css') }}">
+  <script defer src="{{ url_for('static', filename='js/provisioning.js') }}"></script>
 </head>
 <body>
   <main class="shell">
@@ -73,10 +74,17 @@
         {% for category, message in messages %}<div class="notice error">{{ message }}</div>{% endfor %}
       {% endwith %}
       {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
-      <div class="step-banner"><div class="step-count">01</div><div class="step-copy"><strong>פרויקט חדש · הגדרות ראשוניות</strong><span>מלא את פרטי העסק, בחר מודולים והמשך לתוכנית הקמה מאובטחת.</span></div></div>
-      <div class="progress-track" aria-label="התקדמות"><span></span></div>
-      <form method="post" action="{{ url_for('wizard') }}">
+      <div class="step-banner"><div class="step-count" data-step-number>01</div><div class="step-copy"><strong data-step-title>פרטי העסק</strong><span data-step-description>מגדירים את זהות הפרויקט והעסק.</span></div></div>
+      <div class="wizard-steps" aria-label="שלבי האשף">
+        <span class="wizard-step-label active" data-step-label="0"><b>01</b> פרטי העסק</span>
+        <span class="wizard-step-label" data-step-label="1"><b>02</b> מיתוג וקשר</span>
+        <span class="wizard-step-label" data-step-label="2"><b>03</b> מודולים</span>
+        <span class="wizard-step-label" data-step-label="3"><b>04</b> תשתיות</span>
+      </div>
+      <div class="progress-track" aria-label="התקדמות"><span data-progress></span></div>
+      <form method="post" action="{{ url_for('wizard') }}" novalidate>
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+        <div class="wizard-step" data-wizard-step="0">
         <section class="panel" id="business-profile">
           <div class="eyebrow">01 · BUSINESS PROFILE</div><h2>פרטי העסק</h2>
           <div class="grid">
@@ -85,6 +93,8 @@
             <div class="field full"><label for="category">סוג העסק</label><select id="category" name="category">{% for key,label in categories.items() %}<option value="{{ key }}" {% if form_values.category == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
           </div>
         </section>
+      </div>
+      <div class="wizard-step" data-wizard-step="1">
         <section class="panel" id="brand-profile">
           <div class="eyebrow">02 · BRAND & CONTACT</div><h2>מיתוג ופרטי קשר</h2>
           <div class="grid">
@@ -99,6 +109,8 @@
             <div class="field"><label for="font_family">גופן</label><select id="font_family" name="font_family">{% for font in ['Heebo','Assistant','Rubik','Arial'] %}<option value="{{ font }}" {% if form_values.font_family == font %}selected{% endif %}>{{ font }}</option>{% endfor %}</select></div>
           </div>
         </section>
+      </div>
+      <div class="wizard-step" data-wizard-step="2">
         <section class="panel" id="modules">
           <div class="eyebrow">03 · APPLICATION MODULES</div><h2>מודולים להפעלה</h2>
           <div class="choices">
@@ -108,6 +120,8 @@
           </div>
           <p class="hint">מודולים מתקדמים כגון מלאי, רכש, CRM מלא ותורים יוצגו לבחירה רק לאחר שיפותחו וייבדקו.</p>
         </section>
+      </div>
+      <div class="wizard-step" data-wizard-step="3">
         <section class="panel" id="infrastructure">
           <div class="eyebrow">04 · INFRASTRUCTURE</div><h2>תשתית מוצעת</h2>
           <div class="grid">
@@ -117,7 +131,13 @@
             <div class="field"><label>מדיניות עלויות</label><input value="ללא משאבים בתשלום" disabled></div>
           </div>
         </section>
-        <div class="actions"><button class="button" type="submit">הפק תוכנית הקמה</button></div>
+      </div>
+      <div class="wizard-controls">
+        <button class="button secondary" type="button" data-wizard-prev hidden>חזרה</button>
+        <span class="wizard-status" data-wizard-status aria-live="polite">שלב 1 מתוך 4</span>
+        <button class="button" type="button" data-wizard-next>המשך</button>
+        <button class="button" type="submit" data-wizard-submit hidden>הפק תוכנית הקמה</button>
+      </div>
       </form>
       {% if plan %}
         <section class="panel" id="plan-review">
