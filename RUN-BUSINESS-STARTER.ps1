@@ -12,6 +12,16 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+# Windows PowerShell 5.1 initializes its console host before the script runs.
+# Set the console code page in cmd.exe first, then relaunch this script once.
+if (-not $env:BUSINESS_STARTER_UTF8_BOOTSTRAPPED) {
+    $env:BUSINESS_STARTER_UTF8_BOOTSTRAPPED = "1"
+    $command = 'chcp 65001>nul & powershell.exe -NoProfile -ExecutionPolicy Bypass -File "' + $PSCommandPath + '"'
+    & $env:ComSpec /d /c $command
+    exit $LASTEXITCODE
+}
+
+
 # Windows PowerShell 5.1 may start with an OEM code page that cannot render
 # UTF-8 Hebrew correctly. Switch the interactive console to UTF-8 before
 # printing any Hebrew UI. Keep the BOM for reliable script-file decoding.
