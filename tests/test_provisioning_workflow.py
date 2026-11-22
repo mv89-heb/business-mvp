@@ -158,6 +158,11 @@ def test_workflow_creates_isolated_resources_and_persists_secret_free_state(tmp_
     assert "SECRET_KEY" not in serialized
     state = json.loads(serialized)
     assert state["status"] == "completed"
+    assert state["resources"]["github"]["repository_id"] == 1
+    assert state["resources"]["neon"]["project_id"] == "neon-project-1"
+    assert state["resources"]["neon"]["org_id"] == "neon-org-approved"
+    assert state["resources"]["render"]["service_id"] == "srv-123"
+    assert state["resources"]["render"]["workspace_id"] == "workspace-approved"
 
 
 def test_workflow_failure_is_persisted_without_secrets(tmp_path, monkeypatch):
@@ -518,3 +523,29 @@ def test_preflight_reuses_render_service_only_when_saved_service_id_matches(tmp_
     )
 
     assert report["resources"]["render"]["status"] == "existing"
+
+
+
+def test_workflow_refuses_saved_state_for_a_different_business_plan(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    workflow.state_store.save("plan-123456", {
+        "plan_id": "another-plan",
+        "business_slug": "another-business",
+        "status": "completed",
+        "step": "completed",
+        "resources": {"github": {"repository_id": 99}},
+        "history": [],
+        "error": None,
+    })
+
+    with pytest.raises(ProviderError, match="does not match this business plan"):
+        workflow.run(
+            make_plan(),
+            github_owner="developer",
+            admin_password="a-very-long-test-password",
+            approval="CREATE",
+            neon_free_tier_verified=True,
+        )
+
+    assert github.ensure_calls == 0
+    assert github.published is False
