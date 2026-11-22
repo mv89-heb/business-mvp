@@ -16,8 +16,8 @@ def export_starter(target, business_name, slug):
     if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
         raise ValueError("Slug must use lowercase letters, numbers and single hyphens.")
     destination = Path(target).expanduser().resolve()
-    if destination == ROOT or ROOT in destination.parents:
-        raise ValueError("Starter destination must be outside the source repository.")
+    if destination == ROOT or ROOT in destination.parents or destination in ROOT.parents:
+        raise ValueError("Starter destination must be outside the source repository and its parent folders.")
     if destination.exists() and any(destination.iterdir()):
         raise FileExistsError(f"Destination must be empty: {destination}")
 
