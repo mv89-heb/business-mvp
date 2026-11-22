@@ -92,12 +92,12 @@ def test_neon_reuses_existing_project_and_does_not_create_duplicate():
 def test_neon_rejects_same_name_in_different_region():
     opener = FakeOpener([{"projects": [{"id": "neon-1", "name": "app", "region_id": "aws-us-east-2"}]}])
     with pytest.raises(Exception, match="different region"):
-        NeonProvider("token", opener=opener).ensure_project("app")
+        NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
 
 
 def test_neon_connection_uri_is_not_added_to_request_url():
     opener = FakeOpener([{"uri": "postgresql://user:secret@host/db"}])
-    uri = NeonProvider("token", opener=opener).get_connection_uri("neon-1")
+    uri = NeonProvider("token", org_id="org-1", opener=opener).get_connection_uri("neon-1")
     assert uri.startswith("postgresql://")
     assert "secret" not in opener.requests[0][0].full_url
 
@@ -162,7 +162,7 @@ def test_neon_project_lookup_walks_all_pages_before_creating():
         {"projects": [{"id": "first", "name": "other", "region_id": "aws-eu-central-1"}], "pagination": {"cursor": "next-page"}},
         {"projects": [{"id": "found", "name": "app", "region_id": "aws-eu-central-1"}], "pagination": {}},
     ])
-    result = NeonProvider("token", opener=opener).ensure_project("app")
+    result = NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
     assert result["created"] is False
     assert result["project"]["id"] == "found"
     assert "cursor=next-page" in opener.requests[1][0].full_url
@@ -173,7 +173,7 @@ def test_neon_refuses_create_when_project_list_is_incomplete():
         {"projects": [], "unavailable_project_ids": ["project-unknown"], "pagination": {}}
     ])
     with pytest.raises(Exception, match="could not verify every project"):
-        NeonProvider("token", opener=opener).ensure_project("app")
+        NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
 
 
 def test_render_service_lookup_walks_all_pages_before_creating():
@@ -198,7 +198,7 @@ def test_render_service_lookup_walks_all_pages_before_creating():
 def test_neon_project_creation_requires_explicit_free_tier_verification():
     opener = FakeOpener([{"projects": []}])
     with pytest.raises(Exception, match="Verify Neon free-tier eligibility"):
-        NeonProvider("token", opener=opener).ensure_project("app")
+        NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
     assert len(opener.requests) == 1
 
 def test_github_organization_repo_uses_organization_endpoint():
