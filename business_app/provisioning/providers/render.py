@@ -47,6 +47,16 @@ class RenderProvider:
             cursor = next_cursor
         return services
 
+
+    def get_service(self, service_id):
+        """Fetch the current service snapshot, including its public URL when available."""
+        from urllib.parse import quote
+        response = self.client.request("GET", f"/services/{quote(service_id, safe='')}")
+        service = response.get("service", response)
+        if not service.get("id"):
+            raise ProviderError("Render did not return the requested service")
+        return service
+
     def ensure_web_service(self, *, name, repository_url, branch="main",
                            build_command="pip install -r requirements.txt",
                            start_command="gunicorn --workers 1 --threads 4 --timeout 60 wsgi:app",
