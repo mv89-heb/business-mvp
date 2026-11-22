@@ -15,7 +15,9 @@
    - `WEBHOOK_SECRET` – מחרוזת אקראית חזקה שתייצרו אצלכם. אין לשלוח אותה בצ'אט או להכניס אותה לקוד.
 4. צרו סוד ב-PowerShell במחשב Windows:
    ```powershell
-   [Convert]::ToHexString([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+   $bytes = New-Object byte[] 32
+   [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+   [BitConverter]::ToString($bytes).Replace("-", "")
    ```
    העתיקו את התוצאה לשדה `WEBHOOK_SECRET` ב-Script Properties. שמרו אותה באופן זמני כדי להגדיר את אותו הערך גם ב-Render.
 5. לחצו **Deploy → New deployment → Web app**.
