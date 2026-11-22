@@ -74,7 +74,7 @@ def test_neon_creates_project_with_scale_to_zero_defaults():
         {"project": {"id": "neon-1", "name": "app", "region_id": "aws-eu-central-1"}},
     ])
     provider = NeonProvider("token", org_id="org-1", opener=opener)
-    result = provider.ensure_project("app")
+    result = provider.ensure_project("app", free_tier_verified=True)
     assert result["created"] is True
     payload = json.loads(opener.requests[-1][0].data)
     assert payload["project"]["org_id"] == "org-1"
@@ -193,3 +193,10 @@ def test_render_service_lookup_walks_all_pages_before_creating():
     assert result["created"] is False
     assert result["service"]["id"] == "found"
     assert "cursor=next-page" in opener.requests[1][0].full_url
+
+
+def test_neon_project_creation_requires_explicit_free_tier_verification():
+    opener = FakeOpener([{"projects": []}])
+    with pytest.raises(Exception, match="Verify Neon free-tier eligibility"):
+        NeonProvider("token", opener=opener).ensure_project("app")
+    assert len(opener.requests) == 1
