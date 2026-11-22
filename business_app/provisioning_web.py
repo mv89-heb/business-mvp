@@ -55,7 +55,7 @@ def _audit_event(app, event, **details):
             pass
         descriptor = os.open(str(path), os.O_APPEND | os.O_CREAT | os.O_WRONLY, 0o600)
         with os.fdopen(descriptor, "a", encoding="utf-8") as stream:
-            stream.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\\n")
+            stream.write(json.dumps(record, ensure_ascii=False, separators=(",", ":")) + "\n")
         try:
             os.chmod(path, 0o600)
         except OSError:
