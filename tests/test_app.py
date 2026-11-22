@@ -214,3 +214,25 @@ def test_webhook_is_not_called_without_shared_secret(monkeypatch, client):
         "contact_consent": "on",
     })
     assert response.status_code == 302
+
+def test_production_requires_explicit_secret_and_database(monkeypatch, tmp_path):
+    monkeypatch.setenv("FLASK_ENV", "production")
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    with pytest.raises(RuntimeError, match="SECRET_KEY must be configured"):
+        create_app()
+
+    monkeypatch.setenv("SECRET_KEY", "production-test-secret")
+    with pytest.raises(RuntimeError, match="DATABASE_URL must be configured"):
+        create_app()
+
+    app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "production-test-secret",
+        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'production-test.db'}",
+    })
+    assert app.config["SESSION_COOKIE_SECURE"] is True
+    with app.app_context():
+        db.drop_all()
+
