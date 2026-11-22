@@ -42,6 +42,10 @@
 
 **גישה מרחוק:** לפריסת האשף בלבד יש להשתמש ב־`provisioning_wsgi:app` ולא ב־`wsgi:app`. מצב Render דורש `PROVISIONING_PUBLIC_ACCESS=true`, סיסמה אקראית באורך 32 תווים לפחות, `PROVISIONING_SESSION_SECRET` באורך 32 תווים לפחות ו־`PROVISIONING_ALLOWED_HOSTS` עם hostname מדויק. מצב זה אוכף HTTPS, Secure/HttpOnly/SameSite cookies, CSRF, Host allowlist, rate limit של 5 לדקה ו־20 לשעה, HSTS ו־security headers. יש להפעיל worker יחיד כדי לשמור על עקביות מגבלת הניסיונות בזיכרון. אין להגדיר מפתחות ספקים עד שמוודאים את מדיניות הסודות ואת ההרשאות בחשבונות. הגנת סיסמה אינה תחליף ל־MFA או לשכבת Zero Trust; מומלץ להוסיף Cloudflare Access או VPN לפני שימוש בפעולות ענן רגישות.
 
+## קטלוג עסקים, הצעות ואישורים
+
+מימוש API וזרימת אישור מפורטים ב־[Business Studio API](docs/BUSINESS_STUDIO_API_HE.md). מסך הקטלוג זמין ב־`/businesses`; עסק חדש נשמר כהצעה ממתינה, ורק אישור מפורש יוצר עסק פעיל ואירוע Make בתור.
+
 ## ספקים ואינטגרציות
 
 המתאמים הקיימים מיועדים לאינטגרציה מבוקרת עם:

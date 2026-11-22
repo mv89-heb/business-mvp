@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token() }}">
+  <title>Business Studio · עסקים ואישורים</title>
+  <style>
+    :root{font-family:Heebo,Arial,sans-serif;color:#172b28;background:#f4f6f5;font-synthesis:none}
+    *{box-sizing:border-box}body{margin:0;background:#f4f6f5}.shell{max-width:1280px;margin:auto;padding:32px 24px 64px}
+    header{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:28px}
+    .brand{display:flex;align-items:center;gap:12px}.mark{width:42px;height:42px;border-radius:14px;background:#173b35;color:#fff;display:grid;place-items:center;font-weight:800}
+    h1{font-size:25px;margin:0}header p,.muted{color:#71817c;margin:3px 0 0;font-size:14px}
+    a{color:#17665a;text-decoration:none;font-weight:600}.actions{display:flex;gap:10px;align-items:center}
+    button{font:inherit;border:0;border-radius:10px;padding:10px 15px;cursor:pointer;font-weight:700}
+    .primary{background:#173b35;color:white}.secondary{background:#e7eeeb;color:#24483f}.danger{background:#f8e8e5;color:#a03b30}
+    .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:22px}
+    .stat,.panel{background:#fff;border:1px solid #e4eae7;border-radius:16px;padding:20px;box-shadow:0 4px 18px #1c3d3210}
+    .stat span{display:block;color:#75837e;font-size:13px}.stat strong{display:block;font-size:28px;margin-top:4px}
+    .panel{margin-top:18px}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
+    h2{font-size:18px;margin:0}.pill{font-size:12px;background:#fff3dc;color:#8a5c1d;border-radius:999px;padding:5px 10px;font-weight:700}
+    .table-wrap{overflow:auto}table{width:100%;border-collapse:collapse;min-width:680px}th,td{text-align:right;padding:12px 10px;border-bottom:1px solid #edf0ee;font-size:14px;vertical-align:middle}th{color:#71817c;font-weight:600}
+    .status{font-size:12px;font-weight:700;padding:5px 9px;border-radius:999px;background:#fff2d9;color:#8b5c18}.status.active{background:#e4f3ec;color:#176347}
+    .row-actions{display:flex;gap:7px;flex-wrap:wrap}.row-actions button{padding:7px 10px;font-size:12px}
+    .empty{padding:24px;text-align:center;color:#788680}.error{color:#a03b30;margin:12px 0}.hint{font-size:13px;color:#71817c}
+    .task-list{display:grid;gap:10px}.task{padding:12px;border:1px solid #edf0ee;border-radius:12px;display:flex;justify-content:space-between;gap:12px}
+    @media(max-width:700px){.shell{padding:20px 14px}.stats{grid-template-columns:1fr}.panel{padding:15px}header{align-items:flex-start;flex-direction:column}}
+  </style>
+</head>
+<body>
+<div class="shell">
+  <header>
+    <div class="brand"><div class="mark">BS</div><div><h1>Business Studio</h1><p>קטלוג עסקים · הצעות להקמה · אישורים · משימות</p></div></div>
+    <div class="actions"><a href="{{ url_for('wizard') }}">חזרה לאשף התשתיות</a><form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="secondary" type="submit">יציאה</button></form></div>
+  </header>
+  <div class="stats">
+    <article class="stat"><span>עסקים ותבניות</span><strong id="business-count">—</strong></article>
+    <article class="stat"><span>הצעות ממתינות לאישור</span><strong id="pending-count">—</strong></article>
+    <article class="stat"><span>משימות פתוחות</span><strong id="task-count">—</strong></article>
+  </div>
+  <section class="panel">
+    <div class="panel-head"><div><h2>הצעות עסק שממתינות לאישור</h2><p class="hint">אישור יוצר עסק פעיל ומכניס אירוע לתור Make. ללא הגדרות Webhook האירוע נשאר בתור.</p></div><span class="pill">Human in the loop</span></div>
+    <div class="table-wrap"><table><thead><tr><th>עסק</th><th>תחום</th><th>תבנית מקור</th><th>נוצרה</th><th>סטטוס</th><th>פעולות</th></tr></thead><tbody id="proposals-body"><tr><td colspan="6" class="empty">טוען הצעות…</td></tr></tbody></table></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h2>עסקים שאושרו ואוטומציות Make</h2><p class="hint">מעקב אחר אירועי אישור שנשלחו או ממתינים להגדרת חיבור.</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>עסק</th><th>מזהה</th><th>סטטוס עסק</th><th>Webhook Make</th><th>פעולה</th></tr></thead><tbody id="approved-body"><tr><td colspan="5" class="empty">טוען אישורים…</td></tr></tbody></table></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h2>עסקים ותבניות זמינים לשכפול</h2><p class="hint">כל עסק מאושר נשמר כבסיס אפשרי להקמה הבאה בתחום שלו.</p></div></div>
+    <div class="table-wrap"><table><thead><tr><th>שם העסק</th><th>מזהה</th><th>תחום</th><th>סוג</th><th>סטטוס</th></tr></thead><tbody id="businesses-body"><tr><td colspan="5" class="empty">טוען קטלוג…</td></tr></tbody></table></div>
+  </section>
+  <section class="panel">
+    <div class="panel-head"><div><h2>משימות משלימות</h2><p class="hint">חומרים גרפיים, פרטי קשר וחיבורים שצריך להשלים לפני הפעלה.</p></div></div>
+    <div id="tasks-body" class="task-list"><div class="empty">טוען משימות…</div></div>
+  </section>
+  <p id="page-error" class="error" role="alert" aria-live="polite"></p>
+</div>
+<script src="{{ url_for('static', filename='business-studio.js') }}" defer></script>
+</body>
+</html>

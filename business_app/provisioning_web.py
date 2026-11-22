@@ -21,6 +21,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from business_app.provisioning.providers import GitHubProvider, NeonProvider, RenderProvider
 from business_app.provisioning.providers.http import ProviderError
 from business_app.provisioning.workflow import ProvisioningWorkflow
+from business_app.provisioning.business_studio import create_business_studio_blueprint
 
 from business_app.provisioning import (
     BUSINESS_CATEGORIES,
@@ -457,6 +458,8 @@ def create_provisioning_app(test_config=None):
             error=error,
             connection_results=None,
         )
+
+    app.register_blueprint(create_business_studio_blueprint())
 
     return app
 
