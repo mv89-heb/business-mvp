@@ -36,6 +36,12 @@ python -m flask --app wsgi run
 ## גבולות MVP ואבטחה
 אין כרגע שליחת WhatsApp אוטומטית, סליקה או חיבור לכלי צד שלישי. הטפסים מוגנים ב-CSRF. הגבלת הקצב נשמרת בזיכרון של תהליך האפליקציה (מתאים ל-MVP חד-מופעי, לא להגנה מבוזרת). לפני הרחבה יש לחבר אחסון משותף כמו Redis ולהוסיף אימות מנהל מתקדם, מדיניות פרטיות וגיבויים.
 
+
+
+### מדריך הקמת עסק חדש
+
+למדריך המלא לשכפול נקי והקמת שירותים נפרדים ב־GitHub, Neon ו־Render, כולל PowerShell, משתני סביבה, אבטחה ובדיקות: [docs/NEW_CUSTOMER_INSTALLATION_HE.md](docs/NEW_CUSTOMER_INSTALLATION_HE.md).
+
 ## Business App Starter
 
 This repository is structured as a reusable **single-customer** application starter, not a multi-tenant SaaS product. Business identity, content, branding, feature switches and integration enablement live in `config/business.json`. Credentials remain environment secrets.
