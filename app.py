@@ -95,6 +95,14 @@ def _notify_lead_webhook(lead, app):
         with urllib.request.urlopen(webhook_request, timeout=8) as response:
             if not 200 <= response.status < 300:
                 app.logger.warning("Lead webhook returned HTTP %s", response.status)
+                return
+            try:
+                result = json.loads(response.read(4096).decode("utf-8"))
+            except (ValueError, UnicodeDecodeError):
+                app.logger.warning("Lead webhook returned an unreadable response")
+                return
+            if result.get("ok") is not True:
+                app.logger.warning("Lead webhook rejected the event; check its shared secret and Apps Script logs")
     except (urllib.error.URLError, TimeoutError, OSError, ValueError):
         app.logger.exception("Lead webhook delivery failed; lead remains saved")
 
