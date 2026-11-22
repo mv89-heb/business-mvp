@@ -356,3 +356,17 @@ def test_preflight_rejects_unsupported_region(tmp_path, monkeypatch):
 
     with pytest.raises(ProviderError, match="region is not supported"):
         workflow.preflight(plan, github_owner="developer")
+
+
+def test_preflight_does_not_create_local_workflow_state_directory(tmp_path, monkeypatch):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    workflow = ProvisioningWorkflow(
+        github=FakeGitHub(),
+        neon=FakeNeon(),
+        render=FakeRender(),
+    )
+
+    report = workflow.preflight(make_plan(), github_owner="developer")
+
+    assert report["writes_performed"] is False
+    assert not (tmp_path / ".business-app-provisioner" / "runs").exists()
