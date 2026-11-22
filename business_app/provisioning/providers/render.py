@@ -85,7 +85,7 @@ class RenderProvider:
     def ensure_web_service(self, *, name, repository_url, branch="main",
                            build_command="pip install -r requirements.txt",
                            start_command="gunicorn --workers 1 --threads 4 --timeout 60 wsgi:app",
-                           env_vars=None):
+                           env_vars=None, expected_service_id=None):
         if not self.workspace_id:
             raise ProviderError("RENDER_WORKSPACE_ID is required; select the intended workspace explicitly")
         matches = [item for item in self.list_services() if item.get("name", "").casefold() == name.casefold()]
@@ -93,6 +93,8 @@ class RenderProvider:
             raise ProviderError("Multiple Render services have this name; choose the intended service explicitly")
         if matches:
             service = matches[0]
+            if not expected_service_id or str(service.get("id")) != str(expected_service_id):
+                raise ProviderError("An existing Render service is not registered to this provisioning workflow")
             if service.get("repo") != repository_url or service.get("type") != "web_service":
                 raise ProviderError("A Render service with this name exists but has a different source or type")
             if service.get("branch") != branch:
