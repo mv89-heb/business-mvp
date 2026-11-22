@@ -148,9 +148,11 @@ class ProvisioningWorkflow:
                         saved_state = json.loads(state_path.read_text(encoding="utf-8"))
                     except (OSError, json.JSONDecodeError):
                         raise ProviderError("Local provisioning state could not be verified; refusing to reuse existing cloud resources") from None
-                    if saved_state.get("plan_id") != plan_id or saved_state.get("business_slug") != slug:
+                    if not isinstance(saved_state, dict) or saved_state.get("plan_id") != plan_id or saved_state.get("business_slug") != slug:
                         raise ProviderError("Local provisioning state does not match this business plan")
                     known_resources = saved_state.get("resources") or {}
+                    if not isinstance(known_resources, dict):
+                        raise ProviderError("Local provisioning resource ownership state is invalid")
         if not isinstance(known_resources, dict):
             raise ProviderError("Provisioning resource ownership state is invalid")
         if not github_owner or not isinstance(github_owner, str):
@@ -292,7 +294,14 @@ class ProvisioningWorkflow:
             self.state_store = WorkflowStateStore()
 
         workflow_id = plan.get("plan_id") or slug
-        state = self.state_store.load(workflow_id) or {
+        state = self.state_store.load(workflow_id)
+        if state is not None and (
+            not isinstance(state, dict)
+            or state.get("plan_id") != plan.get("plan_id")
+            or state.get("business_slug") != slug
+        ):
+            raise ProviderError("Saved provisioning state does not match this business plan")
+        state = state or {
             "plan_id": plan.get("plan_id"),
             "business_slug": slug,
             "status": "not_started",
