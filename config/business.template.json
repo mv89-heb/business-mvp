@@ -48,7 +48,17 @@
     },
     "services_heading": "השירותים שלנו",
     "services_description": "תיאור השירותים.",
-    "services": [],
+    "services": [
+      {
+        "id": "service-1",
+        "number": "01",
+        "name": "שירות ראשון",
+        "form_value": "שירות ראשון",
+        "description": "תיאור השירות.",
+        "link_text": "לפרטים נוספים",
+        "prompt": "ספרו לנו על השירות המבוקש."
+      }
+    ],
     "process_heading": "איך מתקדמים?",
     "process_steps": [],
     "estimate": {
