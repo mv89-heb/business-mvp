@@ -1,5 +1,6 @@
 """Create a customer-neutral, isolated copy of this application starter."""
 import argparse
+import fnmatch
 import re
 import shutil
 import sys
@@ -25,16 +26,11 @@ def _ignore_export_artifacts(directory, names):
     """Exclude developer tooling and local artifacts at every copied directory level."""
     ignored = set()
     for name in names:
-        if name in {"__pycache__", ".pytest_cache", ".git", ".venv", "venv", "node_modules"}:
+        if name in {"__pycache__", ".pytest_cache", ".git", ".venv", "venv", "node_modules", ".DS_Store"}:
             ignored.add(name)
         elif name.endswith((".pyc", ".pyo", ".log", ".sqlite", ".db")):
             ignored.add(name)
-        elif name in EXCLUDED_EXPORT_PATHS:
-            ignored.add(name)
-        elif any(
-            pattern.endswith("*") and name.startswith(pattern[:-1])
-            for pattern in EXCLUDED_EXPORT_PATHS
-        ):
+        elif any(fnmatch.fnmatchcase(name, pattern) for pattern in EXCLUDED_EXPORT_PATHS):
             ignored.add(name)
         elif name == ".env":
             ignored.add(name)
