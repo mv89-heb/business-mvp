@@ -84,7 +84,7 @@ def test_neon_creates_project_with_scale_to_zero_defaults():
 
 def test_neon_reuses_existing_project_and_does_not_create_duplicate():
     opener = FakeOpener([{"projects": [{"id": "neon-1", "name": "app", "region_id": "aws-eu-central-1"}]}])
-    result = NeonProvider("token", opener=opener).ensure_project("app")
+    result = NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
     assert result["created"] is False
     assert len(opener.requests) == 1
 
@@ -406,3 +406,25 @@ def test_render_reconciles_existing_service_env_vars_without_replacing_other_var
     assert opener.requests[0][0].full_url.endswith("/services/srv-1/env-vars/DATABASE_URL")
     assert json.loads(opener.requests[0][0].data) == {"value": "postgresql://db"}
     assert opener.requests[-1][0].full_url.endswith("/services/srv-1/deploys")
+
+
+
+def test_neon_requires_organization_scope_before_project_discovery():
+    provider = NeonProvider("token", org_id="", opener=FakeOpener([]))
+    with pytest.raises(ProviderConfigurationError, match="NEON_ORG_ID"):
+        provider.list_projects()
+    assert provider.client.opener.requests == []
+
+
+def test_neon_refuses_existing_project_with_mismatched_organization():
+    opener = FakeOpener([{
+        "projects": [{
+            "id": "foreign",
+            "name": "app",
+            "region_id": "aws-eu-central-1",
+            "org_id": "other-org",
+        }]
+    }])
+    with pytest.raises(Exception, match="different organization"):
+        NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
+    assert len(opener.requests) == 1
