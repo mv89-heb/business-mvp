@@ -309,3 +309,9 @@ def test_github_publish_refuses_unexpected_existing_repository_files(tmp_path):
             "developer", "new-app", tmp_path
         )
     assert len(opener.requests) == 3
+
+
+def test_github_git_blob_hash_uses_git_object_header():
+    from business_app.provisioning.providers.github import GitHubProvider
+
+    assert GitHubProvider._git_blob_sha(b"hello\\n") == "ce013625030ba8dba906f756967f9e9ca394464a"
