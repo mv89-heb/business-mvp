@@ -18,7 +18,7 @@
 <label>כמה מילים על הפרויקט<textarea name="details" rows="4" maxlength="4000" placeholder="מה תרצו לבנות או לשפץ?"></textarea></label>
 <input type="hidden" name="preset" value="{{ preset }}">
 <div class="hp" aria-hidden="true"><label>אין למלא שדה זה<input name="website" tabindex="-1" autocomplete="off"></label></div>
-<label class="consent"><input type="checkbox" required> אני מאשר/ת ליצור איתי קשר בנוגע לפנייה זו.</label>
+<label class="consent"><input type="checkbox" name="contact_consent" required> אני מאשר/ת ליצור איתי קשר בנוגע לפנייה זו.</label>
 <button class="button primary full" type="submit">שליחת פרטים</button><small>הפרטים ישמשו לחזרה אליכם בקשר לפנייה בלבד.</small>
 </form></section>
 {% endblock %}
