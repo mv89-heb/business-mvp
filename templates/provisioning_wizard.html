@@ -10,7 +10,7 @@
   <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard-premium.css') }}?v=3">
   <script defer src="{{ url_for('static', filename='js/provisioning.js') }}?v=2"></script>
 </head>
-<body class="studio-body">
+<body class="studio-body" data-initial-step="{{ 3 if connection_results is not none or plan or preflight_report or execution_result or error else 0 }}">
 {% if login_required or not session.get('developer') %}
   <main class="login-page">
     <section class="login-card">
@@ -202,7 +202,7 @@
                 <button class="button button-secondary" type="submit" formaction="{{ url_for('wizard') }}" data-wizard-submit>הפק תוכנית Dry Run</button>
                 <button class="button button-secondary" type="submit" formaction="{{ url_for('preflight_provisioning') }}">הרץ Preflight לקריאה בלבד</button>
                 <button class="button button-primary" type="submit" formaction="{{ url_for('execute_provisioning') }}">אשר והתחל הקמה</button>
-                <button class="button button-quiet" type="submit" form="connectionsForm">בדוק חיבורי ספקים</button>
+                <button class="button button-quiet" type="submit" formaction="{{ url_for('check_connections') }}">בדוק חיבורי ספקים</button>
               </div>
             </div>
           </section>
@@ -214,9 +214,6 @@
           </div>
         </form>
 
-        <form id="connectionsForm" method="post" action="{{ url_for('check_connections') }}">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        </form>
 
         <section class="panel result-panel" id="plan-review">
           <div class="panel-heading"><div><div class="section-kicker">PLAN & VALIDATION</div><h2>תוכנית הקמה ותוצאות בדיקה</h2><p class="panel-description">כל תוצאה מוצגת כאן לפני ביצוע פעולות בענן.</p></div><span class="status-chip">Audit trail</span></div>
