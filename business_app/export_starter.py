@@ -1,5 +1,6 @@
 """Create a customer-neutral, isolated copy of this application starter."""
 import argparse
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -10,6 +11,10 @@ DIRECTORIES = ("business_app", "integrations", "static", "templates", "tests", "
 
 
 def export_starter(target, business_name, slug):
+    if not isinstance(business_name, str) or not business_name.strip():
+        raise ValueError("Business name must not be empty.")
+    if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+        raise ValueError("Slug must use lowercase letters, numbers and single hyphens.")
     destination = Path(target).expanduser().resolve()
     if destination == ROOT or ROOT in destination.parents:
         raise ValueError("Starter destination must be outside the source repository.")
