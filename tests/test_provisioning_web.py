@@ -493,6 +493,7 @@ def test_remote_login_accepts_a_valid_csrf_token_with_seconds_time_limit():
     client = create_provisioning_app(config).test_client()
     page = client.get("/login", base_url="https://wizard.example.test")
     assert page.status_code == 200
+    assert page.headers["Referrer-Policy"] == "same-origin"
     token = re.search(
         r'name="csrf_token" value="([^"]+)"',
         page.get_data(as_text=True),
