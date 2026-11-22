@@ -43,6 +43,15 @@ def main(argv=None):
         print("\nלא נוצרו או שונו משאבים בענן.")
         return 0
 
+    workflow = ProvisioningWorkflow()
+    try:
+        preflight_report = workflow.preflight(plan, github_owner=owner)
+    except ProviderError as exc:
+        print(f"בדיקת ההיתכנות נכשלה; לא נוצרו משאבים: {exc}", file=sys.stderr)
+        return 1
+    print("\nדוח Preflight לקריאה בלבד:")
+    print(json.dumps(preflight_report, ensure_ascii=False, indent=2))
+
     print("\nאזהרה: הפעולה תיצור משאבים אמיתיים ב-GitHub, Neon ו-Render.")
     print("יש לוודא מראש שהחשבון זכאי ל-Neon Free ושלא צפוי חיוב.")
     approval = input('להמשך, הקלד CREATE: ').strip()
@@ -58,7 +67,7 @@ def main(argv=None):
         return 1
 
     try:
-        result = ProvisioningWorkflow().run(
+        result = workflow.run(
             plan,
             github_owner=owner,
             admin_password=admin_password,
