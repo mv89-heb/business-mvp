@@ -85,3 +85,20 @@ def test_plan_uses_provider_region_identifiers():
     assert resources["neon"]["region"] == "aws-eu-central-1"
     assert resources["render"]["region"] == "frankfurt"
     assert plan["provider_readiness"]["github"] == "adapter_available_credentials_required"
+
+
+
+def test_ai_enrichment_requires_automation_webhooks():
+    with pytest.raises(ProvisioningInputError, match="requires the automation_webhooks"):
+        make_plan(modules=["lead_capture", "lead_management", "ai_lead_enrichment"])
+
+
+def test_lead_integration_modules_are_available_in_the_plan():
+    plan = make_plan(modules=[
+        "lead_capture", "lead_management", "whatsapp_inbound",
+        "automation_webhooks", "ai_lead_enrichment",
+    ])
+    assert set(plan["application"]["modules"]) == {
+        "lead_capture", "lead_management", "whatsapp_inbound",
+        "automation_webhooks", "ai_lead_enrichment",
+    }
