@@ -285,7 +285,7 @@ def test_github_publish_refuses_environment_secrets_before_network_call(tmp_path
 
     (tmp_path / ".env").write_text("DATABASE_URL=postgresql://secret", encoding="utf-8")
     opener = FakeOpener([])
-    with pytest.raises(Exception, match="environment file"):
+    with pytest.raises(Exception, match="secret, provisioning artifact"):
         GitHubProvider("token", opener=opener).publish_directory(
             "developer", "new-app", tmp_path
         )
