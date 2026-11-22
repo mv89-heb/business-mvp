@@ -32,13 +32,15 @@ class GitHubProvider:
                 return None
             raise
 
-    def ensure_private_repository(self, owner, name, description="Business application"):
+    def ensure_private_repository(self, owner, name, description="Business application", *, expected_repository_id=None):
         if not owner or not name:
             raise ProviderConfigurationError("GitHub owner and repository name are required")
         existing = self.get_repository(owner, name)
         if existing:
             if existing.get("private") is not True:
                 raise ProviderError("A repository with this name already exists but is not private")
+            if not expected_repository_id or str(existing.get("id")) != str(expected_repository_id):
+                raise ProviderError("An existing GitHub repository is not registered to this provisioning workflow")
             return {"created": False, "repository": existing}
 
         profile = self.check_connection()
