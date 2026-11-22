@@ -56,7 +56,6 @@ def test_lead_is_saved_and_thanks_page_shown(client):
         assert lead.phone == "050-1234567"
 
 
-
 def test_lead_requires_contact_consent(client):
     response = client.post("/leads", data={
         "name": "ישראל ישראלי",
@@ -81,3 +80,15 @@ def test_admin_login_and_dashboard(client):
     response = client.get("/admin")
     assert response.status_code == 200
     assert "פניות לקוחות" in response.get_data(as_text=True)
+
+
+def test_health_check_is_exempt_from_global_rate_limits(tmp_path):
+    app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "test-secret",
+        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'health.db'}",
+        "RATELIMIT_ENABLED": True,
+    })
+    with app.test_client() as test_client:
+        responses = [test_client.get("/health") for _ in range(55)]
+    assert all(response.status_code == 200 for response in responses)
