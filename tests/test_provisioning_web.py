@@ -119,7 +119,7 @@ def test_preflight_route_runs_read_only_and_unlocks_execution(monkeypatch):
     assert "PREFLIGHT" in page
     assert '"writes_performed": false' in page
     with client.session_transaction() as session:
-        assert session["preflight_plan_id"]
+        assert session["preflight_fingerprint"]
 
 
 def test_execution_route_requires_developer_login():
@@ -127,6 +127,45 @@ def test_execution_route_requires_developer_login():
     response = client.post("/execute", data={})
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/login")
+
+
+
+def test_execution_route_cannot_bypass_preflight_or_reuse_it_for_changed_modules(monkeypatch):
+    import business_app.provisioning_web as provisioning_web
+
+    class NeverRunWorkflow:
+        def __init__(self):
+            raise AssertionError("execution must not start without a matching preflight")
+
+    monkeypatch.setattr(provisioning_web, "ProvisioningWorkflow", NeverRunWorkflow)
+    monkeypatch.setenv("GITHUB_OWNER", "developer")
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    base_data = {
+        "business_name": "עסק בדיקה",
+        "slug": "test-business",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "approval": "CREATE",
+        "confirm_zero_cost": "yes",
+        "admin_password": "a-very-long-test-password",
+    }
+    response = client.post("/execute", data=base_data)
+    assert "Preflight מוצלח" in response.get_data(as_text=True)
+
+    from business_app.provisioning_web import _plan_fingerprint
+    from business_app.provisioning import build_provisioning_plan
+    original = build_provisioning_plan(
+        business_name="עסק בדיקה", slug="test-business", category="services",
+        modules=["lead_capture", "lead_management"],
+    )
+    with client.session_transaction() as session:
+        session["preflight_fingerprint"] = _plan_fingerprint(original)
+
+    changed = dict(base_data)
+    changed["business_name"] = "שם עסק שונה"
+    response = client.post("/execute", data=changed)
+    assert "Preflight מוצלח" in response.get_data(as_text=True)
 
 
 def test_execution_route_requires_explicit_zero_cost_confirmation(monkeypatch):
@@ -145,7 +184,8 @@ def test_execution_route_requires_explicit_zero_cost_confirmation(monkeypatch):
         modules=["lead_capture", "lead_management"],
     )
     with client.session_transaction() as session:
-        session["preflight_plan_id"] = plan["plan_id"]
+        from business_app.provisioning_web import _plan_fingerprint
+        session["preflight_fingerprint"] = _plan_fingerprint(plan)
     response = client.post("/execute", data={
         "business_name": "עסק בדיקה",
         "slug": "test-business",
