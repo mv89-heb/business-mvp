@@ -24,7 +24,11 @@ py -m business_app.provisioning --output .\work\new-business-plan.json
 לנוחות העבודה אפשר להפעיל ממשק מקומי בעברית, המיועד למפתח בלבד. ב־PowerShell, מתוך תיקיית המאגר:
 
 ```powershell
-$rng = [Security.Cryptography.RandomNumberGenerator]::Create()\n$bytes = New-Object byte[] 48\n$rng.GetBytes($bytes)\n$env:PROVISIONING_SESSION_SECRET = [Convert]::ToBase64String($bytes)\n$rng.Dispose()
+$rng = [Security.Cryptography.RandomNumberGenerator]::Create()
+$bytes = New-Object byte[] 48
+$rng.GetBytes($bytes)
+$env:PROVISIONING_SESSION_SECRET = [Convert]::ToBase64String($bytes)
+$rng.Dispose()
 $secure = Read-Host "בחר סיסמת כניסה לאשף" -AsSecureString
 $ptr = [Runtime.InteropServices.Marshal]::SecureStringToBSTR($secure)
 try {
