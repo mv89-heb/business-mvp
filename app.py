@@ -64,8 +64,13 @@ def _notify_lead_webhook(lead, app):
     webhook_url = os.getenv("LEAD_WEBHOOK_URL", "").strip()
     if not webhook_url:
         return
+    webhook_secret = os.getenv("LEAD_WEBHOOK_SECRET", "").strip()
+    if not webhook_secret:
+        app.logger.warning("Lead webhook URL is configured but LEAD_WEBHOOK_SECRET is missing; delivery skipped")
+        return
     payload = {
         "event": "lead.created",
+        "token": webhook_secret,
         "lead": {
             "id": lead.id,
             "created_at": lead.created_at.isoformat() if lead.created_at else None,
@@ -87,7 +92,7 @@ def _notify_lead_webhook(lead, app):
         method="POST",
     )
     try:
-        with urllib.request.urlopen(webhook_request, timeout=3) as response:
+        with urllib.request.urlopen(webhook_request, timeout=8) as response:
             if not 200 <= response.status < 300:
                 app.logger.warning("Lead webhook returned HTTP %s", response.status)
     except (urllib.error.URLError, TimeoutError, OSError, ValueError):
