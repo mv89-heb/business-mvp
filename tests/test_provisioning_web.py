@@ -90,6 +90,47 @@ def test_connection_check_reports_missing_credentials_without_exposing_secrets(m
 
 
 
+def test_connection_check_preserves_wizard_values_and_returns_to_infrastructure(monkeypatch):
+    import business_app.provisioning_web as provisioning_web
+
+    class ConnectedProvider:
+        def check_connection(self):
+            return {"provider": "test", "connected": True}
+
+    monkeypatch.setattr(provisioning_web, "GitHubProvider", ConnectedProvider)
+    monkeypatch.setattr(provisioning_web, "NeonProvider", ConnectedProvider)
+    monkeypatch.setattr(provisioning_web, "RenderProvider", ConnectedProvider)
+
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.post("/connections/check", data={
+        "business_name": "עסק בדיקה",
+        "slug": "test-business",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "tagline": "פתרונות מקצועיים",
+        "phone": "050-123-4567",
+        "whatsapp_number": "050-123-4567",
+        "address": "רחוב הדוגמה 12",
+        "service_area": "בית שמש והסביבה",
+        "primary_color": "#123456",
+        "accent_color": "#abcdef",
+        "font_family": "Rubik",
+        "services": "פרגולות, דקים",
+    })
+
+    page = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert 'data-initial-step="3"' in page
+    assert 'value="עסק בדיקה"' in page
+    assert 'value="test-business"' in page
+    assert 'value="פתרונות מקצועיים"' in page
+    assert 'value="רחוב הדוגמה 12"' in page
+    assert 'value="פרגולות, דקים"' in page
+    assert "הבדיקה הושלמה" in page
+    assert "מחובר" in page
+
+
 
 def test_preflight_route_requires_developer_login():
     client = make_client()

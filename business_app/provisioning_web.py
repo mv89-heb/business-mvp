@@ -255,6 +255,7 @@ def create_provisioning_app(test_config=None):
     @app.post("/connections/check")
     @developer_required
     def check_connections():
+        form_values = _read_form_values(request.form)
         results = {}
         providers = {
             "github": GitHubProvider,
@@ -284,7 +285,7 @@ def create_provisioning_app(test_config=None):
             login_required=False,
             categories=BUSINESS_CATEGORIES,
             modules=SUPPORTED_MODULES,
-            form_values=_empty_form_values(),
+            form_values=form_values,
             connection_results=results,
         )
 

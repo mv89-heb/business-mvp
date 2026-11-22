@@ -21,7 +21,10 @@ document.addEventListener("DOMContentLoaded", () => {
     ["בחירת מודולים", "בוחרים רק יכולות שנדרשות לפרויקט."],
     ["תשתיות ותקציב", "בודקים את סביבת ההקמה לפני יצירת התוכנית."]
   ];
-  let current = 0;
+  const requestedStep = Number(document.body.dataset.initialStep || 0);
+  let current = Number.isInteger(requestedStep)
+    ? Math.min(Math.max(requestedStep, 0), steps.length - 1)
+    : 0;
 
   const render = () => {
     steps.forEach((step, index) => {
