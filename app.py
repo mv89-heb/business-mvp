@@ -262,7 +262,7 @@ def create_app(test_config=None):
             ])
         response = app.response_class(
             output.getvalue(), mimetype="text/csv; charset=utf-8",
-            headers={"Content-Disposition": "attachment; filename=eli-cohen-leads.csv"}
+            headers={"Content-Disposition": "attachment; filename=business-leads.csv"}
         )
         response.set_data("\ufeff" + response.get_data(as_text=True))
         return response
