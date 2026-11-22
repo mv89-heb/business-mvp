@@ -173,7 +173,7 @@ def create_provisioning_app(test_config=None):
             session.pop("preflight_fingerprint", None)
             error = str(exc)
         except Exception:
-            session.pop("preflight_plan_id", None)
+            session.pop("preflight_fingerprint", None)
             error = "בדיקת ההיתכנות נכשלה. פרטי שגיאה ונתוני אימות לא נחשפו."
         return render_template(
             "provisioning_wizard.html",
@@ -240,7 +240,7 @@ def create_provisioning_app(test_config=None):
             "modules": ["lead_capture", "lead_management"],
         }
         if request.method == "POST":
-            session.pop("preflight_plan_id", None)
+            session.pop("preflight_fingerprint", None)
             form_values = {
                 "business_name": request.form.get("business_name", ""),
                 "slug": request.form.get("slug", ""),
