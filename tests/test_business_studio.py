@@ -3,7 +3,7 @@ import pytest
 from business_app.provisioning.business_studio import (
     create_business_studio_blueprint,
     normalize_business_payload, execute_github_command, encrypt_command_response,
-    decrypt_github_command, create_business_studio_blueprint,
+    decrypt_github_command,
 )
 
 
@@ -137,6 +137,7 @@ def test_command_response_is_encrypted_and_roundtrips():
 def test_command_envelope_decrypt_roundtrips(monkeypatch):
     import json, base64, os
     from datetime import datetime, timezone
+    import hashlib
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import rsa, padding
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
@@ -150,6 +151,7 @@ def test_command_envelope_decrypt_roundtrips(monkeypatch):
     encrypted_key=key.public_key().encrypt(aes_key,padding.OAEP(mgf=padding.MGF1(hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
     envelope={
         "schema":"business-studio-command/v1","commandId":"12345678-1234-1234-1234-123456789012",
+        "keyId":hashlib.sha256(key.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)).hexdigest()[:24],
         "issuedAt":datetime.now(timezone.utc).isoformat(),
         "encryptedKey":base64.b64encode(encrypted_key).decode(),
         "nonce":base64.b64encode(nonce).decode(),"ciphertext":base64.b64encode(ciphertext).decode(),
@@ -206,3 +208,30 @@ def test_github_command_workflow_is_owner_only_and_uses_oidc():
     assert "id-token: write" in workflow
     assert "core.getIDToken('business-studio')" in workflow
     assert "business-developer-studio.onrender.com/internal/github/commands" in workflow
+
+def test_render_public_command_key_endpoint_is_public_and_returns_key_id():
+    from flask import Flask
+    app=Flask(__name__); app.secret_key="test-secret"; app.config.update(TESTING=True)
+    app.register_blueprint(create_business_studio_blueprint(lambda:FakeStore()))
+    response=app.test_client().get("/internal/github/command-public-key")
+    assert response.status_code==200
+    assert response.json["keyId"]
+    assert response.json["publicKey"].startswith("-----BEGIN PUBLIC KEY-----")
+
+
+def test_command_decryption_rejects_stale_key_id(monkeypatch):
+    import json, base64, os, hashlib
+    from datetime import datetime, timezone
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa, padding
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    from business_app.provisioning.business_studio import COMMAND_AAD
+    key=rsa.generate_private_key(public_exponent=65537,key_size=2048)
+    private=key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())
+    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64",base64.b64encode(private).decode())
+    aes_key=os.urandom(32); nonce=os.urandom(12)
+    encrypted=AESGCM(aes_key).encrypt(nonce,json.dumps({"type":"get_businesses","payload":{}}).encode(),COMMAND_AAD)
+    wrapped=key.public_key().encrypt(aes_key,padding.OAEP(mgf=padding.MGF1(hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
+    envelope={"schema":"business-studio-command/v1","commandId":"12345678-1234-1234-1234-123456789012","issuedAt":datetime.now(timezone.utc).isoformat(),"keyId":"stale-key-id","encryptedKey":base64.b64encode(wrapped).decode(),"nonce":base64.b64encode(nonce).decode(),"ciphertext":base64.b64encode(encrypted).decode(),"responsePublicKey":key.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode()}
+    with pytest.raises(ValueError):
+        decrypt_github_command(envelope)
