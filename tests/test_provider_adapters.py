@@ -158,19 +158,22 @@ def test_http_error_does_not_leak_response_body_or_token():
 
 
 def test_neon_project_lookup_walks_all_pages_before_creating():
-    first_page = [
-        {"id": f"p-{i}", "name": f"other-{i}", "region_id": "aws-eu-central-1"}
-        for i in range(399)
-    ]
-    first_page.append({"id": "last", "name": "other-last", "region_id": "aws-eu-central-1"})
     opener = FakeOpener([
-        {"projects": first_page, "pagination": {"cursor": "next-page"}},
+        {"projects": [{"id": "first", "name": "other", "region_id": "aws-eu-central-1"}], "pagination": {"cursor": "next-page"}},
         {"projects": [{"id": "found", "name": "app", "region_id": "aws-eu-central-1"}], "pagination": {}},
     ])
     result = NeonProvider("token", opener=opener).ensure_project("app")
     assert result["created"] is False
     assert result["project"]["id"] == "found"
     assert "cursor=next-page" in opener.requests[1][0].full_url
+
+
+def test_neon_refuses_create_when_project_list_is_incomplete():
+    opener = FakeOpener([
+        {"projects": [], "unavailable_project_ids": ["project-unknown"], "pagination": {}}
+    ])
+    with pytest.raises(Exception, match="could not verify every project"):
+        NeonProvider("token", opener=opener).ensure_project("app")
 
 
 def test_render_service_lookup_walks_all_pages_before_creating():
