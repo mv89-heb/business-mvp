@@ -17,3 +17,19 @@ jobs:
           python-version: "3.11"
       - run: pip install -r requirements.txt
       - run: python -m pytest -q
+
+  powershell-syntax:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Validate PowerShell syntax
+        shell: pwsh
+        run: |
+          $tokens = $null
+          $errors = $null
+          [System.Management.Automation.Language.Parser]::ParseFile("RUN-BUSINESS-STARTER.ps1", [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List
+            exit 1
+          }
+          Write-Host "PowerShell syntax OK"
