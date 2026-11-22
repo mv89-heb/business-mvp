@@ -7,7 +7,8 @@
 </section>
 <section class="services section"><div class="section-heading"><span class="eyebrow">מה אנחנו עושים</span><h2>פתרון שמתאים לפרויקט שלכם</h2></div><div class="service-grid"><article class="service-card"><span class="service-number">01</span><h3>עבודות בניה</h3><p>עבודות בניה, שיפוץ והתאמות לפי היקף הפרויקט.</p></article><article class="service-card"><span class="service-number">02</span><h3>עבודות עץ</h3><p>פתרונות עץ בהתאמה אישית, תכנון וביצוע.</p></article><article class="service-card"><span class="service-number">03</span><h3>ייעוץ ותכנון</h3><p>מחדדים את הצורך, בוחנים אפשרויות ומתקדמים לתוכנית עבודה.</p></article></div></section>
 <section class="estimate section"><div><span class="eyebrow">מתחילים להבין את ההיקף</span><h2>בדיקת אומדן ראשוני</h2><p>הזינו שטח משוער וקבלו מידע ראשוני. אומדן יוצג רק לאחר הגדרת תעריפים מאושרים על ידי העסק.</p></div><div class="estimate-box"><label for="area-estimate">שטח משוער במ״ר</label><input id="area-estimate" type="number" min="1" max="100000" placeholder="לדוגמה: 35"><button class="button dark" id="estimate-button" type="button">בדיקת אומדן</button><p id="estimate-result" class="estimate-result" aria-live="polite">האומדן אינו הצעת מחיר מחייבת.</p></div></section>
-<section class="contact section" id="contact"><div><span class="eyebrow">הפרויקט הבא מתחיל כאן</span><h2>נשמח לשמוע מכם</h2><p>משאירים פרטים ונחזור אליכם בהקדם.</p><a class="contact-phone" href="tel:0507208386">050-720-8386</a><p class="muted">ז׳בוטינסקי 14ב, בית שמש</p></div><form class="lead-form" action="/leads" method="post">\n<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+<section class="contact section" id="contact"><div><span class="eyebrow">הפרויקט הבא מתחיל כאן</span><h2>נשמח לשמוע מכם</h2><p>משאירים פרטים ונחזור אליכם בהקדם.</p><a class="contact-phone" href="tel:0507208386">050-720-8386</a><p class="muted">ז׳בוטינסקי 14ב, בית שמש</p></div><form class="lead-form" action="/leads" method="post">
+<input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
 <label>שם מלא<input name="name" required minlength="2" maxlength="120" autocomplete="name"></label>
 <label>טלפון<input name="phone" required inputmode="tel" autocomplete="tel" placeholder="050-0000000"></label>
 <label>דוא״ל (לא חובה)<input name="email" type="email" maxlength="254" autocomplete="email"></label>
@@ -21,4 +22,3 @@
 <button class="button primary full" type="submit">שליחת פרטים</button><small>הפרטים ישמשו לחזרה אליכם בקשר לפנייה בלבד.</small>
 </form></section>
 {% endblock %}
-{% block title %}אלי כהן בניה ועץ{% endblock %}
