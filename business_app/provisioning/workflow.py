@@ -116,7 +116,7 @@ class WorkflowStateStore:
         )
         if any(marker in serialized.upper() for marker in forbidden_markers):
             raise ValueError("Refusing to persist provisioning state containing a secret marker")
-        if re.search(r"(?i)(?:postgres(?:ql)?://|bearer\\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|(?:pbkdf2|scrypt):)", serialized):
+        if re.search(r"(?i)(?:postgres(?:ql)?://|bearer\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|(?:pbkdf2|scrypt):)", serialized):
             raise ValueError("Refusing to persist provisioning state containing a credential or connection string")
         return safe_state, serialized
 
@@ -156,7 +156,7 @@ class WorkflowStateStore:
                 ))
             return workflow_id
         path = self.path_for(workflow_id)
-        serialized = json.dumps(safe_state, ensure_ascii=False, indent=2) + "\\n"
+        serialized = json.dumps(safe_state, ensure_ascii=False, indent=2) + "\n"
         handle, temp_name = tempfile.mkstemp(prefix=f".{workflow_id}-", suffix=".tmp", dir=self.root)
         try:
             with os.fdopen(handle, "w", encoding="utf-8") as stream:
