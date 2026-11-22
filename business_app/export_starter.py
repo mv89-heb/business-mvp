@@ -1,6 +1,7 @@
 """Create a customer-neutral, isolated copy of this application starter."""
 import argparse
 import fnmatch
+import json
 import os
 import re
 import shutil
