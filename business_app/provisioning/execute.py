@@ -15,6 +15,11 @@ def main(argv=None):
         description="Execute a reviewed Business App Starter plan (creates real cloud resources)."
     )
     parser.add_argument("--plan", required=True, help="Path to a JSON dry-run plan")
+    parser.add_argument(
+        "--preflight-only",
+        action="store_true",
+        help="Perform read-only provider and resource checks; do not create or modify cloud resources",
+    )
     args = parser.parse_args(argv)
     try:
         plan = json.loads(Path(args.plan).expanduser().read_text(encoding="utf-8"))
@@ -26,6 +31,17 @@ def main(argv=None):
     if not owner:
         print("יש להגדיר GITHUB_OWNER בסביבת המפתח.", file=sys.stderr)
         return 1
+
+    if args.preflight_only:
+        try:
+            report = ProvisioningWorkflow().preflight(plan, github_owner=owner)
+        except ProviderError as exc:
+            print(f"בדיקת ההיתכנות נכשלה: {exc}", file=sys.stderr)
+            return 1
+        print("\\nדוח Preflight לקריאה בלבד:")
+        print(json.dumps(report, ensure_ascii=False, indent=2))
+        print("\\nלא נוצרו או שונו משאבים בענן.")
+        return 0
 
     print("\nאזהרה: הפעולה תיצור משאבים אמיתיים ב-GitHub, Neon ו-Render.")
     print("יש לוודא מראש שהחשבון זכאי ל-Neon Free ושלא צפוי חיוב.")
