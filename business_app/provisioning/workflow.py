@@ -142,6 +142,8 @@ class ProvisioningWorkflow:
             raise ProviderError("GITHUB_OWNER is required")
         if not getattr(self.render, "workspace_id", None):
             raise ProviderError("RENDER_WORKSPACE_ID must identify the approved workspace")
+        if not getattr(self.neon, "org_id", None):
+            raise ProviderError("NEON_ORG_ID must identify the approved Neon organization")
 
         connections = {
             "github": self.github.check_connection(),
@@ -178,6 +180,9 @@ class ProvisioningWorkflow:
         project = projects[0] if projects else None
         if project and project.get("region_id") != neon_region:
             raise ProviderError("A Neon project with this name exists in a different region")
+        neon_org_id = getattr(self.neon, "org_id", None)
+        if project and project.get("org_id") and project.get("org_id") != neon_org_id:
+            raise ProviderError("A Neon project with this name belongs to a different organization")
 
         services = [
             item for item in self.render.list_services()
@@ -253,6 +258,8 @@ class ProvisioningWorkflow:
             raise ProviderError("GITHUB_OWNER is required")
         if not getattr(self.render, "workspace_id", None):
             raise ProviderError("RENDER_WORKSPACE_ID must identify the approved workspace")
+        if not getattr(self.neon, "org_id", None):
+            raise ProviderError("NEON_ORG_ID must identify the approved Neon organization")
 
         # Keep read-only preflight free of local filesystem side effects.
         if self.state_store is None:
