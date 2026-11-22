@@ -12,7 +12,7 @@ Canva מנוהלת דרך חיבור Canva המאומת ב-ChatGPT (Canva MCP) �
 
 - GITHUB_TOKEN — GitHub fine-grained token עם הרשאות יצירת Repository פרטי.
 - NEON_API_KEY — Neon API key.
-- NEON_ORG_ID — אופציונלי כאשר המפתח משויך לארגון מסוים.
+- NEON_ORG_ID — חובה; תוחם את איתור ויצירת פרויקטי Neon לארגון המאושר ומונע חיפוש גלובלי בין ארגונים.
 - RENDER_API_KEY — Render API key.
 - RENDER_WORKSPACE_ID — מזהה סביבת העבודה שאושרה במפורש.
 
@@ -21,7 +21,7 @@ Canva מנוהלת דרך חיבור Canva המאומת ב-ChatGPT (Canva MCP) �
 ## יכולות המתאמים
 
 - GitHub: בדיקת זהות, איתור/יצירת Repository פרטי, פרסום Starter נקי דרך Git Data API, והשוואת עץ הקבצים למניעת פרסום כפול.
-- Neon: בדיקת חיבור, איתור פרויקט קיים לפי שם, יצירת פרויקט עם compute מינימלי והחזרת URI לחיבור. ה-URI הוא סוד; אין לכתוב אותו ללוגים או לקובצי מצב.
+- Neon: בדיקת חיבור, איתור פרויקט קיים לפי שם בתוך NEON_ORG_ID בלבד, יצירת פרויקט בתוך הארגון המאושר עם compute מינימלי והחזרת URI לחיבור. ה-URI הוא סוד; אין לכתוב אותו ללוגים או לקובצי מצב.
 - Render: בדיקת סביבת עבודה, איתור שירות קיים ויצירת Web Service בתוכנית Free בלבד, בפרנקפורט, עם deploy רק לאחר מעבר בדיקות CI (checksPass).
 
 ## בטיחות ותפעול
@@ -40,7 +40,7 @@ Canva מנוהלת דרך חיבור Canva המאומת ב-ChatGPT (Canva MCP) �
 
     # בדיקות חיבור בלבד — ללא יצירת משאבים
     print(GitHubProvider().check_connection())
-    print(NeonProvider().check_connection())
+    print(NeonProvider().check_connection())  # requires NEON_ORG_ID
     print(RenderProvider().check_connection())
 
 ## שכבת Orchestration
