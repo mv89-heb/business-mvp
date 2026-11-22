@@ -4,28 +4,13 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>אשף הקמת עסקים | כלי מפתח</title>
-  <style>
-    :root{color-scheme:light;--ink:#172033;--muted:#657189;--line:#e4e9f0;--surface:#fff;--bg:#f4f6fa;--accent:#2457c5;--soft:#edf3ff;--danger:#a42a35}
-    *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,"Segoe UI",sans-serif;line-height:1.55}
-    .shell{max-width:980px;margin:0 auto;padding:32px 18px 56px}.top{display:flex;justify-content:space-between;align-items:center;gap:16px;margin-bottom:24px}
-    .eyebrow{font-size:12px;color:var(--accent);font-weight:700;letter-spacing:.04em}.title{font-size:28px;margin:4px 0 0}.subtitle{color:var(--muted);margin:6px 0 0}
-    .panel{background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:24px;margin:16px 0;box-shadow:0 6px 22px #1720330a}
-    .grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}.field{display:flex;flex-direction:column;gap:7px}.field.full{grid-column:1/-1}
-    label,.legend{font-size:14px;font-weight:700}input,select{width:100%;padding:12px 13px;border:1px solid #cfd7e4;border-radius:9px;background:#fff;font:inherit;color:var(--ink)}
-    input:focus,select:focus{outline:3px solid #2457c522;border-color:var(--accent)}.hint{font-size:12px;color:var(--muted)}
-    .choices{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px}.choice{border:1px solid var(--line);border-radius:10px;padding:12px;display:flex;gap:9px;align-items:flex-start;font-weight:400}
-    .choice input{width:auto;margin-top:4px;accent-color:var(--accent)}.choice span{display:block}.choice small{display:block;color:var(--muted);font-size:12px;margin-top:3px}
-    .actions{display:flex;gap:12px;align-items:center;margin-top:22px}.button{border:0;border-radius:9px;background:var(--accent);color:#fff;padding:12px 20px;font:inherit;font-weight:700;cursor:pointer}.button.secondary{background:#eef1f6;color:var(--ink)}
-    .notice{padding:12px 14px;border-radius:9px;background:var(--soft);color:#23417b;margin:12px 0}.error{background:#fff0f1;color:var(--danger)}
-    pre{direction:ltr;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;background:#101a2b;color:#e5edff;padding:18px;border-radius:10px;font-size:12px;max-height:540px;overflow:auto}
-    .top form{margin:0}.lock{max-width:440px;margin:8vh auto}.footer{font-size:12px;color:var(--muted);margin-top:20px}
-    @media(max-width:700px){.grid{grid-template-columns:1fr}.choices{grid-template-columns:1fr}.panel{padding:18px}.title{font-size:23px}.top{align-items:flex-start}}
-  </style>
+  <link rel="stylesheet" href="{{ url_for('static', filename='css/provisioning.css') }}">
 </head>
 <body>
   <main class="shell">
     {% if login_required %}
       <section class="panel lock">
+        <div class="login-mark" aria-hidden="true">B</div>
         <div class="eyebrow">DEVELOPER ONLY</div>
         <h1 class="title">כניסה לכלי המפתח</h1>
         <p class="subtitle">{% if remote_access %}גישה פרטית למפתח בלבד. אין למסור את הסיסמה או לשתף את הקישור.{% else %}האשף פועל מקומית במחשב המפתח ואינו חלק ממערכת הלקוחות.{% endif %}</p>
@@ -39,12 +24,32 @@
         </form>
       </section>
     {% else %}
-      <header class="top">
-        <div><div class="eyebrow">DEVELOPER WORKSPACE · {% if remote_access %}SECURE REMOTE ACCESS{% else %}LOCAL ONLY{% endif %}</div><h1 class="title">אשף הקמת עסק חדש</h1><p class="subtitle">תכנון תשתית מבודדת וקביעת מודולים לפני הקמה</p></div>
-        <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button secondary" type="submit">יציאה</button></form>
+      <div class="workspace">
+        <aside class="sidebar" aria-label="ניווט ראשי">
+          <div class="brandmark"><div class="brand-icon" aria-hidden="true">B</div><div><div class="brand-name">Business Studio</div><div class="brand-caption">סביבת פיתוח פרטית</div></div></div>
+          <div class="nav-label">WORKSPACE</div>
+          <nav class="side-nav">
+            <a class="active" href="#dashboard"><span class="nav-symbol">⌂</span>סקירה כללית</a>
+            <a href="#business-profile"><span class="nav-symbol">◈</span>פרטי העסק</a>
+            <a href="#brand-profile"><span class="nav-symbol">✳</span>מיתוג ושפה</a>
+            <a href="#modules"><span class="nav-symbol">▦</span>מודולים</a>
+            <a href="#infrastructure"><span class="nav-symbol">⌘</span>תשתיות</a>
+            <a href="#plan-review"><span class="nav-symbol">✓</span>תוכנית הקמה</a>
+          </nav>
+          <div class="sidebar-bottom"><div class="private-tag"><span class="private-dot"></span>גישה פרטית למפתח</div><div class="sidebar-note">כל פרויקט לקוח מבודד בנפרד</div></div>
+        </aside>
+        <div class="workspace-main">
+      <header class="top" id="dashboard">
+        <div class="top-left"><div class="eyebrow">DEVELOPER WORKSPACE · {% if remote_access %}SECURE REMOTE ACCESS{% else %}LOCAL ONLY{% endif %}</div><h1 class="title">מרכז הפיתוח שלך</h1><p class="subtitle">תכנון, הקמה וניהול של פרויקטים עסקיים — במקום אחד.</p></div>
+        <div class="top-actions"><div class="user-chip"><span class="user-avatar">מ</span>מפתח · מנהל מערכת</div><form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button secondary" type="submit">יציאה</button></form></div>
       </header>
       <section class="panel">
-        <div class="eyebrow">PROVIDER CONNECTIONS</div><h2>חיבור לשירותים</h2>
+        <div class="panel-heading"><div><div class="eyebrow">CONNECTED SERVICES</div><h2>השירותים שלך</h2><p class="panel-description">בדיקת חיבורים לספקים לפני שמתחילים להקים פרויקט חדש.</p></div><span class="status-chip warning">ממתין לבדיקה</span></div>
+        <div class="provider-grid">
+          <div class="provider-card"><div class="provider-head"><span class="provider-name">GitHub</span><span class="status-chip">לא נבדק</span></div><div class="provider-caption">מאגרים, ענפים ו־Pull Requests</div></div>
+          <div class="provider-card"><div class="provider-head"><span class="provider-name">Neon</span><span class="status-chip">לא נבדק</span></div><div class="provider-caption">PostgreSQL מבודד לכל פרויקט</div></div>
+          <div class="provider-card"><div class="provider-head"><span class="provider-name">Render</span><span class="status-chip">לא נבדק</span></div><div class="provider-caption">פריסה, Health Checks ושירותים</div></div>
+        </div>
         <p class="hint">האשף בודק חיבורים באמצעות מפתחות שמוגדרים בסביבת המפתח בלבד. ערכי מפתחות וסודות אינם מוצגים.</p>
         <form method="post" action="{{ url_for('check_connections') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -68,9 +73,11 @@
         {% for category, message in messages %}<div class="notice error">{{ message }}</div>{% endfor %}
       {% endwith %}
       {% if error %}<div class="notice error">{{ error }}</div>{% endif %}
+      <div class="step-banner"><div class="step-count">01</div><div class="step-copy"><strong>פרויקט חדש · הגדרות ראשוניות</strong><span>מלא את פרטי העסק, בחר מודולים והמשך לתוכנית הקמה מאובטחת.</span></div></div>
+      <div class="progress-track" aria-label="התקדמות"><span></span></div>
       <form method="post" action="{{ url_for('wizard') }}">
         <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-        <section class="panel">
+        <section class="panel" id="business-profile">
           <div class="eyebrow">01 · BUSINESS PROFILE</div><h2>פרטי העסק</h2>
           <div class="grid">
             <div class="field"><label for="business_name">שם העסק</label><input id="business_name" name="business_name" maxlength="120" required value="{{ form_values.business_name }}"></div>
@@ -78,8 +85,8 @@
             <div class="field full"><label for="category">סוג העסק</label><select id="category" name="category">{% for key,label in categories.items() %}<option value="{{ key }}" {% if form_values.category == key %}selected{% endif %}>{{ label }}</option>{% endfor %}</select></div>
           </div>
         </section>
-        <section class="panel">
-          <div class="eyebrow">01B · BRAND & CONTACT</div><h2>מיתוג ופרטי קשר</h2>
+        <section class="panel" id="brand-profile">
+          <div class="eyebrow">02 · BRAND & CONTACT</div><h2>מיתוג ופרטי קשר</h2>
           <div class="grid">
             <div class="field full"><label for="tagline">משפט תיאור קצר</label><input id="tagline" name="tagline" maxlength="160" value="{{ form_values.tagline }}" placeholder="מה העסק מציע ולמי?"></div>
             <div class="field"><label for="phone">טלפון להצגה באתר</label><input id="phone" name="phone" maxlength="30" value="{{ form_values.phone }}" placeholder="050-1234567"></div>
@@ -92,8 +99,8 @@
             <div class="field"><label for="font_family">גופן</label><select id="font_family" name="font_family">{% for font in ['Heebo','Assistant','Rubik','Arial'] %}<option value="{{ font }}" {% if form_values.font_family == font %}selected{% endif %}>{{ font }}</option>{% endfor %}</select></div>
           </div>
         </section>
-        <section class="panel">
-          <div class="eyebrow">02 · APPLICATION MODULES</div><h2>מודולים להפעלה</h2>
+        <section class="panel" id="modules">
+          <div class="eyebrow">03 · APPLICATION MODULES</div><h2>מודולים להפעלה</h2>
           <div class="choices">
             {% for key,details in modules.items() %}
               <label class="choice"><input type="checkbox" name="modules" value="{{ key }}" {% if key in form_values.modules %}checked{% endif %}><span>{{ details.label }}<small>{{ details.description }}</small></span></label>
@@ -101,8 +108,8 @@
           </div>
           <p class="hint">מודולים מתקדמים כגון מלאי, רכש, CRM מלא ותורים יוצגו לבחירה רק לאחר שיפותחו וייבדקו.</p>
         </section>
-        <section class="panel">
-          <div class="eyebrow">03 · INFRASTRUCTURE</div><h2>תשתית מוצעת</h2>
+        <section class="panel" id="infrastructure">
+          <div class="eyebrow">04 · INFRASTRUCTURE</div><h2>תשתית מוצעת</h2>
           <div class="grid">
             <div class="field"><label>GitHub</label><input value="Repository פרטי ונפרד" disabled></div>
             <div class="field"><label>Neon</label><input value="PostgreSQL נפרד · aws-eu-central-1" disabled></div>
@@ -113,8 +120,8 @@
         <div class="actions"><button class="button" type="submit">הפק תוכנית הקמה</button></div>
       </form>
       {% if plan %}
-        <section class="panel">
-          <div class="eyebrow">04 · REVIEW</div><h2>תוכנית ההקמה</h2>
+        <section class="panel" id="plan-review">
+          <div class="eyebrow">05 · REVIEW</div><h2>תוכנית ההקמה</h2>
           <div class="notice">עדיין לא נוצרו משאבים. בדוק את פרטי העסק והמודולים לפני מעבר לביצוע.</div>
           <pre>{{ plan|tojson(indent=2) }}</pre>
           <form method="post" action="{{ url_for('preflight_provisioning') }}">
@@ -133,13 +140,13 @@
           </form>
         </section>
         {% if preflight_report %}
-          <section class="panel">
-            <div class="eyebrow">PREFLIGHT · READ ONLY</div><h2>דוח בדיקת היתכנות</h2>
+          <section class="panel" id="preflight-report">
+            <div class="eyebrow">06 · PREFLIGHT · READ ONLY</div><h2>דוח בדיקת היתכנות</h2>
             <div class="notice">הבדיקה הסתיימה ללא יצירה או שינוי של משאבים. יש לבדוק ידנית זכאות Neon Free ועלויות עדכניות לפני כל ביצוע.</div>
             <pre>{{ preflight_report|tojson(indent=2) }}</pre>
           </section>
-          <section class="panel">
-            <div class="eyebrow">05 · EXECUTION · EXPLICIT APPROVAL</div><h2>ביצוע הקמה אמיתית</h2>
+          <section class="panel" id="execution">
+            <div class="eyebrow">07 · EXECUTION · EXPLICIT APPROVAL</div><h2>ביצוע הקמה אמיתית</h2>
           <div class="notice error">הפעולה הבאה יוצרת Repository פרטי, פרויקט Neon ושירות Render אמיתיים. היא אינה מוחקת משאבים קיימים ואינה מפעילה תוכנית Render בתשלום.</div>
           <form method="post" action="{{ url_for('execute_provisioning') }}">
             <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
@@ -181,6 +188,8 @@
         </section>
       {% endif %}
       <p class="footer">{% if remote_access %}סביבת מפתח פרטית. אין להעביר את פרטי הגישה או להשתמש באשף ממכשיר ציבורי.{% else %}הכלי אינו משולב ב־app.py ואינו נחשף ללקוחות. הפעל אותו רק מקומית ב־127.0.0.1.{% endif %}</p>
+        </div>
+      </div>
     {% endif %}
   </main>
 </body>
