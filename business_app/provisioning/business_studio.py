@@ -5,6 +5,7 @@ record and a durable Make.com outbox event; no external automation runs before a
 """
 from __future__ import annotations
 
+import base64
 import hashlib
 import hmac
 import json
@@ -178,6 +179,19 @@ class BusinessStudioStore:
             )
         """)
         conn.execute("""
+            CREATE TABLE IF NOT EXISTS studio_command_inbox (
+                command_id TEXT PRIMARY KEY,
+                github_issue_number BIGINT NOT NULL UNIQUE,
+                command_type TEXT NOT NULL,
+                payload JSONB NOT NULL,
+                status TEXT NOT NULL DEFAULT 'RECEIVED',
+                result JSONB,
+                error_code TEXT,
+                created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+            )
+        """)
+        conn.execute("""
             INSERT INTO business_catalog
                 (business_id, slug, name, industry, is_template, status, config)
             VALUES
@@ -283,6 +297,53 @@ class BusinessStudioStore:
             "createdAt": r[6].isoformat() if r[6] else None,
         } for r in rows]
 
+
+
+    def list_commands(self):
+        with self._connect() as conn:
+            self._ensure_schema(conn)
+            rows = conn.execute("""
+                SELECT command_id, github_issue_number, command_type, status,
+                       result, error_code, created_at, updated_at
+                FROM studio_command_inbox ORDER BY created_at DESC LIMIT 30
+            """).fetchall()
+        return [{
+            "commandId": r[0], "issueNumber": r[1], "type": r[2],
+            "status": r[3], "result": r[4], "errorCode": r[5],
+            "createdAt": r[6].isoformat() if r[6] else None,
+            "updatedAt": r[7].isoformat() if r[7] else None,
+        } for r in rows]
+
+    def accept_command(self, command_id, issue_number, command_type, payload):
+        with self._connect() as conn:
+            self._ensure_schema(conn)
+            inserted = conn.execute("""
+                INSERT INTO studio_command_inbox
+                    (command_id, github_issue_number, command_type, payload, status)
+                VALUES (%s, %s, %s, %s::jsonb, 'RECEIVED')
+                ON CONFLICT DO NOTHING
+                RETURNING command_id, status, result
+            """, (command_id, issue_number, command_type, json.dumps(payload, ensure_ascii=False))).fetchone()
+            if inserted:
+                return {"new": True, "commandId": inserted[0], "status": inserted[1], "result": inserted[2]}
+            existing = conn.execute("""
+                SELECT command_id, status, result FROM studio_command_inbox
+                WHERE github_issue_number = %s OR command_id = %s
+            """, (issue_number, command_id)).fetchone()
+            if not existing or existing[0] != command_id:
+                raise ValueError("GitHub issue או מזהה פקודה כבר שויכו לפקודה אחרת.")
+            return {"new": False, "commandId": existing[0], "status": existing[1], "result": existing[2]}
+
+    def complete_command(self, command_id, status, result=None, error_code=None):
+        with self._connect() as conn:
+            self._ensure_schema(conn)
+            conn.execute("""
+                UPDATE studio_command_inbox
+                SET status = %s, result = %s::jsonb, error_code = %s, updated_at = NOW()
+                WHERE command_id = %s
+            """, (status, json.dumps(result, ensure_ascii=False) if result is not None else None,
+                  error_code, command_id))
+
     def approve_proposal(self, proposal_id):
         business_id = str(uuid4())
         with self._connect() as conn:
@@ -373,6 +434,132 @@ class BusinessStudioStore:
         return {"status": status, "message": error or "Webhook נשלח בהצלחה."}
 
 
+
+COMMAND_AAD = b"business-studio-command:v1"
+RESPONSE_AAD = b"business-studio-response:v1"
+GITHUB_REPOSITORY = "mv89-heb/business-mvp"
+GITHUB_WORKFLOW_REF = "mv89-heb/business-mvp/.github/workflows/studio-command.yml@refs/heads/main"
+
+
+def verify_github_actions_identity(token):
+    import jwt
+    client = jwt.PyJWKClient("https://token.actions.githubusercontent.com/.well-known/jwks")
+    signing_key = client.get_signing_key_from_jwt(token)
+    claims = jwt.decode(
+        token, signing_key.key, algorithms=["RS256"],
+        audience="business-studio",
+        issuer="https://token.actions.githubusercontent.com",
+        options={"require": ["exp", "iat", "iss", "aud", "repository", "ref", "event_name"]},
+    )
+    expected = {
+        "repository": GITHUB_REPOSITORY,
+        "ref": "refs/heads/main",
+        "event_name": "issues",
+        "workflow_ref": GITHUB_WORKFLOW_REF,
+        "actor": "mv89-heb",
+    }
+    for key, value in expected.items():
+        if claims.get(key) != value:
+            raise ValueError("GitHub Actions identity is not authorized.")
+    return claims
+
+
+def decrypt_github_command(envelope):
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+
+    if not isinstance(envelope, dict) or envelope.get("schema") != "business-studio-command/v1":
+        raise ValueError("Unsupported command envelope.")
+    encoded_key = os.getenv("STUDIO_COMMAND_PRIVATE_KEY_B64", "").strip()
+    if not encoded_key:
+        raise RuntimeError("STUDIO_COMMAND_PRIVATE_KEY_B64 is not configured.")
+    private_pem = base64.b64decode(encoded_key, validate=True)
+    private_key = serialization.load_pem_private_key(private_pem, password=None)
+    aes_key = private_key.decrypt(
+        base64.b64decode(envelope["encryptedKey"], validate=True),
+        padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                     algorithm=hashes.SHA256(), label=None),
+    )
+    nonce = base64.b64decode(envelope["nonce"], validate=True)
+    ciphertext = base64.b64decode(envelope["ciphertext"], validate=True)
+    if len(ciphertext) > 131072:
+        raise ValueError("Command payload is too large.")
+    plaintext = AESGCM(aes_key).decrypt(nonce, ciphertext, COMMAND_AAD)
+    command = json.loads(plaintext.decode("utf-8"))
+    if not isinstance(command, dict) or not isinstance(command.get("payload", {}), dict):
+        raise ValueError("Invalid command payload.")
+    issued_at = datetime.fromisoformat(str(envelope["issuedAt"]).replace("Z", "+00:00"))
+    age = (datetime.now(timezone.utc) - issued_at.astimezone(timezone.utc)).total_seconds()
+    if age < -300 or age > 86400:
+        raise ValueError("Command envelope has expired.")
+    return command, envelope.get("responsePublicKey")
+
+
+def encrypt_command_response(result, response_public_key_pem):
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    import secrets
+
+    public_key = serialization.load_pem_public_key(response_public_key_pem.encode("utf-8"))
+    aes_key = secrets.token_bytes(32)
+    nonce = secrets.token_bytes(12)
+    ciphertext = AESGCM(aes_key).encrypt(
+        nonce, json.dumps(result, ensure_ascii=False, separators=(",", ":")).encode("utf-8"),
+        RESPONSE_AAD,
+    )
+    encrypted_key = public_key.encrypt(
+        aes_key,
+        padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                     algorithm=hashes.SHA256(), label=None),
+    )
+    return {
+        "schema": "business-studio-response/v1",
+        "encryptedKey": base64.b64encode(encrypted_key).decode("ascii"),
+        "nonce": base64.b64encode(nonce).decode("ascii"),
+        "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
+    }
+
+
+def execute_github_command(active_store, command_type, payload):
+    if command_type == "get_businesses":
+        businesses = active_store.list_businesses()
+        return {"businesses": [{
+            "id": item["id"], "slug": item["slug"], "name": item["name"],
+            "industry": item["industry"], "isTemplate": item["isTemplate"],
+            "status": item["status"], "sourceBusinessId": item.get("sourceBusinessId"),
+        } for item in businesses]}
+    if command_type == "create_business_proposal":
+        source_id = str(payload.get("sourceBusinessId") or "base-template")
+        source_config = active_store.get_source_config(source_id)
+        normalized = normalize_business_payload(payload, source_config)
+        proposal = active_store.create_proposal(normalized)
+        missing = []
+        if not normalized["branding"]["heroImageUrl"] or not normalized["branding"]["logoUrl"]:
+            missing.append(("השלמת חומרים גרפיים", "להוסיף קישור לתמונת Hero ולוגו מקנבה או להעלות נכסים מאושרים."))
+        if not normalized["automationConfig"]["whatsappNumber"]:
+            missing.append(("חיבור מספר WhatsApp עסקי", "להשלים ולאמת את מספר הווטסאפ העסקי לפני הפעלת תרחיש Make."))
+        for title, description in missing:
+            active_store.create_task(title, description, proposal_id=proposal["id"], priority="HIGH")
+        return {
+            "proposalId": proposal["id"], "status": "PENDING_APPROVAL",
+            "name": normalized["name"], "slug": normalized["slug"],
+            "industry": normalized["industry"], "sourceBusinessId": source_id,
+            "createdTasks": len(missing),
+        }
+    if command_type == "create_task":
+        title = str(payload.get("title") or "").strip()
+        description = str(payload.get("description") or "").strip()
+        priority = str(payload.get("priority") or "NORMAL").upper()
+        proposal_id = payload.get("proposalId")
+        if not title or priority not in {"LOW", "NORMAL", "HIGH"}:
+            raise ValueError("Invalid task payload.")
+        task = active_store.create_task(title, description, proposal_id, priority)
+        return {"taskId": task["id"], "title": task["title"], "status": task["status"]}
+    raise ValueError("Unsupported command type.")
+
+
 def create_business_studio_blueprint(store_factory=None):
     bp = Blueprint("business_studio", __name__)
 
@@ -388,11 +575,72 @@ def create_business_studio_blueprint(store_factory=None):
 
     @bp.before_request
     def require_developer():
+        if request.path == "/internal/github/commands":
+            return None
         if not session.get("developer"):
             if request.path.startswith("/api/"):
                 return jsonify({"error": "authentication_required"}), 401
             from flask import redirect, url_for
             return redirect(url_for("login"))
+
+
+    @bp.post("/internal/github/commands")
+    def github_command_ingest():
+        try:
+            authorization = request.headers.get("Authorization", "")
+            if not authorization.startswith("Bearer "):
+                return jsonify({"error": "github_identity_required"}), 401
+            verify_github_actions_identity(authorization[7:])
+            body = request.get_json(silent=True)
+            if not isinstance(body, dict):
+                return jsonify({"error": "invalid_request"}), 400
+            issue = body.get("issue") if isinstance(body.get("issue"), dict) else {}
+            if (body.get("repository") != GITHUB_REPOSITORY
+                    or body.get("sender") != "mv89-heb"
+                    or issue.get("author") != "mv89-heb"
+                    or not str(issue.get("title") or "").startswith("[Business Studio Command]")):
+                return jsonify({"error": "github_event_not_authorized"}), 403
+            issue_body = str(issue.get("body") or "")
+            if len(issue_body.encode("utf-8")) > 180000:
+                return jsonify({"error": "command_payload_too_large"}), 413
+            issue_number = int(issue.get("number") or 0)
+            if issue_number < 1:
+                return jsonify({"error": "invalid_issue_number"}), 400
+            envelope = json.loads(str(issue.get("body") or ""))
+            command, response_public_key = decrypt_github_command(envelope)
+            command_id = str(envelope.get("commandId") or "")
+            if not re.fullmatch(r"[0-9a-fA-F-]{36}", command_id) or not response_public_key:
+                raise ValueError("Invalid command identity or response key.")
+            command_type = str(command.get("type") or "")
+            if command_type not in {"get_businesses", "create_business_proposal", "create_task"}:
+                raise ValueError("Unsupported command type.")
+            active_store = store()
+            accepted = active_store.accept_command(
+                command_id, issue_number, command_type, command.get("payload") or {}
+            )
+            if not accepted["new"]:
+                if accepted["status"] == "COMPLETED":
+                    result = accepted["result"]
+                else:
+                    result = {"commandId": command_id, "status": accepted["status"]}
+            else:
+                try:
+                    result = execute_github_command(active_store, command_type, command.get("payload") or {})
+                    result = {"commandId": command_id, "status": "COMPLETED", **result}
+                    active_store.complete_command(command_id, "COMPLETED", result=result)
+                except ValueError:
+                    active_store.complete_command(command_id, "FAILED", error_code="invalid_command")
+                    raise
+                except Exception:
+                    active_store.complete_command(command_id, "FAILED", error_code="command_execution_failed")
+                    raise
+            encrypted_result = encrypt_command_response(result, response_public_key)
+            return jsonify({"accepted": True, "encryptedResult": encrypted_result}), 200
+        except ValueError:
+            return jsonify({"error": "command_rejected"}), 400
+        except Exception:
+            current_app.logger.exception("GitHub command relay failed")
+            return jsonify({"error": "command_relay_unavailable"}), 503
 
     @bp.get("/businesses")
     def business_dashboard():
@@ -406,6 +654,14 @@ def create_business_studio_blueprint(store_factory=None):
         except Exception:
             current_app.logger.exception("Business catalog read failed")
             return jsonify({"error": "business_catalog_unavailable"}), 503
+
+    @bp.get("/api/commands")
+    def get_commands():
+        try:
+            return jsonify({"commands": store().list_commands()})
+        except Exception:
+            current_app.logger.exception("GitHub command inbox read failed")
+            return jsonify({"error": "command_inbox_unavailable"}), 503
 
     @bp.get("/api/business-proposals")
     def get_proposals():

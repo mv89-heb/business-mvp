@@ -1,0 +1,40 @@
+name: Business Studio command relay
+on:
+  issues:
+    types: [opened, edited]
+permissions:
+  contents: read
+  issues: write
+  id-token: write
+jobs:
+  relay:
+    if: github.event.issue.user.login == 'mv89-heb' && github.event.sender.login == 'mv89-heb' && startsWith(github.event.issue.title, '[Business Studio Command]')
+    runs-on: ubuntu-latest
+    steps:
+      - name: Relay encrypted command to Render with GitHub OIDC
+        uses: actions/github-script@60a0d83039c74a4aee543508d2ffcb1c3799cdea
+        timeout-minutes: 5
+        with:
+          script: |
+            const issue = context.payload.issue;
+            const token = await core.getIDToken('business-studio');
+            const response = await fetch('https://business-developer-studio.onrender.com/internal/github/commands', {
+              method: 'POST',
+              headers: { 'Authorization': 'Bearer ' + token, 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                repository: context.repo.owner + '/' + context.repo.repo,
+                sender: context.payload.sender.login,
+                issue: { number: issue.number, title: issue.title, body: issue.body || '', author: issue.user.login }
+              })
+            });
+            const data = await response.json().catch(() => ({}));
+            if (!response.ok || !data.encryptedResult) {
+              const safeError = data.error || 'command_relay_failed';
+              await github.rest.issues.createComment({ owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number, body: 'Business Studio: הפקודה לא עובדה. קוד: ' + safeError });
+              core.setFailed('Business Studio command relay failed: ' + safeError);
+              return;
+            }
+            await github.rest.issues.createComment({
+              owner: context.repo.owner, repo: context.repo.repo, issue_number: issue.number,
+              body: 'Business Studio: הפקודה עובדה ב-Render. התוצאה מוצפנת ומיועדת רק ליוזם הפקודה.\n\n```json\n' + JSON.stringify(data.encryptedResult) + '\n```'
+            });

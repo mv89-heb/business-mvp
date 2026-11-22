@@ -52,12 +52,28 @@
   async function load() {
     $("page-error").textContent = "";
     try {
-      const [businesses, proposals, tasks] = await Promise.all([
-        api("/api/businesses"), api("/api/business-proposals"), api("/api/tasks")
+      const [businesses, proposals, tasks, commands] = await Promise.all([
+        api("/api/businesses"), api("/api/business-proposals"), api("/api/tasks"), api("/api/commands")
       ]);
       $("business-count").textContent = businesses.businesses.length;
       $("pending-count").textContent = proposals.proposals.filter(p => p.status === "PENDING_APPROVAL").length;
       $("task-count").textContent = tasks.tasks.filter(t => t.status === "OPEN").length;
+      $("command-count").textContent = commands.commands.length;
+      const cbody=$("commands-body"); cbody.replaceChildren();
+      if (!commands.commands.length) { const tr=document.createElement("tr"); const td=document.createElement("td"); td.colSpan=5; td.className="empty"; td.textContent="עדיין לא התקבלו פקודות דרך GitHub."; tr.append(td); cbody.append(tr); }
+      commands.commands.forEach(c=>{
+        const tr=document.createElement("tr");
+        cell(tr,"#"+c.issueNumber);
+        cell(tr,c.type);
+        const st=cell(tr,""); st.append(status(c.status,c.status==="COMPLETED"));
+        const result= c.result || {};
+        const summary = result.name ? result.name + " (" + (result.slug || "") + ")" :
+          result.businesses ? result.businesses.length + " עסקים/תבניות" :
+          result.title || result.error || "—";
+        cell(tr,summary);
+        cell(tr,c.updatedAt ? new Date(c.updatedAt).toLocaleString("he-IL") : "—");
+        cbody.append(tr);
+      });
       const pbody = $("proposals-body"); pbody.replaceChildren();
       const pending = proposals.proposals.filter(p => p.status === "PENDING_APPROVAL");
       const approved = proposals.proposals.filter(p => p.status === "APPROVED");

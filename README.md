@@ -104,3 +104,8 @@ GitHub Actions מריץ את בדיקות Python וכן בדיקת תחביר ו
 ## רישיון ומדיניות שימוש
 
 המאגר הוא סביבת פיתוח פרטית. לפני הפיכתו לתבנית ציבורית או שיתוף עם צד שלישי יש לוודא שלא נותרו בו קוד, הגדרות, מסמכים או נתונים ייחודיים ללקוח.
+
+
+## GitHub → Render command relay
+
+Business Studio accepts developer commands only through encrypted GitHub issues and GitHub Actions OIDC. See [command relay architecture](docs/GITHUB_RENDER_COMMAND_RELAY_HE.md). Business data is encrypted before it enters this public repository; Render verifies GitHub identity, stores commands/results in Neon, and returns an encrypted result comment. Remote commands cannot approve or activate businesses.

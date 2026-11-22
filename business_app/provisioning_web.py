@@ -460,6 +460,8 @@ def create_provisioning_app(test_config=None):
         )
 
     app.register_blueprint(create_business_studio_blueprint())
+    # GitHub Actions OIDC replaces browser CSRF on this machine-to-machine endpoint.
+    csrf.exempt(app.view_functions["business_studio.github_command_ingest"])
 
     return app
 
