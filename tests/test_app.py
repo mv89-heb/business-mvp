@@ -24,10 +24,10 @@ def test_homepage_is_hebrew_rtl(client):
     assert response.status_code == 200
     html = response.get_data(as_text=True)
     assert 'lang="he" dir="rtl"' in html
-    assert "דקים" in html
-    assert "פרגולות" in html
-    assert "חיפויי עץ" in html
-    assert "תיקונים וחידוש" in html
+    from business_app.config import load_business_config
+    config = load_business_config()
+    for service in config["content"]["services"]:
+        assert service["name"] in html
 
 
 def test_estimate_without_approved_rates_is_not_invented(client):
