@@ -1,5 +1,7 @@
 # Create a new independent business installation
 
+For the complete end-to-end Hebrew walkthrough covering a clean export, a new GitHub repository, a new Neon project and a new Render service, see [NEW_CUSTOMER_INSTALLATION_HE.md](NEW_CUSTOMER_INSTALLATION_HE.md).
+
 ## Export a clean project (from a local clone of the source repository)
 
 Run this from the source repository root in Windows PowerShell:
