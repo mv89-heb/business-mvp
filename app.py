@@ -1,5 +1,8 @@
 import os
 import re
+import json
+import urllib.request
+import urllib.error
 import csv
 import io
 from datetime import datetime, timezone
@@ -55,6 +58,40 @@ def _estimate(area):
         return None, None
     mid = base + area * rate
     return int(mid * 0.85), int(mid * 1.15)
+
+
+def _notify_lead_webhook(lead, app):
+    webhook_url = os.getenv("LEAD_WEBHOOK_URL", "").strip()
+    if not webhook_url:
+        return
+    payload = {
+        "event": "lead.created",
+        "lead": {
+            "id": lead.id,
+            "created_at": lead.created_at.isoformat() if lead.created_at else None,
+            "name": lead.name,
+            "phone": lead.phone,
+            "email": lead.email,
+            "city": lead.city,
+            "service": lead.service,
+            "area_sqm": lead.area,
+            "budget": lead.budget,
+            "details": lead.details,
+            "status": lead.status,
+        },
+    }
+    request_data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+    webhook_request = urllib.request.Request(
+        webhook_url, data=request_data,
+        headers={"Content-Type": "application/json", "User-Agent": "EliCohenBusinessMVP/1.0"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(webhook_request, timeout=3) as response:
+            if not 200 <= response.status < 300:
+                app.logger.warning("Lead webhook returned HTTP %s", response.status)
+    except (urllib.error.URLError, TimeoutError, OSError, ValueError):
+        app.logger.exception("Lead webhook delivery failed; lead remains saved")
 
 
 def admin_required(fn):
@@ -151,6 +188,7 @@ def create_app(test_config=None):
         db.session.add(lead)
         db.session.commit()
         app.logger.info("Lead %s stored successfully", lead.id)
+        _notify_lead_webhook(lead, app)
         return redirect(url_for("thanks", lead_id=lead.id))
 
     @app.get("/thanks")

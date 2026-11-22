@@ -135,3 +135,59 @@ def test_admin_csv_export_requires_login_and_exports_filtered_data(client):
     assert "text/csv" in response.content_type
     assert "לקוח לבדיקה" in response.get_data(as_text=True)
     assert "050-1234567" in response.get_data(as_text=True)
+
+
+def test_lead_webhook_is_optional_and_sends_saved_lead(monkeypatch, client):
+    import json
+    from unittest.mock import MagicMock
+    import app as app_module
+
+    captured = {}
+    response = MagicMock()
+    response.status = 202
+    response.__enter__.return_value = response
+
+    def fake_urlopen(request, timeout):
+        captured["url"] = request.full_url
+        captured["body"] = json.loads(request.data.decode("utf-8"))
+        captured["timeout"] = timeout
+        return response
+
+    monkeypatch.setenv("LEAD_WEBHOOK_URL", "https://automation.example.test/lead")
+    monkeypatch.setattr(app_module.urllib.request, "urlopen", fake_urlopen)
+    response = client.post("/leads", data={
+        "name": "לקוח webhook",
+        "phone": "050-1234567",
+        "service": "דק",
+        "contact_consent": "on",
+    })
+    assert response.status_code == 302
+    assert response.location.startswith("/thanks?lead_id=")
+    assert captured["url"] == "https://automation.example.test/lead"
+    assert captured["timeout"] == 3
+    assert captured["body"]["event"] == "lead.created"
+    assert captured["body"]["lead"]["name"] == "לקוח webhook"
+    assert captured["body"]["lead"]["service"] == "דק"
+
+
+def test_lead_is_saved_even_when_webhook_fails(monkeypatch, client):
+    import app as app_module
+    monkeypatch.setenv("LEAD_WEBHOOK_URL", "https://automation.example.test/lead")
+
+    def failed_urlopen(request, timeout):
+        raise TimeoutError("simulated timeout")
+
+    monkeypatch.setattr(app_module.urllib.request, "urlopen", failed_urlopen)
+    response = client.post("/leads", data={
+        "name": "לקוח ללא webhook",
+        "phone": "050-1234567",
+        "service": "פרגולה",
+        "contact_consent": "on",
+    })
+    assert response.status_code == 302
+    with client.application.app_context():
+        from app import Lead
+        saved = db.session.execute(
+            db.select(Lead).where(Lead.name == "לקוח ללא webhook")
+        ).scalar_one()
+        assert saved.service == "פרגולה"

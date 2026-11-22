@@ -25,7 +25,7 @@ python -m flask --app wsgi run
 - `DATABASE_URL`: כתובת החיבור ל-Neon, לשמור כ-Secret.
 - `SECRET_KEY`: מפתח אקראי ארוך.
 - `ADMIN_PASSWORD`: סיסמת מנהל חזקה, או `ADMIN_PASSWORD_HASH` עם hash של Werkzeug.
-- `ESTIMATE_BASE_RATE` ו-`ESTIMATE_RATE_PER_SQM`: להשאיר 0 עד לקבלת תעריפים אמיתיים ואישור בעל העסק.
+- `ESTIMATE_BASE_RATE` ו-`ESTIMATE_RATE_PER_SQM`: להשאיר 0 עד לקבלת תעריפים אמיתיים ואישור בעל העסק.\n- `LEAD_WEBHOOK_URL` (אופציונלי): כתובת Webhook של n8n או Make לקבלת פניות חדשות כ-JSON. להגדיר כ-Secret ב-Render; כשל בשליחה אינו מונע שמירת פנייה.
 
 ## פריסה
 `render.yaml` מגדיר Web Service בתוכנית Free. יש לחבר את המאגר ל-Render ולהגדיר את `DATABASE_URL` ואת סיסמת המנהל לפני הפעלה ציבורית. אין להכניס סודות ל-Git.
