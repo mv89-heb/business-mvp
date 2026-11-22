@@ -5,6 +5,7 @@ import os
 from pathlib import Path
 from urllib.parse import quote
 
+from business_app.export_starter import _is_excluded_export_name
 from .http import JsonApiClient, ProviderConfigurationError, ProviderError, ProviderHTTPError, ProviderOperationUnknown
 
 
@@ -66,25 +67,26 @@ class GitHubProvider:
     def publish_directory(self, owner, name, directory, *, branch="main",
                           commit_message="Publish clean Business App Starter"):
         """Publish a verified clean export using Git Data API; never uploads local secrets."""
-        root = Path(directory).expanduser().resolve()
+        supplied_root = Path(directory).expanduser()
+        if supplied_root.is_symlink():
+            raise ProviderError("Starter export root is a symbolic link; refusing to publish")
+        root = supplied_root.resolve()
         if not root.is_dir():
             raise ProviderConfigurationError("Starter export directory does not exist")
 
-        excluded_parts = {".git", ".venv", "__pycache__", ".pytest_cache", ".provisioning-state"}
+        excluded_parts = {".git", ".venv", "venv", "__pycache__", ".pytest_cache", "node_modules", ".DS_Store"}
         files = []
         for path in sorted(root.rglob("*")):
-            if not path.is_file():
-                continue
             if path.is_symlink():
                 raise ProviderError("Starter export contains a symbolic link; refusing to publish")
             relative = path.relative_to(root)
             if any(part in excluded_parts for part in relative.parts):
                 continue
-            filename = path.name.lower()
-            if filename == ".env" or (filename.startswith(".env.") and filename != ".env.example"):
-                raise ProviderError("Starter export contains a non-example environment file")
-            if path.suffix.lower() in {".pem", ".key", ".p12", ".pfx", ".sqlite", ".db", ".log"}:
-                raise ProviderError("Starter export contains a credential, database, or runtime file")
+            unsafe_parts = [part for part in relative.parts if _is_excluded_export_name(part)]
+            if unsafe_parts:
+                raise ProviderError("Starter export contains a secret, provisioning artifact, or customer runtime path")
+            if not path.is_file():
+                continue
             data = path.read_bytes()
             if len(data) > 20 * 1024 * 1024:
                 raise ProviderError("Starter export contains a file larger than the 20 MB publishing limit")
