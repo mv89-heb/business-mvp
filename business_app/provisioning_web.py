@@ -315,6 +315,35 @@ def create_provisioning_app(test_config=None):
         )
 
 
+    @app.post("/storage/check")
+    @developer_required
+    def storage_check():
+        form_values = _read_form_values(request.form)
+        try:
+            from business_app.provisioning.workflow import WorkflowStateStore
+            WorkflowStateStore().check_round_trip()
+            result = {
+                "success": True,
+                "message": "בדיקת Neon הצליחה: נשמרה רשומה זמנית, נטענה מחדש ונמחקה.",
+            }
+            _audit_event(app, "storage_round_trip_check", status="success")
+        except Exception:
+            result = {
+                "success": False,
+                "message": "בדיקת השמירה נכשלה. לא נחשפו פרטי חיבור או נתוני אימות.",
+            }
+            _audit_event(app, "storage_round_trip_check", status="failed", reason="storage_check_failed")
+        return render_template(
+            "provisioning_wizard.html",
+            login_required=False,
+            categories=BUSINESS_CATEGORIES,
+            modules=SUPPORTED_MODULES,
+            form_values=form_values,
+            storage_check_result=result,
+            connection_results=None,
+        )
+
+
     @app.post("/preflight")
     @developer_required
     def preflight_provisioning():
