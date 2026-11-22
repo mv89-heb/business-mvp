@@ -145,6 +145,7 @@ def test_lead_webhook_is_optional_and_sends_saved_lead(monkeypatch, client):
     captured = {}
     response = MagicMock()
     response.status = 202
+    response.read.return_value = b'{"ok": true}'
     response.__enter__.return_value = response
 
     def fake_urlopen(request, timeout):
@@ -154,6 +155,7 @@ def test_lead_webhook_is_optional_and_sends_saved_lead(monkeypatch, client):
         return response
 
     monkeypatch.setenv("LEAD_WEBHOOK_URL", "https://automation.example.test/lead")
+    monkeypatch.setenv("LEAD_WEBHOOK_SECRET", "test-shared-secret")
     monkeypatch.setattr(app_module.urllib.request, "urlopen", fake_urlopen)
     response = client.post("/leads", data={
         "name": "לקוח webhook",
@@ -164,8 +166,9 @@ def test_lead_webhook_is_optional_and_sends_saved_lead(monkeypatch, client):
     assert response.status_code == 302
     assert response.location.startswith("/thanks?lead_id=")
     assert captured["url"] == "https://automation.example.test/lead"
-    assert captured["timeout"] == 3
+    assert captured["timeout"] == 8
     assert captured["body"]["event"] == "lead.created"
+    assert captured["body"]["token"] == "test-shared-secret"
     assert captured["body"]["lead"]["name"] == "לקוח webhook"
     assert captured["body"]["lead"]["service"] == "דק"
 
@@ -173,6 +176,7 @@ def test_lead_webhook_is_optional_and_sends_saved_lead(monkeypatch, client):
 def test_lead_is_saved_even_when_webhook_fails(monkeypatch, client):
     import app as app_module
     monkeypatch.setenv("LEAD_WEBHOOK_URL", "https://automation.example.test/lead")
+    monkeypatch.setenv("LEAD_WEBHOOK_SECRET", "test-shared-secret")
 
     def failed_urlopen(request, timeout):
         raise TimeoutError("simulated timeout")
@@ -191,3 +195,22 @@ def test_lead_is_saved_even_when_webhook_fails(monkeypatch, client):
             db.select(Lead).where(Lead.name == "לקוח ללא webhook")
         ).scalar_one()
         assert saved.service == "פרגולה"
+
+
+
+def test_webhook_is_not_called_without_shared_secret(monkeypatch, client):
+    import app as app_module
+    monkeypatch.setenv("LEAD_WEBHOOK_URL", "https://automation.example.test/lead")
+    monkeypatch.delenv("LEAD_WEBHOOK_SECRET", raising=False)
+
+    def unexpected_urlopen(request, timeout):
+        raise AssertionError("Webhook must not be called without a shared secret")
+
+    monkeypatch.setattr(app_module.urllib.request, "urlopen", unexpected_urlopen)
+    response = client.post("/leads", data={
+        "name": "לקוח ללא סוד",
+        "phone": "050-1234567",
+        "service": "דק",
+        "contact_consent": "on",
+    })
+    assert response.status_code == 302
