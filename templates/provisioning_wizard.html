@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>אשף הקמת עסקים | כלי מפתח</title>
+  <title>Business App Starter | Developer Studio</title>
   <style>
     :root{color-scheme:light;--ink:#172033;--muted:#657189;--line:#e4e9f0;--surface:#fff;--bg:#f4f6fa;--accent:#2457c5;--soft:#edf3ff;--danger:#a42a35}
     *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font-family:Arial,"Segoe UI",sans-serif;line-height:1.55}
@@ -18,7 +18,7 @@
     .actions{display:flex;gap:12px;align-items:center;margin-top:22px}.button{border:0;border-radius:9px;background:var(--accent);color:#fff;padding:12px 20px;font:inherit;font-weight:700;cursor:pointer}.button.secondary{background:#eef1f6;color:var(--ink)}
     .notice{padding:12px 14px;border-radius:9px;background:var(--soft);color:#23417b;margin:12px 0}.error{background:#fff0f1;color:var(--danger)}
     pre{direction:ltr;text-align:left;white-space:pre-wrap;overflow-wrap:anywhere;background:#101a2b;color:#e5edff;padding:18px;border-radius:10px;font-size:12px;max-height:540px;overflow:auto}
-    .top form{margin:0}.lock{max-width:440px;margin:8vh auto}.footer{font-size:12px;color:var(--muted);margin-top:20px}
+    .top form{margin:0}.lock{max-width:460px;margin:8vh auto}.security-mark{display:inline-flex;align-items:center;gap:8px;padding:6px 10px;border-radius:999px;background:#eaf3ed;color:#23633d;font-size:12px;font-weight:700}.security-dot{width:7px;height:7px;border-radius:50%;background:#269b59}.brandline{display:flex;align-items:center;gap:10px;margin-bottom:18px}.brand-icon{width:38px;height:38px;border-radius:11px;background:#172033;color:white;display:grid;place-items:center;font-weight:800}.login-copy{max-width:360px}.login-copy p{margin:8px 0 22px}.footer{font-size:12px;color:var(--muted);margin-top:20px}
     @media(max-width:700px){.grid{grid-template-columns:1fr}.choices{grid-template-columns:1fr}.panel{padding:18px}.title{font-size:23px}.top{align-items:flex-start}}
   </style>
 </head>
@@ -26,7 +26,7 @@
   <main class="shell">
     {% if login_required %}
       <section class="panel lock">
-        <div class="eyebrow">DEVELOPER ONLY</div>
+        <div class="brandline"><div class="brand-icon">BA</div><div><div class="eyebrow">BUSINESS APP STARTER</div><strong>Developer Studio</strong></div></div><div class="security-mark"><span class="security-dot"></span>{% if hosted_mode %}חיבור מאובטח · אימות דו־שלבי{% else %}גישה פרטית למפתח{% endif %}</div>
         <h1 class="title">כניסה לכלי המפתח</h1>
         <p class="subtitle">האשף פועל מקומית במחשב המפתח ואינו חלק ממערכת הלקוחות.</p>
         {% with messages = get_flashed_messages(with_categories=true) %}
@@ -34,13 +34,13 @@
         {% endwith %}
         <form method="post" action="{{ url_for('login') }}">
           <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
-          <div class="field"><label for="password">סיסמת גישה</label><input id="password" name="password" type="password" required autocomplete="current-password"></div>
+          <div class="field"><label for="password">סיסמת גישה</label><input id="password" name="password" type="password" required autocomplete="current-password"></div>\n          {% if requires_otp %}<div class="field" style="margin-top:14px"><label for="otp">קוד אימות (Authenticator)</label><input id="otp" name="otp" inputmode="numeric" pattern="[0-9]{6}" minlength="6" maxlength="6" required autocomplete="one-time-code" placeholder="6 ספרות"></div>{% endif %}
           <div class="actions"><button class="button" type="submit">כניסה לאשף</button></div>
         </form>
       </section>
     {% else %}
       <header class="top">
-        <div><div class="eyebrow">DEVELOPER WORKSPACE · LOCAL ONLY</div><h1 class="title">אשף הקמת עסק חדש</h1><p class="subtitle">תכנון תשתית מבודדת וקביעת מודולים לפני הקמה</p></div>
+        <div><div class="eyebrow">BUSINESS APP STARTER · DEVELOPER STUDIO</div><h1 class="title">סביבת פיתוח והקמת עסקים</h1><p class="subtitle">מקום אחד לתכנון, בדיקה והקמה של אתרים ומערכות עצמאיות</p></div>
         <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button secondary" type="submit">יציאה</button></form>
       </header>
       <section class="panel">
@@ -158,7 +158,7 @@
           <pre>{{ execution_result|tojson(indent=2) }}</pre>
         </section>
       {% endif %}
-      <p class="footer">הכלי אינו משולב ב־app.py ואינו נחשף ללקוחות. הפעל אותו רק מקומית ב־127.0.0.1.</p>
+      <p class="footer">{% if hosted_mode %}סביבת מפתח פרטית. כל פרויקט לקוח נוצר בנפרד עם Repository, מסד נתונים ושירות אירוח עצמאיים.{% else %}הפעלה מקומית בלבד ב־127.0.0.1. סביבת הפיתוח אינה חלק ממערכת הלקוחות.{% endif %}</p>
     {% endif %}
   </main>
 </body>
