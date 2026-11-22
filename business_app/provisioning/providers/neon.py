@@ -27,10 +27,10 @@ class NeonProvider:
             if isinstance(response, list):
                 projects.extend(response)
                 break
+            if response.get("unavailable_project_ids"):
+                raise ProviderError("Neon could not verify every project; refusing duplicate-sensitive provisioning")
             page_projects = response.get("projects", [])
             projects.extend(page_projects)
-            if len(page_projects) < 400:
-                break
             next_cursor = (response.get("pagination") or {}).get("cursor")
             if not next_cursor:
                 break
