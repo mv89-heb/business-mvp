@@ -208,6 +208,8 @@ def test_github_command_workflow_is_owner_only_and_uses_oidc():
     assert "id-token: write" in workflow
     assert "core.getIDToken('business-studio')" in workflow
     assert "business-developer-studio.onrender.com/internal/github/commands" in workflow
+    assert "business-developer-studio.onrender.com/internal/github/command-public-key" in workflow
+    assert "startsWith(github.event.issue.title, '[Business Studio Key]')" in workflow
 
 def test_render_public_command_key_endpoint_is_public_and_returns_key_id():
     from flask import Flask
