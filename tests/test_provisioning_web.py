@@ -505,9 +505,10 @@ def test_remote_login_accepts_a_valid_csrf_token_with_seconds_time_limit():
             "password": config["PROVISIONING_PASSWORD"],
             "csrf_token": token.group(1),
         },
+        headers={"Referer": "https://wizard.example.test/login"},
         base_url="https://wizard.example.test",
     )
-    assert response.status_code == 302
+    assert response.status_code == 302, response.get_data(as_text=True)
     assert response.headers["Location"].endswith("/wizard")
 
 
