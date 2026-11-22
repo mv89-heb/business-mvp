@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import secrets
 import tempfile
 import time
@@ -31,6 +32,10 @@ class WorkflowStateStore:
     def __init__(self, root=None):
         self.root = Path(root or Path.home() / ".business-app-provisioner" / "runs").expanduser()
         self.root.mkdir(parents=True, exist_ok=True)
+        try:
+            os.chmod(self.root, 0o700)
+        except OSError:
+            pass
 
     def path_for(self, workflow_id):
         if not workflow_id or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in workflow_id):
@@ -56,11 +61,17 @@ class WorkflowStateStore:
             "updated_at": _utc_now(),
             "error": state.get("error"),
         }
-        # A defensive deny-list prevents future changes from persisting common secret fields.
+        # Validate the complete persisted payload, not just a few known field names.
         serialized = json.dumps(safe_state, ensure_ascii=False, indent=2) + "\n"
-        forbidden = ("DATABASE_URL", "ADMIN_PASSWORD", "SECRET_KEY", "NEON_API_KEY", "GITHUB_TOKEN", "RENDER_API_KEY")
-        if any(marker in serialized for marker in forbidden):
+        forbidden_markers = (
+            "DATABASE_URL", "ADMIN_PASSWORD", "SECRET_KEY", "NEON_API_KEY",
+            "GITHUB_TOKEN", "RENDER_API_KEY", "AUTHORIZATION", "PRIVATE_KEY",
+            "CONNECTION_URI", "API_TOKEN",
+        )
+        if any(marker in serialized.upper() for marker in forbidden_markers):
             raise ValueError("Refusing to persist provisioning state containing a secret marker")
+        if re.search(r"(?i)(?:postgres(?:ql)?://|bearer\s+|gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+|(?:pbkdf2|scrypt):)", serialized):
+            raise ValueError("Refusing to persist provisioning state containing a credential or connection string")
         handle, temp_name = tempfile.mkstemp(prefix=f".{workflow_id}-", suffix=".tmp", dir=self.root)
         try:
             with os.fdopen(handle, "w", encoding="utf-8") as stream:
@@ -213,7 +224,7 @@ class ProvisioningWorkflow:
             database_uri = self.neon.get_connection_uri(project_id)
             if not isinstance(database_uri, str) or not database_uri.startswith(("postgres://", "postgresql://")):
                 raise ProviderError("Neon returned an invalid PostgreSQL connection URI")
-            record("neon_connection", "completed", {"connection_uri": "received; not persisted"})
+            record("neon_connection", "completed", {"database_connection": "received; not persisted"})
 
             record("render_service", "running")
             render_env = {

@@ -1,3 +1,4 @@
+import os
 import json
 
 import pytest
@@ -172,3 +173,57 @@ def test_workflow_rejects_short_admin_password_before_provider_calls(tmp_path, m
             neon_free_tier_verified=True,
         )
     assert github.published is False
+
+
+@pytest.mark.parametrize(
+    "sensitive_details",
+    [
+        {"ADMIN_PASSWORD_HASH": "pbkdf2:sha256:fake"},
+        {"render_env": {"DATABASE_URL": "postgresql://user:secret@db.example/app"}},
+        {"debug": "Authorization: Bearer ghp_exampletoken"},
+        {"credential": "scrypt:32768:8:1$salty$hash"},
+    ],
+)
+def test_state_store_rejects_credentials_even_inside_nested_history(tmp_path, sensitive_details):
+    store = WorkflowStateStore(tmp_path / "private-state")
+    state = {
+        "plan_id": "plan-safe",
+        "business_slug": "safe-business",
+        "status": "running",
+        "step": "test",
+        "resources": {},
+        "history": [{"step": "test", "details": sensitive_details}],
+        "error": None,
+    }
+
+    with pytest.raises(ValueError, match="Refusing to persist provisioning state"):
+        store.save("plan-safe", state)
+
+    assert not (tmp_path / "private-state" / "plan-safe.json").exists()
+
+
+def test_state_store_creates_private_directory_and_private_state_file(tmp_path):
+    store = WorkflowStateStore(tmp_path / "private-state")
+    path = store.save(
+        "plan-safe",
+        {
+            "plan_id": "plan-safe",
+            "business_slug": "safe-business",
+            "status": "completed",
+            "step": "completed",
+            "resources": {"github": {"repository": "owner/safe-business"}},
+            "history": [],
+            "error": None,
+        },
+    )
+
+    assert path.exists()
+    if os.name == "posix":
+        assert (tmp_path / "private-state").stat().st_mode & 0o777 == 0o700
+        assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_state_store_rejects_path_traversal_workflow_ids(tmp_path):
+    store = WorkflowStateStore(tmp_path / "state")
+    with pytest.raises(ValueError, match="Invalid workflow identifier"):
+        store.save("../outside", {"status": "failed"})
