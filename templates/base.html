@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Heebo:wght@400;500;600;700;800&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/app.css') }}">
-</head>
+<script defer src="{{ url_for('static', filename='js/app.js') }}"></script></head>
 <body>
 <header class="site-header"><a class="brand" href="/">אלי כהן <span>בניה ועץ</span></a><a class="header-phone" href="tel:0507208386">050-720-8386</a></header>
 <main>{% with messages = get_flashed_messages(with_categories=true) %}{% if messages %}<div class="flash-wrap">{% for category, message in messages %}<p class="flash {{ category }}">{{ message }}</p>{% endfor %}</div>{% endif %}{% endwith %}{% block content %}{% endblock %}</main>
