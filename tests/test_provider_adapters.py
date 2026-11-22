@@ -315,3 +315,13 @@ def test_github_git_blob_hash_uses_git_object_header():
     from business_app.provisioning.providers.github import GitHubProvider
 
     assert GitHubProvider._git_blob_sha(b"hello\n") == "ce013625030ba8dba906f756967f9e9ca394464a"
+
+
+def test_render_fetch_service_returns_current_public_url():
+    opener = FakeOpener([
+        {"service": {"id": "srv-1", "name": "app",
+                     "serviceDetails": {"url": "https://app.onrender.com"}}}
+    ])
+    service = RenderProvider("token", workspace_id="tea-1", opener=opener).get_service("srv-1")
+    assert service["serviceDetails"]["url"] == "https://app.onrender.com"
+    assert opener.requests[0][0].full_url.endswith("/services/srv-1")
