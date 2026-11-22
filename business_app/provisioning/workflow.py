@@ -269,15 +269,11 @@ class ProvisioningWorkflow:
 
         try:
             record("preflight", "running")
-            connections = {
-                "github": self.github.check_connection(),
-                "neon": self.neon.check_connection(),
-                "render": self.render.check_connection(),
-            }
+            preflight_report = self.preflight(plan, github_owner=github_owner)
             record("preflight", "completed", {
-                "github_account": connections["github"].get("account"),
-                "neon_visible_projects": connections["neon"].get("visible_projects"),
-                "render_workspace_selected": connections["render"].get("workspace_selected"),
+                "read_only": preflight_report["read_only"],
+                "writes_performed": preflight_report["writes_performed"],
+                "resources": preflight_report["resources"],
             })
 
             record("starter_export", "running")
