@@ -59,7 +59,7 @@ try {
 py -m business_app.provisioning_web
 ```
 
-פתח בדפדפן: `http://127.0.0.1:8765`. השרת מאזין ל־localhost בלבד; אין לשנות את ה־host ל־`0.0.0.0` ואין לחשוף את האשף לרשת או ללקוחות. האפליקציה עצמה דוחה גם בקשות שמגיעות מכתובת IP שאינה loopback או עם Host שאינו localhost, כך שהגבלת הגישה אינה נשענת רק על כתובת ההאזנה. נדרשים מפתח Session באורך 32 תווים לפחות וסיסמת מפתח באורך 16 תווים לפחות. מסך ההתחברות מוגבל לחמישה ניסיונות בדקה; חריגה מחזירה HTTP 429. כל תגובה מקבלת Security Headers ו־Cache-Control: no-store. אירועי כניסה, בדיקות חיבור, Preflight והקמה נרשמים בקובץ Audit מקומי מצומצם תחת `.business-app-provisioner/audit.jsonl`, ללא סיסמאות, מפתחות או פרטי ליד. זהו רישום תפעולי מקומי best-effort ולא יומן חסין שינוי.
+פתח בדפדפן: `http://127.0.0.1:8765`. במצב מקומי השרת מאזין ל־localhost בלבד ודוחה בקשות שאינן loopback. אין לשנות את ה־host ל־`0.0.0.0`. במצב המקומי נדרשים מפתח Session באורך 32 תווים לפחות וסיסמת מפתח באורך 16 תווים לפחות. מסך ההתחברות מוגבל לחמישה ניסיונות בדקה. אירועי כניסה, בדיקות חיבור, Preflight והקמה נרשמים בקובץ Audit מצומצם ללא סיסמאות או מפתחות.
 
 כדי לבדוק חיבורי ספקים ולהפעיל הקמה מתוך הממשק, הגדר באותה חלונית PowerShell גם את משתני הסביבה `GITHUB_TOKEN`, `GITHUB_OWNER`, `NEON_API_KEY`, `RENDER_API_KEY`, `RENDER_WORKSPACE_ID` ו־`NEON_ORG_ID` (חובה). אין להקליד מפתחות API בשדות הטופס או לשמור אותם בקובצי הפרויקט.
 
@@ -240,3 +240,24 @@ py -m business_app.provisioning.execute --plan .\\work\\test-business-plan.json
 - בסיום בדיקות הקבלה, אם אין צורך להשאיר את סביבת הבדיקה, מחק ידנית ורק לאחר אימות בעלות את שירות Render, פרויקט Neon וה־Repository הייעודיים לבדיקה. ודא תחילה שאין בהם מידע שצריך לשמור.
 - סגור את חלון PowerShell שבו הוגדרו מפתחות ה־API; משתני הסביבה הוגדרו ל־Process בלבד ואינם אמורים להישמר מעבר לתהליך.
 - אין לבצע בדיקת הקמה ראשונה על Repository, Neon project או Render service של לקוח אמיתי.
+
+
+## פריסת Developer Studio ב־Render — מצב גישה מרחוק
+
+האשף רץ כתהליך נפרד מהאפליקציה העסקית. יש ליצור Web Service ייעודי שמחובר למאגר הזה ולענף `main`, עם הפקודות:
+
+- Build: `pip install -r requirements.txt`
+- Start: `gunicorn --workers 1 --threads 4 --timeout 120 provisioning_wsgi:app`
+- Health check: `/healthz`
+- Runtime: Python 3.11, Frankfurt, Free (רק אם המסלול זמין בחשבון).
+
+משתני סביבה נדרשים ב־Render:
+- `PROVISIONING_PUBLIC_ACCESS=true`
+- `PROVISIONING_ALLOWED_HOSTS=business-mvp-iqem.onrender.com` (hostname מדויק בלבד, בלי scheme או path)
+- `PROVISIONING_SESSION_SECRET` — סוד אקראי חזק באורך 32 תווים לפחות.
+- `PROVISIONING_PASSWORD` — סיסמה אקראית ייעודית באורך 32 תווים לפחות; לא סיסמה שמשמשת במקום אחר.
+- `PROVISIONING_RATE_LIMIT_STORAGE_URI=memory://` כברירת מחדל.
+
+במצב זה האפליקציה אינה בודקת loopback, אלא דורשת Host מדויק, HTTPS, session cookie מאובטח, CSRF פעיל, HSTS והגבלת ניסיונות. יש להשאיר worker יחיד כדי שמגבלת הניסיונות בזיכרון לא תתפצל בין תהליכים. אין לפרוס את האשף דרך `wsgi:app`, שמפעיל את אפליקציית הלידים. אין להוסיף סודות GitHub/Neon/Render עד שהשירות מוגן ונבדק; לאחר מכן יש להוסיף רק מפתחות עם ההרשאות המזעריות הנדרשות.
+
+**הגבלת אבטחה:** סיסמה חזקה והגבלת ניסיונות מגנות על מסך הכניסה, אך אינן מספקות MFA או Zero Trust. לפני חיבור מפתחות ענן בעלי הרשאות כתיבה, מומלץ להוסיף Cloudflare Access או VPN, ולהפעיל התראות על ניסיונות כניסה. אין לשתף את כתובת האשף או את הסיסמה.

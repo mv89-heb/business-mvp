@@ -16,6 +16,7 @@ from flask import Flask, abort, flash, redirect, render_template, request, sessi
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from business_app.provisioning.providers import GitHubProvider, NeonProvider, RenderProvider
 from business_app.provisioning.providers.http import ProviderError
@@ -117,28 +118,57 @@ def _plan_fingerprint(plan):
 
 def create_provisioning_app(test_config=None):
     config = test_config or {}
+    remote_access = (
+        str(os.getenv("PROVISIONING_PUBLIC_ACCESS", "")).strip().lower() == "true"
+        or config.get("PROVISIONING_PUBLIC_ACCESS") is True
+    )
     session_secret = os.getenv("PROVISIONING_SESSION_SECRET", "").strip() or config.get("SECRET_KEY")
     access_password = os.getenv("PROVISIONING_PASSWORD", "") or config.get("PROVISIONING_PASSWORD")
+    allowed_hosts_value = os.getenv("PROVISIONING_ALLOWED_HOSTS", "").strip()
+    allowed_hosts = (
+        [host.strip().lower() for host in allowed_hosts_value.split(",") if host.strip()]
+        if allowed_hosts_value else config.get("PROVISIONING_ALLOWED_HOSTS", [])
+    )
+    minimum_password_length = 32 if remote_access else 16
     if not session_secret or len(session_secret) < 32:
         raise RuntimeError("PROVISIONING_SESSION_SECRET must contain at least 32 characters.")
-    if not access_password or len(access_password) < 16:
-        raise RuntimeError("PROVISIONING_PASSWORD must contain at least 16 characters.")
+    if not access_password or len(access_password) < minimum_password_length:
+        raise RuntimeError(
+            f"PROVISIONING_PASSWORD must contain at least {minimum_password_length} characters."
+        )
+    if remote_access and not allowed_hosts:
+        raise RuntimeError("PROVISIONING_ALLOWED_HOSTS must list the exact public host.")
 
     app = Flask(__name__, template_folder="../templates")
     app.config.update(
         SECRET_KEY=session_secret,
         PROVISIONING_PASSWORD=access_password,
+        PROVISIONING_PUBLIC_ACCESS=remote_access,
+        PROVISIONING_ALLOWED_HOSTS=allowed_hosts,
         SESSION_COOKIE_HTTPONLY=True,
         SESSION_COOKIE_SAMESITE="Strict",
-        SESSION_COOKIE_SECURE=False,
+        SESSION_COOKIE_SECURE=remote_access,
         PERMANENT_SESSION_LIFETIME=timedelta(minutes=20),
         WTF_CSRF_TIME_LIMIT=timedelta(hours=2),
     )
     if test_config:
         app.config.update(test_config)
+    if remote_access:
+        # Render terminates TLS at its edge and forwards the original scheme.
+        # Trust only the single platform proxy hop; never trust forwarded host.
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
     csrf.init_app(app)
-    limiter = Limiter(key_func=get_remote_address, default_limits=[], storage_uri="memory://")
+    storage_uri = (
+        os.getenv("PROVISIONING_RATE_LIMIT_STORAGE_URI", "").strip()
+        or config.get("PROVISIONING_RATE_LIMIT_STORAGE_URI")
+        or "memory://"
+    )
+    limiter = Limiter(key_func=get_remote_address, default_limits=[], storage_uri=storage_uri)
     limiter.init_app(app)
+
+    @app.context_processor
+    def inject_deployment_context():
+        return {"remote_access": app.config["PROVISIONING_PUBLIC_ACCESS"]}
 
     @app.after_request
     def add_security_headers(response):
@@ -151,18 +181,31 @@ def create_provisioning_app(test_config=None):
             "frame-ancestors 'none'; object-src 'none'; style-src 'self' 'unsafe-inline'"
         )
         response.headers["Cache-Control"] = "no-store"
+        if app.config["PROVISIONING_PUBLIC_ACCESS"]:
+            response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
         return response
 
+    @app.get("/healthz")
+    def healthz():
+        # Deliberately disclose no configuration, provider state, or secrets.
+        return {"status": "ok"}, 200
+
     @app.before_request
-    def enforce_loopback_only():
-        # Host and peer checks are enforced by the app as well as by the
-        # localhost bind in main(), so importing this factory into a public
-        # WSGI server cannot accidentally expose the developer control plane.
+    def enforce_access_boundary():
+        host = (urlsplit(f"//{request.host}").hostname or "").lower()
+        if app.config["PROVISIONING_PUBLIC_ACCESS"]:
+            if host not in set(app.config["PROVISIONING_ALLOWED_HOSTS"]):
+                abort(404)
+            if request.endpoint == "healthz":
+                return
+            if not request.is_secure:
+                abort(404)
+            return
+        # Local mode remains loopback-only even when imported by a WSGI server.
         try:
             peer = ipaddress.ip_address(request.remote_addr or "")
         except ValueError:
             abort(404)
-        host = (urlsplit(f"//{request.host}").hostname or "").lower()
         if not peer.is_loopback or host not in {"localhost", "127.0.0.1", "::1"}:
             abort(404)
 
@@ -182,6 +225,7 @@ def create_provisioning_app(test_config=None):
 
     @app.route("/login", methods=["GET", "POST"])
     @limiter.limit("5 per minute", methods=["POST"])
+    @limiter.limit("20 per hour", methods=["POST"])
     def login():
         if request.method == "POST":
             supplied = request.form.get("password", "")

@@ -28,7 +28,7 @@
       <section class="panel lock">
         <div class="eyebrow">DEVELOPER ONLY</div>
         <h1 class="title">כניסה לכלי המפתח</h1>
-        <p class="subtitle">האשף פועל מקומית במחשב המפתח ואינו חלק ממערכת הלקוחות.</p>
+        <p class="subtitle">{% if remote_access %}גישה פרטית למפתח בלבד. אין למסור את הסיסמה או לשתף את הקישור.{% else %}האשף פועל מקומית במחשב המפתח ואינו חלק ממערכת הלקוחות.{% endif %}</p>
         {% with messages = get_flashed_messages(with_categories=true) %}
           {% for category, message in messages %}<div class="notice error">{{ message }}</div>{% endfor %}
         {% endwith %}
@@ -40,7 +40,7 @@
       </section>
     {% else %}
       <header class="top">
-        <div><div class="eyebrow">DEVELOPER WORKSPACE · LOCAL ONLY</div><h1 class="title">אשף הקמת עסק חדש</h1><p class="subtitle">תכנון תשתית מבודדת וקביעת מודולים לפני הקמה</p></div>
+        <div><div class="eyebrow">DEVELOPER WORKSPACE · {% if remote_access %}SECURE REMOTE ACCESS{% else %}LOCAL ONLY{% endif %}</div><h1 class="title">אשף הקמת עסק חדש</h1><p class="subtitle">תכנון תשתית מבודדת וקביעת מודולים לפני הקמה</p></div>
         <form method="post" action="{{ url_for('logout') }}"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><button class="button secondary" type="submit">יציאה</button></form>
       </header>
       <section class="panel">
@@ -180,7 +180,7 @@
           <pre>{{ execution_result|tojson(indent=2) }}</pre>
         </section>
       {% endif %}
-      <p class="footer">הכלי אינו משולב ב־app.py ואינו נחשף ללקוחות. הפעל אותו רק מקומית ב־127.0.0.1.</p>
+      <p class="footer">{% if remote_access %}סביבת מפתח פרטית. אין להעביר את פרטי הגישה או להשתמש באשף ממכשיר ציבורי.{% else %}הכלי אינו משולב ב־app.py ואינו נחשף ללקוחות. הפעל אותו רק מקומית ב־127.0.0.1.{% endif %}</p>
     {% endif %}
   </main>
 </body>

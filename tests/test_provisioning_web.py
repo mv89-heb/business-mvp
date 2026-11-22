@@ -412,3 +412,89 @@ def test_execution_preserves_brand_profile_after_preflight(monkeypatch):
     assert captured["plan"]["business"]["contact"]["whatsapp_url"] == "https://wa.me/972501234567"
     assert captured["plan"]["business"]["branding"]["font_family"] == "Rubik"
     assert captured["plan"]["business"]["services"] == ["פרגולות", "דקים"]
+
+
+
+def test_remote_deployment_requires_exact_host_https_and_secure_cookie():
+    config = {
+        "TESTING": True,
+        "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
+        "PROVISIONING_PASSWORD": "a-remote-password-with-at-least-32-characters",
+        "PROVISIONING_PUBLIC_ACCESS": True,
+        "PROVISIONING_ALLOWED_HOSTS": ["wizard.example.test"],
+        "WTF_CSRF_ENABLED": False,
+    }
+    app = create_provisioning_app(config)
+    client = app.test_client()
+    response = client.get("/login", base_url="https://wizard.example.test")
+    assert response.status_code == 200
+    login = client.post(
+        "/login",
+        data={"password": config["PROVISIONING_PASSWORD"]},
+        base_url="https://wizard.example.test",
+    )
+    cookie = login.headers.get("Set-Cookie", "")
+    assert login.status_code == 302
+    assert "Secure" in cookie
+    assert "HttpOnly" in cookie
+    assert "SameSite=Strict" in cookie
+    assert login.headers["Strict-Transport-Security"].startswith("max-age=31536000")
+
+
+def test_remote_deployment_rejects_unapproved_host_and_plain_http():
+    config = {
+        "TESTING": True,
+        "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
+        "PROVISIONING_PASSWORD": "a-remote-password-with-at-least-32-characters",
+        "PROVISIONING_PUBLIC_ACCESS": True,
+        "PROVISIONING_ALLOWED_HOSTS": ["wizard.example.test"],
+        "WTF_CSRF_ENABLED": False,
+    }
+    client = create_provisioning_app(config).test_client()
+    assert client.get("/login", base_url="https://attacker.example").status_code == 404
+    assert client.get("/login", base_url="http://wizard.example.test").status_code == 404
+
+
+def test_remote_deployment_requires_32_character_password_and_allowed_host():
+    import pytest
+
+    base_config = {
+        "TESTING": True,
+        "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
+        "PROVISIONING_PASSWORD": "too-short-password",
+        "PROVISIONING_PUBLIC_ACCESS": True,
+        "PROVISIONING_ALLOWED_HOSTS": ["wizard.example.test"],
+    }
+    with pytest.raises(RuntimeError, match="at least 32 characters"):
+        create_provisioning_app(base_config)
+    base_config["PROVISIONING_PASSWORD"] = "a-remote-password-with-at-least-32-characters"
+    base_config["PROVISIONING_ALLOWED_HOSTS"] = []
+    with pytest.raises(RuntimeError, match="exact public host"):
+        create_provisioning_app(base_config)
+
+
+def test_healthz_is_public_and_does_not_disclose_configuration():
+    client = make_client()
+    response = client.get("/healthz")
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ok"}
+
+
+
+def test_remote_deployment_keeps_csrf_protection_enabled_by_default():
+    config = {
+        "TESTING": True,
+        "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
+        "PROVISIONING_PASSWORD": "a-remote-password-with-at-least-32-characters",
+        "PROVISIONING_PUBLIC_ACCESS": True,
+        "PROVISIONING_ALLOWED_HOSTS": ["wizard.example.test"],
+    }
+    client = create_provisioning_app(config).test_client()
+    page = client.get("/login", base_url="https://wizard.example.test")
+    assert page.status_code == 200
+    rejected = client.post(
+        "/login",
+        data={"password": config["PROVISIONING_PASSWORD"]},
+        base_url="https://wizard.example.test",
+    )
+    assert rejected.status_code == 400
