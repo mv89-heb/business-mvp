@@ -31,6 +31,7 @@ class Lead(db.Model):
     estimate_max = db.Column(db.Integer)
     status = db.Column(db.String(24), nullable=False, default="חדש")
     preset = db.Column(db.String(40), nullable=False, default="contractor")
+    consent_at = db.Column(db.DateTime(timezone=True))
 
 
 class Setting(db.Model):
@@ -124,6 +125,9 @@ def create_app(test_config=None):
         if len(name) < 2 or not re.fullmatch(r"[+0-9()\-\s]{7,30}", phone):
             flash("נא לבדוק את השם ומספר הטלפון.", "error")
             return redirect(url_for("index") + "#contact")
+        if request.form.get("contact_consent") != "on":
+            flash("יש לאשר יצירת קשר כדי לשלוח את הפנייה.", "error")
+            return redirect(url_for("index") + "#contact")
         area_raw = request.form.get("area", "").strip()
         try:
             area = int(area_raw) if area_raw else None
@@ -139,7 +143,8 @@ def create_app(test_config=None):
                     budget=request.form.get("budget", "").strip()[:60],
                     details=request.form.get("details", "").strip()[:4000],
                     estimate_min=low, estimate_max=high,
-                    preset=request.form.get("preset", "contractor")[:40])
+                    preset=request.form.get("preset", "contractor")[:40],
+                    consent_at=datetime.now(timezone.utc))
         db.session.add(lead)
         db.session.commit()
         app.logger.info("Lead %s stored successfully", lead.id)
@@ -198,5 +203,3 @@ def create_app(test_config=None):
 
     return app
 
-
-app = create_app()
