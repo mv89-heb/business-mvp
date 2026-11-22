@@ -43,7 +43,7 @@ Set-Location ..\new-business-app
 
 פתח את `config/business.json` ועדכן את שם העסק, מזהה העסק, פרטי קשר, תוכן, שירותים, מיתוג, שפה/כיווניות ומודולים פעילים. אין להכניס לקובץ הזה סיסמאות, מפתחות API או כתובות חיבור למסדי נתונים.
 
-בדוק את `render.yaml` ועדכן את `name` לשם ייחודי לשירות החדש. השאר את `DATABASE_URL` ואת `ADMIN_PASSWORD` כמשתנים שיסופקו באופן מאובטח ב־Render.
+בדוק את `render.yaml` ועדכן את `name` לשם ייחודי לשירות החדש. השאר את `DATABASE_URL` ואת `ADMIN_PASSWORD_HASH` כמשתנים שיסופקו באופן מאובטח ב־Render. אין להגדיר סיסמה גלויה במשתנה סביבה בפריסה.
 
 ---
 
@@ -129,12 +129,12 @@ git push -u origin main
 | `BUSINESS_CONFIG_PATH` | `config/business.json` |
 | `DATABASE_URL` | מחרוזת החיבור של פרויקט Neon החדש בלבד |
 | `SECRET_KEY` | מפתח אקראי חדש; אפשר להשתמש ב־`generateValue: true` ב־Blueprint |
-| `ADMIN_PASSWORD` | סיסמת מנהל חדשה וחזקה, להגדיר כ־Secret |
+| `ADMIN_PASSWORD_HASH` | Hash של סיסמת מנהל חדשה וחזקה, להגדיר כ־Secret; אין לשמור את הסיסמה הגלויה ב־Render |
 | `FLASK_ENV` | `production` |
 | `ESTIMATE_BASE_RATE` | `0` עד שבעל העסק מאשר תעריף אמיתי |
 | `ESTIMATE_RATE_PER_SQM` | `0` עד שבעל העסק מאשר תעריף אמיתי |
 
-אם מוגדר `LEAD_WEBHOOK_URL`, יש להגדיר גם `LEAD_WEBHOOK_SECRET` חדש ומתאים ולבצע את ההגדרה התואמת בצד המקבל. אין להעתיק כתובת Google Apps Script, מזהה Sheet או webhook מעסק אחר. אם אין צורך באינטגרציה, השאר אותה כבויה ואל תגדיר URL.
+כדי להפיק Hash בלי להציג את הסיסמה בשורת הפקודה, אפשר להריץ ב־PowerShell מתוך סביבת Python של הפרויקט: `python -c "from getpass import getpass; from werkzeug.security import generate_password_hash; print(generate_password_hash(getpass('Admin password: ')))"`. העתק ל־Render רק את פלט ה־Hash תחת `ADMIN_PASSWORD_HASH`.\n\nאם מוגדר `LEAD_WEBHOOK_URL`, יש להגדיר גם `LEAD_WEBHOOK_SECRET` חדש ומתאים ולבצע את ההגדרה התואמת בצד המקבל. אין להעתיק כתובת Google Apps Script, מזהה Sheet או webhook מעסק אחר. אם אין צורך באינטגרציה, השאר אותה כבויה ואל תגדיר URL.
 
 אין להוסיף סודות ל־`render.yaml` או ל־GitHub. השתמש במסך Environment של Render ובשדות Secret המתאימים.
 
@@ -151,7 +151,7 @@ py -3.11 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 $env:SECRET_KEY = "local-development-only-change-me"
-$env:ADMIN_PASSWORD = "local-development-only-password"
+$env:ADMIN_PASSWORD = "local-development-only-password"  # local development only; use ADMIN_PASSWORD_HASH in Render
 $env:DATABASE_URL = "sqlite:///local.db"
 python -m business_app.bootstrap --check-env
 python -m pytest -q
