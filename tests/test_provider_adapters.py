@@ -587,3 +587,31 @@ def test_github_merge_requires_expected_head_and_confirmed_success():
     assert json.loads(opener.requests[0][0].data) == {
         "merge_method": "squash", "sha": "head-sha"
     }
+
+
+
+def test_github_checks_accept_successful_check_runs_when_no_legacy_status_contexts_exist():
+    opener = FakeOpener([
+        {"state": "open", "head": {"sha": "head-sha"}},
+        {"check_runs": [
+            {"name": "test", "status": "completed", "conclusion": "success"},
+            {"name": "powershell-syntax", "status": "completed", "conclusion": "success"},
+        ]},
+        {"state": "pending", "statuses": [], "total_count": 0},
+    ])
+    result = GitHubProvider("token", opener=opener).get_pull_request_checks("owner", "repo", 12)
+    assert result["ready"] is True
+    assert result["reason"] == "checks_passed"
+
+
+def test_github_checks_still_wait_for_existing_pending_status_contexts():
+    opener = FakeOpener([
+        {"state": "open", "head": {"sha": "head-sha"}},
+        {"check_runs": [
+            {"name": "test", "status": "completed", "conclusion": "success"},
+        ]},
+        {"state": "pending", "statuses": [{"context": "external-ci", "state": "pending"}], "total_count": 1},
+    ])
+    result = GitHubProvider("token", opener=opener).get_pull_request_checks("owner", "repo", 12)
+    assert result["ready"] is False
+    assert result["reason"] == "checks_running"
