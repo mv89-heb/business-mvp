@@ -104,3 +104,10 @@ def extract_inbound_messages(payload: dict):
                     "ai_text": redact_for_ai(body),
                     "message_at": message_at,
                 }
+
+
+def send_message(*args, **kwargs):
+    """Outbound messaging remains deliberately blocked until explicit approval."""
+    raise RuntimeError(
+        "WhatsApp sending is not implemented or enabled. Obtain explicit business-owner authorization and official Cloud API credentials first."
+    )
