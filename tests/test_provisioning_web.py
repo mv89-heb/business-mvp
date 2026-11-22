@@ -578,3 +578,26 @@ def test_provisioning_wizard_has_four_validated_steps_and_serves_navigation_scri
     assert "validateCurrent" in script_text
     assert "reportValidity" in script_text
     assert "data-wizard-step" in script_text
+
+
+
+def test_provider_cards_reflect_connection_check_results(monkeypatch):
+    import business_app.provisioning_web as provisioning_web
+
+    class ConnectedProvider:
+        def check_connection(self):
+            return {"provider": "test", "status": "ok"}
+
+    monkeypatch.setattr(provisioning_web, "GitHubProvider", ConnectedProvider)
+    monkeypatch.setattr(provisioning_web, "NeonProvider", ConnectedProvider)
+    monkeypatch.setattr(provisioning_web, "RenderProvider", ConnectedProvider)
+
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.post("/connections/check")
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert "הבדיקה הושלמה" in page
+    assert page.count("מחובר") == 3
+    assert "לא נבדק" not in page
