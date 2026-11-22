@@ -104,7 +104,7 @@ def _normalize_contact_number(value: str, label: str) -> tuple[str, str]:
     display = value.strip()
     if not display:
         return "", ""
-    if len(display) > 30 or re.search(r"[^0-9+().\s-]", display):
+    if len(display) > 30 or re.search(r"[^0-9+().\s-]", display) or display.count("+") > 1 or ("+" in display and not display.startswith("+")):
         raise ProvisioningInputError(f"{label} contains unsupported characters")
     digits = re.sub(r"\D", "", display)
     if not 7 <= len(digits) <= 15:
