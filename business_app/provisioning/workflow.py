@@ -282,6 +282,20 @@ class ProvisioningWorkflow:
         slug = business.get("slug")
         if not isinstance(slug, str) or not slug:
             raise ProviderError("Provisioning plan is missing a business slug")
+        selected_modules = set((plan.get("application") or {}).get("modules") or [])
+        required_integration_secrets = set()
+        if "whatsapp_inbound" in selected_modules:
+            required_integration_secrets.update({"WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN"})
+        if "automation_webhooks" in selected_modules:
+            required_integration_secrets.add("AUTOMATION_WEBHOOK_SECRET")
+        missing_integration_secrets = sorted(
+            key for key in required_integration_secrets if not os.getenv(key, "").strip()
+        )
+        if missing_integration_secrets:
+            raise ProviderError(
+                "Selected integrations require local environment variables before provisioning: "
+                + ", ".join(missing_integration_secrets)
+            )
         if not github_owner:
             raise ProviderError("GITHUB_OWNER is required")
         if not getattr(self.render, "workspace_id", None):
@@ -398,6 +412,13 @@ class ProvisioningWorkflow:
                 "ADMIN_PASSWORD_HASH": generate_password_hash(admin_password),
                 "PYTHON_VERSION": "3.11.9",
             }
+            for secret_name in (
+                "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN",
+                "AUTOMATION_WEBHOOK_SECRET",
+            ):
+                secret_value = os.getenv(secret_name, "").strip()
+                if secret_value:
+                    render_env[secret_name] = secret_value
             repository_url = repository.get("html_url") or f"https://github.com/{github_owner}/{slug}"
             service_result = self.render.ensure_web_service(
                 name=slug,
