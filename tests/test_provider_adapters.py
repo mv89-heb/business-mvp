@@ -57,7 +57,7 @@ def test_github_creates_private_repo_only_when_missing():
 
 def test_github_reuses_existing_private_repo_without_post():
     opener = FakeOpener([{"id": 1, "private": True, "full_name": "mv89-heb/app"}])
-    result = GitHubProvider("token", opener=opener).ensure_private_repository("mv89-heb", "app")
+    result = GitHubProvider("token", opener=opener).ensure_private_repository("mv89-heb", "app", expected_repository_id=1)
     assert result["created"] is False
     assert len(opener.requests) == 1
 
@@ -84,7 +84,7 @@ def test_neon_creates_project_with_scale_to_zero_defaults():
 
 def test_neon_reuses_existing_project_and_does_not_create_duplicate():
     opener = FakeOpener([{"projects": [{"id": "neon-1", "name": "app", "region_id": "aws-eu-central-1"}]}])
-    result = NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
+    result = NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app", expected_project_id="neon-1")
     assert result["created"] is False
     assert len(opener.requests) == 1
 
@@ -133,7 +133,7 @@ def test_render_reuses_existing_service_without_post():
                      "type": "web_service", "branch": "main", "autoDeployTrigger": "checksPass", "serviceDetails": {"plan": "free", "region": "frankfurt"}}}
     ]])
     result = RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-        name="app", repository_url="https://github.com/a/b"
+        name="app", repository_url="https://github.com/a/b", expected_service_id="srv-1"
     )
     assert result["created"] is False
     assert len(opener.requests) == 1
@@ -219,7 +219,7 @@ def test_render_refuses_existing_paid_service_without_mutation():
     ])
     with pytest.raises(Exception, match="not on the Free plan"):
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-            name="app", repository_url="https://github.com/a/b"
+            name="app", repository_url="https://github.com/a/b", expected_service_id="srv-paid"
         )
     assert len(opener.requests) == 1
 
@@ -231,7 +231,7 @@ def test_render_refuses_existing_service_on_wrong_branch():
     ])
     with pytest.raises(Exception, match="different Git branch"):
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-            name="app", repository_url="https://github.com/a/b", branch="main"
+            name="app", repository_url="https://github.com/a/b", branch="main", expected_service_id="srv-1"
         )
 
 
@@ -355,7 +355,7 @@ def test_render_refuses_service_when_free_plan_cannot_be_verified():
     ])
     with pytest.raises(Exception, match="did not confirm the Free plan"):
         RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
-            name="app", repository_url="https://github.com/a/b"
+            name="app", repository_url="https://github.com/a/b", expected_service_id="srv-1"
         )
     assert len(opener.requests) == 3
 
@@ -490,3 +490,33 @@ def test_github_publish_rejects_symlinked_export_root(tmp_path):
         )
 
     assert opener.requests == []
+
+
+
+def test_github_provider_refuses_unregistered_existing_private_repository():
+    opener = FakeOpener([{"id": 1, "private": True, "full_name": "mv89-heb/app"}])
+    with pytest.raises(Exception, match="not registered"):
+        GitHubProvider("token", opener=opener).ensure_private_repository("mv89-heb", "app")
+    assert len(opener.requests) == 1
+
+
+def test_neon_provider_refuses_unregistered_existing_project():
+    opener = FakeOpener([{"projects": [{
+        "id": "neon-1", "name": "app", "region_id": "aws-eu-central-1", "org_id": "org-1"
+    }]}])
+    with pytest.raises(Exception, match="not registered"):
+        NeonProvider("token", org_id="org-1", opener=opener).ensure_project("app")
+    assert len(opener.requests) == 1
+
+
+def test_render_provider_refuses_unregistered_existing_service():
+    opener = FakeOpener([[
+        {"service": {"id": "srv-1", "name": "app", "repo": "https://github.com/a/b",
+                     "type": "web_service", "branch": "main", "autoDeployTrigger": "checksPass",
+                     "serviceDetails": {"plan": "free", "region": "frankfurt"}}}
+    ]])
+    with pytest.raises(Exception, match="not registered"):
+        RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
+            name="app", repository_url="https://github.com/a/b"
+        )
+    assert len(opener.requests) == 1
