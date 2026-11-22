@@ -12,3 +12,4 @@ instance/
 uploads/
 logs/
 .DS_Store
+work/
