@@ -14,7 +14,7 @@
     a{color:#17665a;text-decoration:none;font-weight:600}.actions{display:flex;gap:10px;align-items:center}
     button{font:inherit;border:0;border-radius:10px;padding:10px 15px;cursor:pointer;font-weight:700}
     .primary{background:#173b35;color:white}.secondary{background:#e7eeeb;color:#24483f}.danger{background:#f8e8e5;color:#a03b30}
-    .stats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin-bottom:22px}
+    .stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:14px;margin-bottom:22px}
     .stat,.panel{background:#fff;border:1px solid #e4eae7;border-radius:16px;padding:20px;box-shadow:0 4px 18px #1c3d3210}
     .stat span{display:block;color:#75837e;font-size:13px}.stat strong{display:block;font-size:28px;margin-top:4px}
     .panel{margin-top:18px}.panel-head{display:flex;justify-content:space-between;align-items:center;gap:12px;margin-bottom:16px}
@@ -37,7 +37,12 @@
     <article class="stat"><span>עסקים ותבניות</span><strong id="business-count">—</strong></article>
     <article class="stat"><span>הצעות ממתינות לאישור</span><strong id="pending-count">—</strong></article>
     <article class="stat"><span>משימות פתוחות</span><strong id="task-count">—</strong></article>
+    <article class="stat"><span>פקודות GitHub</span><strong id="command-count">—</strong></article>
   </div>
+  <section class="panel">
+    <div class="panel-head"><div><h2>ערוץ ChatGPT ← GitHub ← Render</h2><p class="hint">פקודות מוצפנות, אימות GitHub OIDC, ביצוע ב-Render ותיעוד ב-Neon.</p></div><span class="pill">OIDC מאומת</span></div>
+    <div class="table-wrap"><table><thead><tr><th>מספר פקודה</th><th>פעולה</th><th>סטטוס</th><th>תוצאה</th><th>עדכון אחרון</th></tr></thead><tbody id="commands-body"><tr><td colspan="5" class="empty">טוען פקודות…</td></tr></tbody></table></div>
+  </section>
   <section class="panel">
     <div class="panel-head"><div><h2>הצעות עסק שממתינות לאישור</h2><p class="hint">אישור יוצר עסק פעיל ומכניס אירוע לתור Make. ללא הגדרות Webhook האירוע נשאר בתור.</p></div><span class="pill">Human in the loop</span></div>
     <div class="table-wrap"><table><thead><tr><th>עסק</th><th>תחום</th><th>תבנית מקור</th><th>נוצרה</th><th>סטטוס</th><th>פעולות</th></tr></thead><tbody id="proposals-body"><tr><td colspan="6" class="empty">טוען הצעות…</td></tr></tbody></table></div>
