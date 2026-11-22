@@ -2,8 +2,10 @@
 
 This application is deliberately separate from the customer-facing Flask app.
 """
+import hashlib
 import hmac
 import ipaddress
+import json
 import os
 from urllib.parse import urlsplit
 from datetime import timedelta
@@ -26,6 +28,17 @@ from business_app.provisioning import (
 )
 
 csrf = CSRFProtect()
+
+
+def _plan_fingerprint(plan):
+    """Bind approval to the exact business, module and infrastructure choices."""
+    relevant = {
+        "business": plan.get("business"),
+        "application": plan.get("application"),
+        "infrastructure": plan.get("infrastructure"),
+    }
+    payload = json.dumps(relevant, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
 
 
 def create_provisioning_app(test_config=None):
@@ -155,9 +168,9 @@ def create_provisioning_app(test_config=None):
             plan = build_provisioning_plan(**form_values)
             owner = os.getenv("GITHUB_OWNER", "").strip()
             report = ProvisioningWorkflow().preflight(plan, github_owner=owner)
-            session["preflight_plan_id"] = plan["plan_id"]
+            session["preflight_fingerprint"] = _plan_fingerprint(plan)
         except (ProvisioningInputError, ProviderError) as exc:
-            session.pop("preflight_plan_id", None)
+            session.pop("preflight_fingerprint", None)
             error = str(exc)
         except Exception:
             session.pop("preflight_plan_id", None)
@@ -188,7 +201,7 @@ def create_provisioning_app(test_config=None):
         error = None
         try:
             plan = build_provisioning_plan(**form_values)
-            if session.get("preflight_plan_id") != plan["plan_id"]:
+            if session.get("preflight_fingerprint") != _plan_fingerprint(plan):
                 raise ProviderError("יש להריץ Preflight מוצלח לתוכנית הנוכחית לפני ביצוע.")
             if request.form.get("confirm_zero_cost") != "yes":
                 raise ProviderError("לא התקבל אישור מפורש לכך שעלות Neon תהיה אפס.")
