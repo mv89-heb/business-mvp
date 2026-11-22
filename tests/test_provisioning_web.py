@@ -1,13 +1,18 @@
+import json
+
 from business_app.provisioning_web import create_provisioning_app
 
 
-def make_client():
-    app = create_provisioning_app({
+def make_client(audit_path=None):
+    config = {
         "TESTING": True,
         "SECRET_KEY": "test-session-secret-that-is-at-least-32-chars",
         "PROVISIONING_PASSWORD": "developer-test-password",
         "WTF_CSRF_ENABLED": False,
-    })
+    }
+    if audit_path is not None:
+        config["PROVISIONING_AUDIT_PATH"] = str(audit_path)
+    app = create_provisioning_app(config)
     return app.test_client()
 
 
@@ -308,3 +313,25 @@ def test_web_wizard_session_cookie_is_http_only_and_strict():
     assert "HttpOnly" in cookie
     assert "SameSite=Strict" in cookie
     assert "Secure" not in cookie  # Localhost HTTP is required by the local-only tool.
+
+
+def test_wizard_sets_security_headers_and_disables_caching():
+    client = make_client()
+    response = client.get("/login")
+    assert response.headers["X-Content-Type-Options"] == "nosniff"
+    assert response.headers["X-Frame-Options"] == "DENY"
+    assert response.headers["Referrer-Policy"] == "no-referrer"
+    assert "frame-ancestors 'none'" in response.headers["Content-Security-Policy"]
+    assert response.headers["Cache-Control"] == "no-store"
+
+
+def test_audit_log_records_auth_events_without_passwords(tmp_path):
+    audit_path = tmp_path / "audit.jsonl"
+    client = make_client(audit_path)
+    client.post("/login", data={"password": "wrong-secret-value"})
+    client.post("/login", data={"password": "developer-test-password"})
+    records = [json.loads(line) for line in audit_path.read_text(encoding="utf-8").splitlines()]
+    assert [record["event"] for record in records] == ["login_failure", "login_success"]
+    serialized = audit_path.read_text(encoding="utf-8")
+    assert "wrong-secret-value" not in serialized
+    assert "developer-test-password" not in serialized
