@@ -242,7 +242,11 @@ class ProvisioningWorkflow:
             record("render_service", "completed", state["resources"]["render"])
 
             record("health_check", "running")
-            health_url = self._wait_for_health(service, workflow_url=workflow_url)
+            health_service = service
+            details = service.get("serviceDetails") or {}
+            if not (details.get("url") or service.get("url")) and hasattr(self.render, "get_service"):
+                health_service = self.render.get_service(service_id)
+            health_url = self._wait_for_health(health_service, workflow_url=workflow_url)
             state["resources"]["render"]["health_url"] = health_url
             record("health_check", "completed", {"health_url": health_url})
             record("completed", "completed", {"message": "Provisioning completed; no secrets were persisted"})
