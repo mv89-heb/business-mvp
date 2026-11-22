@@ -13,7 +13,7 @@
 
 ```powershell
 $scriptPath = Join-Path $env:TEMP "RUN-BUSINESS-STARTER.ps1"
-Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/mv89-heb/eli-cohen-business-mvp/main/RUN-BUSINESS-STARTER.ps1" -OutFile $scriptPath
+Invoke-WebRequest -UseBasicParsing "https://raw.githubusercontent.com/mv89-heb/business-mvp/main/RUN-BUSINESS-STARTER.ps1" -OutFile $scriptPath
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File $scriptPath
 ```
 
