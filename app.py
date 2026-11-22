@@ -85,6 +85,7 @@ def create_app(test_config=None):
         db.create_all()
 
     @app.get("/health")
+    @limiter.exempt
     def health():
         try:
             db.session.execute(db.select(1))
@@ -202,4 +203,3 @@ def create_app(test_config=None):
         return redirect(url_for("admin_dashboard"))
 
     return app
-
