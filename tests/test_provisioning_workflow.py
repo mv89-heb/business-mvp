@@ -221,3 +221,9 @@ def test_state_store_creates_private_directory_and_private_state_file(tmp_path):
     if os.name == "posix":
         assert (tmp_path / "private-state").stat().st_mode & 0o777 == 0o700
         assert path.stat().st_mode & 0o777 == 0o600
+
+
+def test_state_store_rejects_path_traversal_workflow_ids(tmp_path):
+    store = WorkflowStateStore(tmp_path / "state")
+    with pytest.raises(ValueError, match="Invalid workflow identifier"):
+        store.save("../outside", {"status": "failed"})
