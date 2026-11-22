@@ -147,9 +147,9 @@ def test_wizard_carries_brand_profile_into_the_dry_run_plan():
     })
     page = response.get_data(as_text=True)
     assert response.status_code == 200
-    assert '"tagline": "פתרונות מקצועיים לבית"' in page
+    assert 'name="tagline" value="פתרונות מקצועיים לבית"' in page
     assert '"whatsapp_url": "https://wa.me/972501234567"' in page
-    assert '"פרגולות"' in page and '"דקים"' in page
+    assert 'value="פרגולות, דקים"' in page
 
 
 def test_execution_route_requires_developer_login():
