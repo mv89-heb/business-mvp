@@ -33,6 +33,8 @@ class FakeGitHub:
 
 
 class FakeNeon:
+    org_id = "neon-org-approved"
+
     def list_projects(self):
         return []
 
@@ -405,3 +407,28 @@ def test_preflight_requires_render_to_confirm_the_selected_workspace(tmp_path, m
 
     assert github.published is False
     assert github.ensure_calls == 0
+
+
+
+def test_preflight_requires_explicit_neon_organization_scope(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    workflow.neon.org_id = ""
+
+    with pytest.raises(ProviderError, match="NEON_ORG_ID"):
+        workflow.preflight(make_plan(), github_owner="developer")
+
+    assert github.published is False
+    assert github.ensure_calls == 0
+
+
+def test_preflight_rejects_neon_project_from_another_organization(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    workflow.neon.list_projects = lambda: [{
+        "id": "foreign-project",
+        "name": "test-business",
+        "region_id": "aws-eu-central-1",
+        "org_id": "different-org",
+    }]
+
+    with pytest.raises(ProviderError, match="different organization"):
+        workflow.preflight(make_plan(), github_owner="developer")
