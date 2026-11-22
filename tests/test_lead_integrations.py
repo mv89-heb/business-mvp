@@ -10,6 +10,7 @@ from app import create_app, db
 
 @pytest.fixture()
 def integration_client(tmp_path, monkeypatch):
+    monkeypatch.delenv("AI_ALLOW_FREE_TEXT", raising=False)
     monkeypatch.setenv("ADMIN_PASSWORD", "test-admin-password")
     monkeypatch.setenv("WHATSAPP_APP_SECRET", "test-meta-secret")
     monkeypatch.setenv("WHATSAPP_VERIFY_TOKEN", "test-verify-token")
