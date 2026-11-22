@@ -352,6 +352,7 @@ class ProvisioningWorkflow:
                     business_name=business.get("name", slug),
                     slug=slug,
                     modules=(plan.get("application") or {}).get("modules", []),
+                    business_profile=business,
                 )
 
                 record("github_repository", "running")
