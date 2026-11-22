@@ -1,0 +1,262 @@
+"""Idempotent, developer-approved provisioning workflow.
+
+Secrets are accepted only in memory and are never written to workflow state.
+"""
+from __future__ import annotations
+
+import json
+import os
+import secrets
+import tempfile
+import time
+from datetime import datetime, timezone
+from pathlib import Path
+from urllib.error import HTTPError, URLError
+from urllib.request import Request, urlopen
+
+from business_app.export_starter import export_starter
+from .providers import GitHubProvider, NeonProvider, RenderProvider
+from .providers.http import ProviderError
+
+
+def _utc_now():
+    return datetime.now(timezone.utc).isoformat()
+
+
+class WorkflowStateStore:
+    """Atomic local state storage; intentionally excludes all secret values."""
+
+    def __init__(self, root=None):
+        self.root = Path(root or Path.home() / ".business-app-provisioner" / "runs").expanduser()
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def path_for(self, workflow_id):
+        if not workflow_id or any(ch not in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_" for ch in workflow_id):
+            raise ValueError("Invalid workflow identifier")
+        return self.root / f"{workflow_id}.json"
+
+    def load(self, workflow_id):
+        path = self.path_for(workflow_id)
+        if not path.exists():
+            return None
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def save(self, workflow_id, state):
+        path = self.path_for(workflow_id)
+        safe_state = {
+            "workflow_id": workflow_id,
+            "plan_id": state.get("plan_id"),
+            "business_slug": state.get("business_slug"),
+            "status": state.get("status"),
+            "step": state.get("step"),
+            "resources": state.get("resources", {}),
+            "history": state.get("history", []),
+            "updated_at": _utc_now(),
+            "error": state.get("error"),
+        }
+        # A defensive deny-list prevents future changes from persisting common secret fields.
+        serialized = json.dumps(safe_state, ensure_ascii=False, indent=2) + "\n"
+        forbidden = ("DATABASE_URL", "ADMIN_PASSWORD", "SECRET_KEY", "NEON_API_KEY", "GITHUB_TOKEN", "RENDER_API_KEY")
+        if any(marker in serialized for marker in forbidden):
+            raise ValueError("Refusing to persist provisioning state containing a secret marker")
+        handle, temp_name = tempfile.mkstemp(prefix=f".{workflow_id}-", suffix=".tmp", dir=self.root)
+        try:
+            with os.fdopen(handle, "w", encoding="utf-8") as stream:
+                stream.write(serialized)
+                stream.flush()
+                os.fsync(stream.fileno())
+            try:
+                os.chmod(temp_name, 0o600)
+            except OSError:
+                pass
+            os.replace(temp_name, path)
+        finally:
+            if os.path.exists(temp_name):
+                os.unlink(temp_name)
+        return path
+
+
+class ProvisioningWorkflow:
+    """Create a clean customer app in isolated GitHub, Neon and Render resources."""
+
+    def __init__(self, *, github=None, neon=None, render=None, state_store=None,
+                 health_checker=None, sleep=time.sleep, health_timeout=600, health_interval=10):
+        self.github = github or GitHubProvider()
+        self.neon = neon or NeonProvider()
+        self.render = render or RenderProvider()
+        self.state_store = state_store or WorkflowStateStore()
+        self.health_checker = health_checker or self._http_health_check
+        self.sleep = sleep
+        self.health_timeout = health_timeout
+        self.health_interval = health_interval
+
+    @staticmethod
+    def _http_health_check(url, timeout=10):
+        request = Request(url, headers={"Accept": "application/json", "User-Agent": "business-app-provisioner/1.0"})
+        try:
+            with urlopen(request, timeout=timeout) as response:
+                return response.status == 200
+        except (HTTPError, URLError, TimeoutError, OSError):
+            return False
+
+    def _wait_for_health(self, service, workflow_url=None):
+        details = service.get("serviceDetails") or {}
+        url = details.get("url") or service.get("url") or workflow_url
+        if not url:
+            raise ProviderError("Render did not return a public service URL; deployment health cannot be verified")
+        health_url = url.rstrip("/") + "/health"
+        deadline = time.monotonic() + self.health_timeout
+        while True:
+            if self.health_checker(health_url):
+                return health_url
+            if time.monotonic() >= deadline:
+                raise ProviderError("Render service did not pass its /health check before the timeout")
+            self.sleep(self.health_interval)
+
+    def run(self, plan, *, github_owner, admin_password, approval,
+            neon_free_tier_verified=False, workflow_url=None):
+        if approval != "CREATE":
+            raise ProviderError("Provisioning requires the explicit confirmation text CREATE")
+        if neon_free_tier_verified is not True:
+            raise ProviderError("Neon project creation is blocked until zero-cost/free-tier eligibility is explicitly verified")
+        if not isinstance(admin_password, str) or len(admin_password) < 14:
+            raise ProviderError("A customer admin password of at least 14 characters is required")
+        if not isinstance(plan, dict) or plan.get("mode") != "dry_run":
+            raise ProviderError("Only a valid dry-run provisioning plan can be executed")
+        business = plan.get("business") or {}
+        slug = business.get("slug")
+        if not isinstance(slug, str) or not slug:
+            raise ProviderError("Provisioning plan is missing a business slug")
+        if not github_owner:
+            raise ProviderError("GITHUB_OWNER is required")
+        if not getattr(self.render, "workspace_id", None):
+            raise ProviderError("RENDER_WORKSPACE_ID must identify the approved workspace")
+
+        workflow_id = plan.get("plan_id") or slug
+        state = self.state_store.load(workflow_id) or {
+            "plan_id": plan.get("plan_id"),
+            "business_slug": slug,
+            "status": "not_started",
+            "step": "not_started",
+            "resources": {},
+            "history": [],
+            "error": None,
+        }
+
+        def record(step, status, details=None, error=None):
+            state["step"] = step
+            state["status"] = status
+            state["error"] = error
+            entry = {"step": step, "status": status, "at": _utc_now()}
+            if details:
+                entry["details"] = details
+            state.setdefault("history", []).append(entry)
+            self.state_store.save(workflow_id, state)
+
+        try:
+            record("preflight", "running")
+            connections = {
+                "github": self.github.check_connection(),
+                "neon": self.neon.check_connection(),
+                "render": self.render.check_connection(),
+            }
+            record("preflight", "completed", {
+                "github_account": connections["github"].get("account"),
+                "neon_visible_projects": connections["neon"].get("visible_projects"),
+                "render_workspace_selected": connections["render"].get("workspace_selected"),
+            })
+
+            record("starter_export", "running")
+            with tempfile.TemporaryDirectory(prefix="business-app-export-") as temporary:
+                export_path = Path(temporary) / slug
+                export_starter(export_path, business_name=business.get("name", slug), slug=slug)
+
+                record("github_repository", "running")
+                repo_result = self.github.ensure_private_repository(github_owner, slug)
+                repository = repo_result["repository"]
+                if repository.get("private") is not True:
+                    raise ProviderError("GitHub did not confirm a private repository")
+                state["resources"]["github"] = {
+                    "repository": repository.get("full_name") or f"{github_owner}/{slug}",
+                    "url": repository.get("html_url"),
+                    "created": repo_result.get("created", False),
+                }
+                record("github_repository", "completed", state["resources"]["github"])
+
+                record("github_publish", "running")
+                publish_result = self.github.publish_directory(github_owner, slug, export_path)
+                state["resources"]["github"]["published_commit"] = publish_result.get("commit_sha")
+                state["resources"]["github"]["file_count"] = publish_result.get("file_count")
+                record("github_publish", "completed", {
+                    "commit": publish_result.get("commit_sha"),
+                    "file_count": publish_result.get("file_count"),
+                    "changed": publish_result.get("published"),
+                })
+
+            record("neon_project", "running")
+            project_result = self.neon.ensure_project(slug, free_tier_verified=True)
+            project = project_result["project"]
+            project_id = project.get("id")
+            if not project_id:
+                raise ProviderError("Neon did not return a project identifier")
+            state["resources"]["neon"] = {
+                "project_id": project_id,
+                "project_name": project.get("name", slug),
+                "region": project.get("region_id"),
+                "created": project_result.get("created", False),
+            }
+            record("neon_project", "completed", state["resources"]["neon"])
+
+            record("neon_connection", "running")
+            database_uri = self.neon.get_connection_uri(project_id)
+            if not isinstance(database_uri, str) or not database_uri.startswith(("postgres://", "postgresql://")):
+                raise ProviderError("Neon returned an invalid PostgreSQL connection URI")
+            record("neon_connection", "completed", {"connection_uri": "received; not persisted"})
+
+            record("render_service", "running")
+            render_env = {
+                "DATABASE_URL": database_uri,
+                "SECRET_KEY": secrets.token_urlsafe(48),
+                "ADMIN_PASSWORD": admin_password,
+                "PYTHON_VERSION": "3.11.9",
+            }
+            repository_url = repository.get("html_url") or f"https://github.com/{github_owner}/{slug}"
+            service_result = self.render.ensure_web_service(
+                name=slug,
+                repository_url=repository_url,
+                branch="main",
+                env_vars=render_env,
+            )
+            service = service_result["service"]
+            service_id = service.get("id")
+            if not service_id:
+                raise ProviderError("Render did not return a service identifier")
+            state["resources"]["render"] = {
+                "service_id": service_id,
+                "service_name": service.get("name", slug),
+                "url": (service.get("serviceDetails") or {}).get("url") or service.get("url"),
+                "created": service_result.get("created", False),
+                "plan": "free",
+                "region": "frankfurt",
+            }
+            record("render_service", "completed", state["resources"]["render"])
+
+            record("health_check", "running")
+            health_url = self._wait_for_health(service, workflow_url=workflow_url)
+            state["resources"]["render"]["health_url"] = health_url
+            record("health_check", "completed", {"health_url": health_url})
+            record("completed", "completed", {"message": "Provisioning completed; no secrets were persisted"})
+            return {
+                "workflow_id": workflow_id,
+                "status": "completed",
+                "resources": state["resources"],
+            }
+        except Exception as exc:
+            # Provider adapters intentionally expose sanitized errors. Never serialize input secrets.
+            safe_error = str(exc)
+            for secret in (admin_password,):
+                if secret:
+                    safe_error = safe_error.replace(secret, "[REDACTED]")
+            state["resources"] = state.get("resources", {})
+            record(state.get("step", "unknown"), "failed", error=safe_error[:500])
+            raise ProviderError(f"Provisioning stopped at {state.get('step')}: {safe_error}") from None
