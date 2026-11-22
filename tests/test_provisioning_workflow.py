@@ -26,10 +26,31 @@ class FakeGitHub:
             "html_url": f"https://github.com/{owner}/{name}",
         }}
 
-    def publish_directory(self, owner, name, directory):
+    def ensure_branch(self, owner, name, branch, *, base_branch="main"):
+        self.branch = branch
+        return {"created": True, "ref": {"object": {"sha": "base-sha"}}}
+
+    def publish_directory(self, owner, name, directory, *, branch="main", commit_message=None):
         assert (directory / "README.md").exists()
         self.published = True
+        self.published_branch = branch
         return {"published": True, "commit_sha": "abc123", "file_count": 3}
+
+    def create_or_get_pull_request(self, owner, name, branch, *, base="main", title, body):
+        return {"created": True, "merged": False, "pull_request": {
+            "number": 17, "state": "open", "html_url": "https://github.com/developer/test-business/pull/17",
+            "head": {"sha": "abc123"}, "base": {"ref": "main"},
+        }}
+
+    def get_pull_request_checks(self, owner, name, pull_request):
+        return {"ready": True, "head_sha": "abc123", "reason": "checks_passed", "checks": [
+            {"name": "test", "status": "completed", "conclusion": "success"},
+        ]}
+
+    def merge_pull_request(self, owner, name, pull_request, *, expected_head_sha):
+        assert expected_head_sha == "abc123"
+        self.merged = True
+        return {"merged": True, "sha": "merge-123"}
 
 
 class FakeNeon:
