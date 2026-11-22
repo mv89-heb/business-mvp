@@ -289,11 +289,14 @@ def test_preflight_is_read_only_and_reports_planned_resources(tmp_path, monkeypa
 def test_preflight_reuses_only_an_existing_private_github_repository(tmp_path, monkeypatch):
     workflow, _ = make_workflow(tmp_path, monkeypatch)
     workflow.github.get_repository = lambda owner, name: {
-        "private": True, "full_name": f"{owner}/{name}",
+        "id": 42, "private": True, "full_name": f"{owner}/{name}",
         "html_url": f"https://github.com/{owner}/{name}",
     }
 
-    report = workflow.preflight(make_plan(), github_owner="developer")
+    report = workflow.preflight(
+        make_plan(), github_owner="developer",
+        known_resources={"github": {"repository_id": 42}},
+    )
 
     assert report["resources"]["github"]["status"] == "existing_private"
 
@@ -328,8 +331,11 @@ def test_preflight_rejects_render_service_with_paid_plan(tmp_path, monkeypatch):
         "serviceDetails": {"plan": "starter", "region": "frankfurt"},
     }]
 
-    with pytest.raises(ProviderError, match="Free Frankfurt"):
-        workflow.preflight(make_plan(), github_owner="developer")
+    with pytest.raises(ProviderError, match="not registered to this provisioning workflow"):
+        workflow.preflight(
+            make_plan(), github_owner="developer",
+            known_resources={"render": {"service_id": "srv-existing"}},
+        )
 
 
 def test_workflow_rechecks_read_only_preflight_before_any_write(tmp_path, monkeypatch):
@@ -432,3 +438,83 @@ def test_preflight_rejects_neon_project_from_another_organization(tmp_path, monk
 
     with pytest.raises(ProviderError, match="different organization"):
         workflow.preflight(make_plan(), github_owner="developer")
+
+
+
+def test_preflight_rejects_existing_github_repository_without_matching_ownership_record(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    workflow.github.get_repository = lambda owner, name: {
+        "id": 99, "private": True, "full_name": f"{owner}/{name}",
+        "html_url": f"https://github.com/{owner}/{name}",
+    }
+
+    with pytest.raises(ProviderError, match="not registered to this provisioning workflow"):
+        workflow.preflight(make_plan(), github_owner="developer")
+
+
+def test_preflight_rejects_existing_neon_project_without_matching_ownership_record(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    workflow.neon.list_projects = lambda: [{
+        "id": "neon-existing",
+        "name": "test-business",
+        "region_id": "aws-eu-central-1",
+        "org_id": workflow.neon.org_id,
+    }]
+
+    with pytest.raises(ProviderError, match="not registered to this provisioning workflow"):
+        workflow.preflight(make_plan(), github_owner="developer")
+
+
+def test_preflight_rejects_existing_render_service_without_matching_ownership_record(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    workflow.render.list_services = lambda: [{
+        "id": "srv-existing",
+        "name": "test-business",
+        "repo": "https://github.com/developer/test-business",
+        "type": "web_service",
+        "branch": "main",
+        "autoDeployTrigger": "checksPass",
+        "serviceDetails": {"plan": "free", "region": "frankfurt"},
+    }]
+
+    with pytest.raises(ProviderError, match="not registered to this provisioning workflow"):
+        workflow.preflight(make_plan(), github_owner="developer")
+
+
+def test_preflight_reuses_neon_project_only_when_saved_project_id_matches(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    workflow.neon.list_projects = lambda: [{
+        "id": "neon-existing",
+        "name": "test-business",
+        "region_id": "aws-eu-central-1",
+        "org_id": workflow.neon.org_id,
+    }]
+
+    report = workflow.preflight(
+        make_plan(),
+        github_owner="developer",
+        known_resources={"neon": {"project_id": "neon-existing", "org_id": workflow.neon.org_id}},
+    )
+
+    assert report["resources"]["neon"]["status"] == "existing"
+
+
+def test_preflight_reuses_render_service_only_when_saved_service_id_matches(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch)
+    workflow.render.list_services = lambda: [{
+        "id": "srv-existing",
+        "name": "test-business",
+        "repo": "https://github.com/developer/test-business",
+        "type": "web_service",
+        "branch": "main",
+        "autoDeployTrigger": "checksPass",
+        "serviceDetails": {"plan": "free", "region": "frankfurt"},
+    }]
+
+    report = workflow.preflight(
+        make_plan(),
+        github_owner="developer",
+        known_resources={"render": {"service_id": "srv-existing", "workspace_id": workflow.render.workspace_id}},
+    )
+
+    assert report["resources"]["render"]["status"] == "existing"
