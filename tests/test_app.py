@@ -45,6 +45,7 @@ def test_lead_is_saved_and_thanks_page_shown(client):
         "service": "עבודות עץ",
         "area": "20",
         "details": "פרגולה",
+        "contact_consent": "on",
     }, follow_redirects=True)
     assert response.status_code == 200
     assert "הפרטים התקבלו" in response.get_data(as_text=True)
@@ -53,6 +54,19 @@ def test_lead_is_saved_and_thanks_page_shown(client):
         lead = db.session.execute(db.select(Lead)).scalar_one()
         assert lead.name == "ישראל ישראלי"
         assert lead.phone == "050-1234567"
+
+
+
+def test_lead_requires_contact_consent(client):
+    response = client.post("/leads", data={
+        "name": "ישראל ישראלי",
+        "phone": "050-1234567",
+        "service": "בניה",
+    }, follow_redirects=True)
+    assert "יש לאשר יצירת קשר" in response.get_data(as_text=True)
+    with client.application.app_context():
+        from app import Lead
+        assert db.session.execute(db.select(Lead)).scalars().all() == []
 
 
 def test_admin_requires_login(client):
