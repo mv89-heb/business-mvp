@@ -237,7 +237,14 @@ function Start-LocalWizard {
     if (-not $env:PROVISIONING_PASSWORD) {
         $env:PROVISIONING_PASSWORD = Get-SecureValue "בחר סיסמה לכניסה לאשף (לפחות 16 תווים)" 16
     }
-    $listener = Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction SilentlyContinue
+    $listener = $false
+    try {
+        $listener = [bool](Get-NetTCPConnection -LocalPort 8765 -State Listen -ErrorAction Stop)
+    }
+    catch {
+        # Fallback for Windows installations without the NetTCPIP cmdlet.
+        try { $listener = [bool](Test-NetConnection -ComputerName 127.0.0.1 -Port 8765 -InformationLevel Quiet -WarningAction SilentlyContinue) } catch { $listener = $false }
+    }
     if ($listener) {
         Write-Warn "נראה שכבר פועל שירות על localhost:8765. לא נפתח תהליך נוסף."
     } else {
