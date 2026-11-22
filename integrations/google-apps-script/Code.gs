@@ -1,5 +1,5 @@
 /**
- * Free Google Sheets receiver for Eli Cohen Construction & Wood.
+ * Generic Google Sheets receiver for a Business App lead form.
  *
  * Configure Script Properties before deploying:
  *   SPREADSHEET_ID = the ID between /d/ and /edit in the Google Sheet URL
