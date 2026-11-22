@@ -26,10 +26,31 @@ class FakeGitHub:
             "html_url": f"https://github.com/{owner}/{name}",
         }}
 
-    def publish_directory(self, owner, name, directory):
+    def ensure_branch(self, owner, name, branch, *, base_branch="main"):
+        self.branch = branch
+        return {"created": True, "ref": {"object": {"sha": "base-sha"}}}
+
+    def publish_directory(self, owner, name, directory, *, branch="main", commit_message=None):
         assert (directory / "README.md").exists()
         self.published = True
+        self.published_branch = branch
         return {"published": True, "commit_sha": "abc123", "file_count": 3}
+
+    def create_or_get_pull_request(self, owner, name, branch, *, base="main", title, body):
+        return {"created": True, "merged": False, "pull_request": {
+            "number": 17, "state": "open", "html_url": "https://github.com/developer/test-business/pull/17",
+            "head": {"sha": "abc123"}, "base": {"ref": "main"},
+        }}
+
+    def get_pull_request_checks(self, owner, name, pull_request):
+        return {"ready": True, "head_sha": "abc123", "reason": "checks_passed", "checks": [
+            {"name": "test", "status": "completed", "conclusion": "success"},
+        ]}
+
+    def merge_pull_request(self, owner, name, pull_request, *, expected_head_sha):
+        assert expected_head_sha == "abc123"
+        self.merged = True
+        return {"merged": True, "sha": "merge-123"}
 
 
 class FakeNeon:
@@ -614,3 +635,41 @@ def test_postgres_state_store_rejects_secret_values_before_writing(monkeypatch):
             "resources": {"connection": "postgresql://user:secret@example/db"},
             "history": [],
         })
+
+
+
+def test_workflow_stops_before_cloud_resources_until_github_ci_passes(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    workflow.github.get_pull_request_checks = lambda owner, name, number: {
+        "ready": False, "head_sha": "abc123", "reason": "checks_running",
+        "checks": [{"name": "test", "status": "in_progress", "conclusion": None}],
+    }
+    with pytest.raises(ProviderError, match="awaiting successful CI checks"):
+        workflow.run(
+            make_plan(), github_owner="developer",
+            admin_password="a-very-long-test-password",
+            approval="CREATE", neon_free_tier_verified=True,
+        )
+    state = json.loads((tmp_path / "state" / "plan-123456.json").read_text(encoding="utf-8"))
+    assert state["step"] == "github_ci"
+    assert state["resources"]["github"]["pull_request"]["number"] == 17
+    assert "neon" not in state["resources"]
+    assert "render" not in state["resources"]
+    assert not getattr(github, "merged", False)
+
+
+def test_workflow_merges_github_pr_only_after_ci_passes(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    result = workflow.run(
+        make_plan(), github_owner="developer",
+        admin_password="a-very-long-test-password",
+        approval="CREATE", neon_free_tier_verified=True,
+    )
+    assert github.merged is True
+    assert github.published_branch == "provisioning/plan-123456"
+    assert result["resources"]["github"]["merge_commit"] == "merge-123"
+    state = json.loads((tmp_path / "state" / "plan-123456.json").read_text(encoding="utf-8"))
+    steps = [entry["step"] for entry in state["history"]]
+    assert "github_pull_request" in steps
+    assert "github_ci" in steps
+    assert "github_merge" in steps

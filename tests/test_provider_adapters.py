@@ -520,3 +520,70 @@ def test_render_provider_refuses_unregistered_existing_service():
             name="app", repository_url="https://github.com/a/b"
         )
     assert len(opener.requests) == 1
+
+
+def test_github_ensure_branch_creates_from_main_and_is_idempotent():
+    opener = FakeOpener([
+        HTTPError("https://api.github.com/ref", 404, "not found", {}, BytesIO(b"{}")),
+        {"object": {"sha": "base-sha"}},
+        {"ref": "refs/heads/provisioning/abc", "object": {"sha": "base-sha"}},
+        {"ref": "refs/heads/provisioning/abc", "object": {"sha": "existing-sha"}},
+    ])
+    provider = GitHubProvider("token", opener=opener)
+    created = provider.ensure_branch("owner", "repo", "provisioning/abc")
+    existing = provider.ensure_branch("owner", "repo", "provisioning/abc")
+    assert created["created"] is True
+    assert existing["created"] is False
+    payload = json.loads(opener.requests[2][0].data)
+    assert payload == {"ref": "refs/heads/provisioning/abc", "sha": "base-sha"}
+
+
+def test_github_create_or_get_pull_request_is_idempotent():
+    opener = FakeOpener([
+        [],
+        {"number": 12, "state": "open", "head": {"ref": "provisioning/abc"}, "base": {"ref": "main"}},
+    ])
+    provider = GitHubProvider("token", opener=opener)
+    result = provider.create_or_get_pull_request(
+        "owner", "repo", "provisioning/abc", title="Provision app", body="CI gate"
+    )
+    assert result["created"] is True
+    assert result["pull_request"]["number"] == 12
+    assert json.loads(opener.requests[1][0].data)["base"] == "main"
+
+
+def test_github_checks_require_all_check_runs_and_combined_status_success():
+    opener = FakeOpener([
+        {"state": "open", "head": {"sha": "head-sha"}},
+        {"check_runs": [
+            {"name": "test", "status": "completed", "conclusion": "success"},
+            {"name": "powershell-syntax", "status": "completed", "conclusion": "success"},
+        ]},
+        {"state": "success"},
+    ])
+    result = GitHubProvider("token", opener=opener).get_pull_request_checks("owner", "repo", 12)
+    assert result["ready"] is True
+    assert result["reason"] == "checks_passed"
+    assert len(result["checks"]) == 2
+
+
+def test_github_checks_fail_closed_when_no_checks_have_started():
+    opener = FakeOpener([
+        {"state": "open", "head": {"sha": "head-sha"}},
+        {"check_runs": []},
+        {"state": "pending"},
+    ])
+    result = GitHubProvider("token", opener=opener).get_pull_request_checks("owner", "repo", 12)
+    assert result["ready"] is False
+    assert result["reason"] == "checks_not_started"
+
+
+def test_github_merge_requires_expected_head_and_confirmed_success():
+    opener = FakeOpener([{"merged": True, "sha": "merge-sha"}])
+    result = GitHubProvider("token", opener=opener).merge_pull_request(
+        "owner", "repo", 12, expected_head_sha="head-sha"
+    )
+    assert result["sha"] == "merge-sha"
+    assert json.loads(opener.requests[0][0].data) == {
+        "merge_method": "squash", "sha": "head-sha"
+    }

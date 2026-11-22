@@ -168,3 +168,117 @@ class GitHubProvider:
             if (latest.get("object") or {}).get("sha") != new_sha:
                 raise
         return {"published": True, "branch": branch, "commit_sha": new_sha, "file_count": len(files)}
+
+
+    def ensure_branch(self, owner, name, branch, *, base_branch="main"):
+        """Create a deterministic provisioning branch, reconciling ambiguous writes."""
+        repo_path = f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
+        ref_path = f"{repo_path}/git/ref/heads/{quote(branch, safe='')}"
+        try:
+            existing = self.client.request("GET", ref_path)
+            if (existing.get("object") or {}).get("sha"):
+                return {"created": False, "ref": existing}
+        except ProviderHTTPError as exc:
+            if exc.status != 404:
+                raise
+        base = self.client.request(
+            "GET", f"{repo_path}/git/ref/heads/{quote(base_branch, safe='')}"
+        )
+        base_sha = (base.get("object") or {}).get("sha")
+        if not base_sha:
+            raise ProviderError("GitHub did not return the base branch head")
+        try:
+            created = self.client.request(
+                "POST", f"{repo_path}/git/refs",
+                payload={"ref": f"refs/heads/{branch}", "sha": base_sha},
+            )
+        except ProviderOperationUnknown:
+            reconciled = self.client.request("GET", ref_path)
+            if (reconciled.get("object") or {}).get("sha") != base_sha:
+                raise
+            created = reconciled
+        if not (created.get("object") or {}).get("sha"):
+            raise ProviderError("GitHub did not confirm the provisioning branch")
+        return {"created": True, "ref": created}
+
+    def create_or_get_pull_request(self, owner, name, branch, *, base="main", title, body):
+        repo_path = f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
+        existing = self.client.request(
+            "GET", f"{repo_path}/pulls",
+            query={"state": "all", "head": f"{owner}:{branch}", "base": base, "per_page": 100},
+        )
+        matches = [
+            item for item in (existing if isinstance(existing, list) else [])
+            if item.get("head", {}).get("ref") == branch
+            and item.get("base", {}).get("ref") == base
+        ]
+        if len(matches) > 1:
+            raise ProviderError("Multiple provisioning pull requests exist for this branch")
+        if matches:
+            pr = matches[0]
+            if pr.get("merged_at"):
+                return {"created": False, "pull_request": pr, "merged": True}
+            if pr.get("state") != "open":
+                raise ProviderError("The provisioning pull request was closed without merging")
+            return {"created": False, "pull_request": pr, "merged": False}
+        pr = self.client.request(
+            "POST", f"{repo_path}/pulls",
+            payload={"title": title, "body": body, "head": branch, "base": base, "draft": False},
+        )
+        if not pr.get("number") or pr.get("state") != "open":
+            raise ProviderError("GitHub did not confirm an open provisioning pull request")
+        return {"created": True, "pull_request": pr, "merged": False}
+
+    def get_pull_request_checks(self, owner, name, pull_request):
+        repo_path = f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
+        pr = self.client.request("GET", f"{repo_path}/pulls/{int(pull_request)}")
+        if pr.get("state") != "open" and not pr.get("merged_at"):
+            raise ProviderError("Provisioning pull request is no longer open")
+        head_sha = (pr.get("head") or {}).get("sha")
+        if not head_sha:
+            raise ProviderError("GitHub did not return the pull request head commit")
+        checks = self.client.request(
+            "GET", f"{repo_path}/commits/{quote(head_sha, safe='')}/check-runs",
+            query={"per_page": 100},
+        )
+        status = self.client.request(
+            "GET", f"{repo_path}/commits/{quote(head_sha, safe='')}/status"
+        )
+        runs = checks.get("check_runs") or []
+        if not runs:
+            return {"ready": False, "head_sha": head_sha, "reason": "checks_not_started", "checks": []}
+        pending = [item for item in runs if item.get("status") != "completed"]
+        failed = [
+            item for item in runs
+            if item.get("status") == "completed"
+            and item.get("conclusion") not in {"success", "neutral", "skipped"}
+        ]
+        combined_state = status.get("state", "pending")
+        if pending or combined_state == "pending":
+            reason = "checks_running"
+            ready = False
+        elif failed or combined_state not in {"success", "pending"}:
+            reason = "checks_failed"
+            ready = False
+        else:
+            reason = "checks_passed"
+            ready = bool(runs) and combined_state == "success"
+        return {
+            "ready": ready,
+            "head_sha": head_sha,
+            "reason": reason,
+            "checks": [
+                {"name": item.get("name"), "status": item.get("status"), "conclusion": item.get("conclusion")}
+                for item in runs
+            ],
+        }
+
+    def merge_pull_request(self, owner, name, pull_request, *, expected_head_sha):
+        repo_path = f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
+        result = self.client.request(
+            "PUT", f"{repo_path}/pulls/{int(pull_request)}/merge",
+            payload={"merge_method": "squash", "sha": expected_head_sha},
+        )
+        if result.get("merged") is not True or not result.get("sha"):
+            raise ProviderError("GitHub did not confirm the CI-gated pull request merge")
+        return result
