@@ -127,6 +127,31 @@ def test_preflight_route_runs_read_only_and_unlocks_execution(monkeypatch):
         assert session["preflight_fingerprint"]
 
 
+def test_wizard_carries_brand_profile_into_the_dry_run_plan():
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.post("/wizard", data={
+        "business_name": "עסק בדיקה",
+        "slug": "test-business",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "tagline": "פתרונות מקצועיים לבית",
+        "phone": "050-123-4567",
+        "whatsapp_number": "050-123-4567",
+        "address": "רחוב הדוגמה 12",
+        "service_area": "בית שמש והסביבה",
+        "primary_color": "#123456",
+        "accent_color": "#abcdef",
+        "font_family": "Rubik",
+        "services": "פרגולות, דקים",
+    })
+    page = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert '"tagline": "פתרונות מקצועיים לבית"' in page
+    assert '"whatsapp_url": "https://wa.me/972501234567"' in page
+    assert '"services": [\n      "פרגולות",' in page
+
+
 def test_execution_route_requires_developer_login():
     client = make_client()
     response = client.post("/execute", data={})
