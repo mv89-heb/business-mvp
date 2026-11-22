@@ -1,5 +1,6 @@
 import os
 import pytest
+from werkzeug.security import generate_password_hash
 from app import create_app, db
 
 
@@ -88,6 +89,21 @@ def test_admin_login_and_dashboard(client):
     response = client.get("/admin")
     assert response.status_code == 200
     assert "פניות לקוחות" in response.get_data(as_text=True)
+
+
+def test_admin_login_accepts_hash_and_prefers_it_over_plaintext(monkeypatch, client):
+    monkeypatch.setenv("ADMIN_PASSWORD", "legacy-plaintext-password")
+    monkeypatch.setenv("ADMIN_PASSWORD_HASH", generate_password_hash("hashed-admin-password"))
+
+    accepted = client.post("/admin/login", data={"password": "hashed-admin-password"})
+    assert accepted.status_code == 302
+    assert accepted.location.endswith("/admin")
+
+    client.get("/admin/logout", follow_redirects=True)  # logout is POST-only; use a fresh client below
+    with client.application.test_client() as fresh_client:
+        rejected = fresh_client.post("/admin/login", data={"password": "legacy-plaintext-password"})
+        assert rejected.status_code == 200
+        assert "פרטי ההתחברות אינם נכונים" in rejected.get_data(as_text=True)
 
 
 def test_health_check_is_exempt_from_global_rate_limits(tmp_path):
