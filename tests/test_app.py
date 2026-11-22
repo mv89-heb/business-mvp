@@ -54,6 +54,8 @@ def test_lead_is_saved_and_thanks_page_shown(client):
     }, follow_redirects=True)
     assert response.status_code == 200
     assert "הפרטים התקבלו" in response.get_data(as_text=True)
+    assert "מספר הפנייה שלכם" in response.get_data(as_text=True)
+    assert "#1" in response.get_data(as_text=True)
     with client.application.app_context():
         from app import Lead
         lead = db.session.execute(db.select(Lead)).scalar_one()
