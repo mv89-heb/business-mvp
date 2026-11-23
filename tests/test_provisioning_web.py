@@ -806,8 +806,9 @@ def test_handover_download_returns_zip_for_completed_verified_workflow(monkeypat
     }
 
     class FakeStore:
-        def __init__(self, database_url=None):
+        def __init__(self, database_url=None, root=None):
             self.database_url = database_url
+            self.root = root
 
         def load(self, workflow_id):
             assert workflow_id == "a" * 20
