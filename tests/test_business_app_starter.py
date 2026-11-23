@@ -225,3 +225,12 @@ def test_selected_brand_font_is_used_by_customer_site_template():
     assert "business.branding.font_family" in base_template
     assert "--brand-font:'{{ business.branding.font_family }}'" in base_template
     assert "font-family:var(--brand-font,'Heebo')" in stylesheet
+
+
+def test_exported_starter_defaults_are_domain_neutral():
+    from business_app.config import STARTER_CONFIG_PATH, load_business_config
+
+    config = load_business_config(STARTER_CONFIG_PATH)
+    assert config["modules"]["estimate_calculator"] is False
+    assert config["modules"]["area_capture"] is False
+    assert config["id"] == "replace-with-unique-business-slug"
