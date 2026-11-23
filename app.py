@@ -335,7 +335,7 @@ def create_app(test_config=None):
                     budget=request.form.get("budget", "").strip()[:60],
                     details=request.form.get("details", "").strip()[:4000],
                     estimate_min=low, estimate_max=high,
-                    preset=request.form.get("preset", "contractor")[:40],
+                    preset=request.form.get("preset", "business")[:40],
                     consent_at=datetime.now(timezone.utc))
         db.session.add(lead)
         db.session.flush()
