@@ -135,31 +135,123 @@ def test_command_response_is_encrypted_and_roundtrips():
     assert json.loads(plaintext)["name"]=="עסק לדוגמה"
 
 def test_command_envelope_decrypt_roundtrips(monkeypatch):
-    import json, base64, os
+    import base64
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from business_app.provisioning.business_studio import (
+        _command_public_key_pem, decrypt_github_command, encrypt_github_command,
+    )
+
+    render_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private = render_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64", base64.b64encode(private).decode())
+    response_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    response_public = response_key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode("ascii")
+    command = {"type": "get_businesses", "payload": {}}
+    envelope = encrypt_github_command(
+        command, _command_public_key_pem(render_key), response_public
+    )
+
+    decoded, response_key_pem = decrypt_github_command(envelope)
+    assert decoded == command
+    assert response_key_pem == response_public
+    assert envelope["schema"] == "business-studio-command/v2"
+
+
+def test_command_decryption_rejects_stale_key_id(monkeypatch):
+    import base64
+    import pytest
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from business_app.provisioning.business_studio import (
+        _command_public_key_pem, decrypt_github_command, encrypt_github_command,
+    )
+
+    render_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private = render_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64", base64.b64encode(private).decode())
+    response_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    response_public = response_key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode("ascii")
+    envelope = encrypt_github_command(
+        {"type": "get_businesses", "payload": {}},
+        _command_public_key_pem(render_key),
+        response_public,
+    )
+    envelope["keyId"] = "0" * 24
+    with pytest.raises(ValueError, match="stale Render key"):
+        decrypt_github_command(envelope)
+
+
+@pytest.mark.parametrize("field", ["commandId", "issuedAt", "responsePublicKey"])
+def test_command_envelope_authenticates_outer_metadata(monkeypatch, field):
+    import base64
+    import pytest
     from datetime import datetime, timezone
-    import hashlib
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa, padding
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    from business_app.provisioning.business_studio import COMMAND_AAD
-    key=rsa.generate_private_key(public_exponent=65537,key_size=2048)
-    private=key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())
-    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64",base64.b64encode(private).decode())
-    aes_key=os.urandom(32); nonce=os.urandom(12)
-    command={"type":"get_businesses","payload":{}}
-    ciphertext=AESGCM(aes_key).encrypt(nonce,json.dumps(command).encode(),COMMAND_AAD)
-    encrypted_key=key.public_key().encrypt(aes_key,padding.OAEP(mgf=padding.MGF1(hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
-    envelope={
-        "schema":"business-studio-command/v1","commandId":"12345678-1234-1234-1234-123456789012",
-        "keyId":hashlib.sha256(key.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo)).hexdigest()[:24],
-        "issuedAt":datetime.now(timezone.utc).isoformat(),
-        "encryptedKey":base64.b64encode(encrypted_key).decode(),
-        "nonce":base64.b64encode(nonce).decode(),"ciphertext":base64.b64encode(ciphertext).decode(),
-        "responsePublicKey":key.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode()
-    }
-    decoded,response_key=decrypt_github_command(envelope)
-    assert decoded==command
-    assert "BEGIN PUBLIC KEY" in response_key
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from cryptography.exceptions import InvalidTag
+    from business_app.provisioning.business_studio import (
+        _command_public_key_pem, decrypt_github_command, encrypt_github_command,
+    )
+
+    render_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    private = render_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64", base64.b64encode(private).decode())
+    response_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    response_public = response_key.public_key().public_bytes(
+        serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+    ).decode("ascii")
+    envelope = encrypt_github_command(
+        {"type": "get_businesses", "payload": {}},
+        _command_public_key_pem(render_key),
+        response_public,
+    )
+    if field == "commandId":
+        envelope[field] = "00000000-0000-0000-0000-000000000000"
+    elif field == "issuedAt":
+        envelope[field] = datetime.now(timezone.utc).isoformat().replace("+00:00", "Z")
+    else:
+        other_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+        envelope[field] = other_key.public_key().public_bytes(
+            serialization.Encoding.PEM, serialization.PublicFormat.SubjectPublicKeyInfo
+        ).decode("ascii")
+    with pytest.raises(InvalidTag):
+        decrypt_github_command(envelope)
+
+
+def test_github_jwks_client_is_cached(monkeypatch):
+    import jwt
+    import business_app.provisioning.business_studio as studio
+
+    calls = []
+
+    class FakeJwksClient:
+        def __init__(self, url):
+            calls.append(url)
+
+    monkeypatch.setattr(jwt, "PyJWKClient", FakeJwksClient)
+    studio._github_jwks_client.cache_clear()
+    first = studio._github_jwks_client()
+    second = studio._github_jwks_client()
+    assert first is second
+    assert len(calls) == 1
+    studio._github_jwks_client.cache_clear()
 
 
 def test_github_command_ingest_requires_oidc_and_creates_only_pending_proposal(monkeypatch):
@@ -219,21 +311,3 @@ def test_render_public_command_key_endpoint_is_public_and_returns_key_id():
     assert response.status_code==200
     assert response.json["keyId"]
     assert response.json["publicKey"].startswith("-----BEGIN PUBLIC KEY-----")
-
-
-def test_command_decryption_rejects_stale_key_id(monkeypatch):
-    import json, base64, os, hashlib
-    from datetime import datetime, timezone
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa, padding
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    from business_app.provisioning.business_studio import COMMAND_AAD
-    key=rsa.generate_private_key(public_exponent=65537,key_size=2048)
-    private=key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())
-    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64",base64.b64encode(private).decode())
-    aes_key=os.urandom(32); nonce=os.urandom(12)
-    encrypted=AESGCM(aes_key).encrypt(nonce,json.dumps({"type":"get_businesses","payload":{}}).encode(),COMMAND_AAD)
-    wrapped=key.public_key().encrypt(aes_key,padding.OAEP(mgf=padding.MGF1(hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
-    envelope={"schema":"business-studio-command/v1","commandId":"12345678-1234-1234-1234-123456789012","issuedAt":datetime.now(timezone.utc).isoformat(),"keyId":"stale-key-id","encryptedKey":base64.b64encode(wrapped).decode(),"nonce":base64.b64encode(nonce).decode(),"ciphertext":base64.b64encode(encrypted).decode(),"responsePublicKey":key.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode()}
-    with pytest.raises(ValueError):
-        decrypt_github_command(envelope)

@@ -20,15 +20,23 @@ There is intentionally no approve_business command. Business activation remains 
 
 ## Encryption
 
-Use RSA-OAEP-SHA256 to wrap a random 256-bit AES key and AES-256-GCM to encrypt UTF-8 JSON. Command AAD: business-studio-command:v1. Response AAD: business-studio-response:v1.
+Use RSA-OAEP-SHA256 to wrap a random 256-bit AES key and AES-256-GCM to encrypt UTF-8 JSON. Command envelopes use schema \`business-studio-command/v2\`; response envelopes remain \`business-studio-response/v1\`.
 
-Command JSON: {type: get_businesses | create_business_proposal | create_task, payload: {...}}.
+The command AES-GCM AAD is the canonical UTF-8 JSON encoding (sorted keys, compact separators) of \`schema\`, \`commandId\`, \`issuedAt\`, \`responsePublicKey\` and \`keyId\`, prefixed by \`business-studio-command:v2:\`. Changing any of those outer fields invalidates the authentication tag. Response AAD remains \`business-studio-response:v1\`.
 
-The envelope schema is business-studio-command/v1 and contains commandId, issuedAt, keyId, encryptedKey, nonce, ciphertext and responsePublicKey. Fetch the current keyId and publicKey from Render immediately before encrypting. The response uses business-studio-response/v1.
+Command JSON: \`{"type":"get_businesses|create_business_proposal|create_task","payload":{...}}\`.
+
+The v2 envelope contains \`commandId\`, \`issuedAt\`, \`keyId\`, \`encryptedKey\`, \`nonce\`, \`ciphertext\` and \`responsePublicKey\`. Fetch the current \`keyId\` and \`publicKey\` from Render immediately before encrypting. The repository helper \`encrypt_github_command(...)\` builds the v2 envelope with the correct AAD. Legacy v1 command envelopes are rejected; recreate any command prepared before this update.
 
 ## Render environment
 
-By default Render creates a fresh RSA-3072 keypair in process memory. ChatGPT first reads GET /internal/github/command-public-key and encrypts the command to that key. The key ID is embedded in the envelope so a restart between key retrieval and command delivery is rejected safely. The Render service currently runs one Gunicorn worker and one instance; keep that single-worker topology for the in-memory key mode. For a stable key across restarts, an operator may set STUDIO_COMMAND_PRIVATE_KEY_B64 to a base64-encoded PKCS#8 PEM private key in Render Environment. Never commit that value or place it in a GitHub issue. The public key endpoint remains the supported discovery mechanism. The private key is generated at runtime unless a stable Render secret is explicitly supplied.
+For reliable operation across restarts, configure \`STUDIO_COMMAND_PRIVATE_KEY_B64\` as a Render secret containing a base64-encoded PKCS#8 PEM RSA-3072 private key. Generate it locally and paste it directly into Render Environment; never commit it, print it in logs, or place it in a GitHub issue. Example PowerShell generation command:
+
+\`\`\`powershell
+py -c "import base64; from cryptography.hazmat.primitives.asymmetric import rsa; from cryptography.hazmat.primitives import serialization; key=rsa.generate_private_key(public_exponent=65537,key_size=3072); pem=key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption()); print(base64.b64encode(pem).decode('ascii'))"
+\`\`\`
+
+If this variable is absent, the service currently falls back to a per-process RSA key. A Render restart then invalidates any command encrypted to the previous public key. Configure the persistent secret before relying on the relay for production commands. The public key endpoint remains the supported discovery mechanism.
 
 ## Neon
 
