@@ -411,6 +411,8 @@ def test_neutral_starter_hides_contractor_area_field_by_default(client):
 
 
 def test_neutral_starter_ignores_contractor_area_values(client):
+    from app import Lead
+
     response = client.post("/leads", data={
         "name": "לקוח בדיקה",
         "phone": "050-123-4567",
