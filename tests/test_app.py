@@ -324,7 +324,8 @@ def test_application_refuses_to_start_without_a_session_secret(monkeypatch, tmp_
         })
 
 
-def test_testing_mode_uses_only_an_explicit_test_secret_fallback(tmp_path):
+def test_testing_mode_uses_only_an_explicit_test_secret_fallback(monkeypatch, tmp_path):
+    monkeypatch.delenv("SECRET_KEY", raising=False)
     app = create_app({
         "TESTING": True,
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test-secret.db'}",
