@@ -15,6 +15,7 @@ EXPORT_TREE_FILES = (
     "business_app/__init__.py",
     "business_app/bootstrap.py",
     "business_app/config.py",
+    "business_app/security.py",
     "business_app/integrations/__init__.py",
     "business_app/integrations/email.py",
     "business_app/integrations/google_sheets.py",

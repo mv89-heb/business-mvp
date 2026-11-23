@@ -19,6 +19,7 @@ from werkzeug.security import check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from business_app.config import load_business_config
+from business_app.security import constant_time_text_equal
 from business_app.integrations.google_sheets import send_lead_created
 from business_app.integrations.whatsapp_cloud import (
     extract_inbound_messages, normalize_phone, redact_for_ai,
@@ -127,7 +128,7 @@ def _automation_authorized():
     expected = os.getenv("AUTOMATION_WEBHOOK_SECRET", "").strip()
     authorization = request.headers.get("Authorization", "")
     supplied = authorization[7:].strip() if authorization.lower().startswith("bearer ") else ""
-    return bool(expected and supplied and hmac.compare_digest(supplied, expected))
+    return bool(expected and supplied and constant_time_text_equal(supplied, expected))
 
 
 def _find_lead_by_phone(phone):

@@ -58,3 +58,15 @@ def test_extract_inbound_text_message_and_redact_personal_details():
 def test_extract_ignores_status_events_and_malformed_messages():
     payload = {"entry": [{"changes": [{"value": {"statuses": [{"id": "x"}], "messages": [{"type": "text"}]}}]}]}
     assert list(extract_inbound_messages(payload)) == []
+
+
+def test_webhook_challenge_supports_non_ascii_tokens():
+    assert verify_webhook_challenge("subscribe", "סוד-בדיקה", "סוד-בדיקה", "12345") == "12345"
+    assert verify_webhook_challenge("subscribe", "סוד-שגוי", "סוד-בדיקה", "12345") is None
+
+
+def test_shared_constant_time_text_compare_supports_unicode():
+    from business_app.security import constant_time_text_equal
+
+    assert constant_time_text_equal("סיסמה-בדיקה", "סיסמה-בדיקה")
+    assert not constant_time_text_equal("סיסמה-אחת", "סיסמה-שתיים")

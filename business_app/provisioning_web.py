@@ -30,6 +30,7 @@ from business_app.provisioning.providers.http import ProviderError
 from business_app.provisioning.workflow import ProvisioningWorkflow, WorkflowStateStore
 from business_app.provisioning.handover_generator import build_handover_pack, HandoverValidationError
 from business_app.provisioning.business_studio import create_business_studio_blueprint
+from business_app.security import constant_time_text_equal
 
 from business_app.provisioning import (
     BUSINESS_CATEGORIES,
@@ -414,7 +415,7 @@ def create_provisioning_app(test_config=None):
         if request.method == "POST":
             supplied = request.form.get("password", "")
             expected = app.config["PROVISIONING_PASSWORD"]
-            if supplied and hmac.compare_digest(supplied, expected):
+            if supplied and constant_time_text_equal(supplied, expected):
                 session.clear()
                 session.permanent = True
                 session["developer"] = True
