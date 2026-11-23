@@ -332,6 +332,10 @@ class ProvisioningWorkflow:
                 raise ProviderError(f"{provider_name.title()} connection could not be verified")
         if connections["render"].get("workspace_selected") is not True:
             raise ProviderError("Render did not verify access to the selected workspace")
+        if plan.get("ownership_mode", "managed") == "customer_owned":
+            connected_github_account = connections["github"].get("account")
+            if not isinstance(connected_github_account, str) or connected_github_account.casefold() != github_owner.casefold():
+                raise ProviderError("GitHub authenticated account does not match the customer-owned repository target")
 
         repository = self.github.get_repository(github_owner, slug)
         if repository and repository.get("private") is not True:
