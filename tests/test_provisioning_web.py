@@ -318,6 +318,10 @@ def test_execution_route_runs_workflow_only_after_explicit_approval(monkeypatch)
     page = response.get_data(as_text=True)
     assert response.status_code == 200
     assert "PROVISIONING RESULT" in page
+    future = provisioning_web._EXECUTION_JOBS[plan["plan_id"]]
+    future.result(timeout=10)
+    status = client.get(f"/execute/status/{plan['plan_id']}")
+    assert status.get_json()["status"] == "completed"
     assert captured["approval"] == "CREATE"
     assert captured["github_owner"] == "developer"
     assert captured["neon_free_tier_verified"] is True
@@ -452,6 +456,7 @@ def test_execution_preserves_brand_profile_after_preflight(monkeypatch):
 
     assert response.status_code == 200
     assert "PROVISIONING RESULT" in response.get_data(as_text=True)
+    provisioning_web._EXECUTION_JOBS[plan["plan_id"]].result(timeout=10)
     assert captured["plan"]["business"]["tagline"] == profile["tagline"]
     assert captured["plan"]["business"]["contact"]["phone_href"] == "tel:0501234567"
     assert captured["plan"]["business"]["contact"]["whatsapp_url"] == "https://wa.me/972501234567"
@@ -971,3 +976,60 @@ def test_remote_healthz_does_not_disclose_missing_configuration(monkeypatch):
     response = client.get("/healthz", base_url="https://studio.example.com")
     assert "DATABASE_URL" not in response.get_data(as_text=True)
     assert "CUSTOMER_CREDENTIALS_ENCRYPTION_KEY" not in response.get_data(as_text=True)
+
+
+def test_execution_runs_in_background_and_exposes_durable_status(monkeypatch):
+    import threading
+    import business_app.provisioning_web as provisioning_web
+    from business_app.provisioning import build_provisioning_plan
+    from business_app.provisioning_web import _plan_fingerprint
+
+    started = threading.Event()
+    release = threading.Event()
+
+    class BlockingWorkflow:
+        def run(self, plan, **kwargs):
+            started.set()
+            assert release.wait(5)
+            return {
+                "workflow_id": plan["plan_id"],
+                "status": "completed",
+                "resources": {"github": {"repository": "developer/async-business"}},
+            }
+
+    monkeypatch.setattr(provisioning_web, "ProvisioningWorkflow", BlockingWorkflow)
+    monkeypatch.setenv("GITHUB_OWNER", "developer")
+    plan = build_provisioning_plan(
+        business_name="עסק אסינכרוני",
+        slug="async-business",
+        category="services",
+        ownership_mode="managed",
+        modules=["lead_capture", "lead_management"],
+    )
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    with client.session_transaction() as session:
+        session["preflight_fingerprint"] = _plan_fingerprint(plan)
+
+    response = client.post("/execute", data={
+        "business_name": "עסק אסינכרוני",
+        "slug": "async-business",
+        "ownership_mode": "managed",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "approval": "CREATE",
+        "confirm_zero_cost": "yes",
+        "admin_password": "a-very-long-test-password",
+    })
+
+    assert response.status_code == 200
+    assert '"status": "running"' in response.get_data(as_text=True)
+    assert started.wait(2)
+    status = client.get(f"/execute/status/{plan['plan_id']}")
+    assert status.status_code == 200
+    assert status.get_json()["status"] == "queued"
+
+    release.set()
+    provisioning_web._EXECUTION_JOBS[plan["plan_id"]].result(timeout=10)
+    completed = client.get(f"/execute/status/{plan['plan_id']}")
+    assert completed.get_json()["status"] == "completed"
