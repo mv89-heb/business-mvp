@@ -402,3 +402,28 @@ def test_phone_normalization_migration_backfills_legacy_leads(client):
         app_module._ensure_lead_phone_normalized_schema()
         db.session.refresh(lead)
         assert lead.phone_normalized == "0501234567"
+
+
+def test_neutral_starter_hides_contractor_area_field_by_default(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert 'name="area"' not in response.get_data(as_text=True)
+
+
+def test_neutral_starter_ignores_contractor_area_values(client):
+    from app import Lead
+
+    response = client.post("/leads", data={
+        "name": "לקוח בדיקה",
+        "phone": "050-123-4567",
+        "service": "שירות ראשון",
+        "area": "250",
+        "contact_consent": "on",
+    })
+    assert response.status_code == 302
+    with client.application.app_context():
+        lead = db.session.execute(db.select(Lead).order_by(Lead.id.desc())).scalars().first()
+        assert lead is not None
+        assert lead.area is None
+        assert lead.estimate_min is None
+        assert lead.estimate_max is None

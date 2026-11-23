@@ -46,7 +46,7 @@ class Lead(db.Model):
     estimate_min = db.Column(db.Integer)
     estimate_max = db.Column(db.Integer)
     status = db.Column(db.String(24), nullable=False, default="חדש")
-    preset = db.Column(db.String(40), nullable=False, default="contractor")
+    preset = db.Column(db.String(40), nullable=False, default="business")
     consent_at = db.Column(db.DateTime(timezone=True))
 
 
@@ -317,22 +317,28 @@ def create_app(test_config=None):
         if request.form.get("contact_consent") != "on":
             flash("יש לאשר יצירת קשר כדי לשלוח את הפנייה.", "error")
             return redirect(url_for("index") + "#contact")
-        area_raw = request.form.get("area", "").strip()
+        area_capture_enabled = app.config["BUSINESS_CONFIG"].get("modules", {}).get(
+            "area_capture", app.config["BUSINESS_CONFIG"].get("modules", {}).get("estimate_calculator", False)
+        )
+        area_raw = request.form.get("area", "").strip() if area_capture_enabled else ""
         try:
             area = int(area_raw) if area_raw else None
         except ValueError:
             area = None
         if area is not None and not 1 <= area <= 100000:
-            flash("שטח העבודה אינו תקין.", "error")
+            flash("הערך המספרי שהוזן אינו תקין.", "error")
             return redirect(url_for("index") + "#contact")
-        low, high = _estimate(area or 0)
+        if app.config["BUSINESS_CONFIG"].get("modules", {}).get("estimate_calculator", False):
+            low, high = _estimate(area or 0)
+        else:
+            low, high = None, None
         lead = Lead(name=name, phone=phone, email=email or None,
                     city=request.form.get("city", "").strip()[:100],
                     service=service, area=area,
                     budget=request.form.get("budget", "").strip()[:60],
                     details=request.form.get("details", "").strip()[:4000],
                     estimate_min=low, estimate_max=high,
-                    preset=request.form.get("preset", "contractor")[:40],
+                    preset=request.form.get("preset", "business")[:40],
                     consent_at=datetime.now(timezone.utc))
         db.session.add(lead)
         db.session.flush()
@@ -416,7 +422,7 @@ def create_app(test_config=None):
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(["תאריך", "שם", "טלפון", "דוא״ל", "יישוב", "סוג עבודה",
-                         "שטח במ״ר", "תקציב", "פרטים", "סטטוס"])
+                         "כמות / מאפיין", "תקציב", "פרטים", "סטטוס"])
         for lead in leads:
             writer.writerow([
                 lead.created_at.strftime("%Y-%m-%d %H:%M") if lead.created_at else "",

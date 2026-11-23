@@ -23,6 +23,7 @@
     "lead_capture": true,
     "lead_management": true,
     "estimate_calculator": false,
+    "area_capture": false,
     "whatsapp_inbound": false,
     "automation_webhooks": false,
     "ai_lead_enrichment": false

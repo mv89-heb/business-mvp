@@ -15,13 +15,13 @@
     <a class="{% if not selected %}active{% endif %}" href="{{ url_for('admin_dashboard', q=search) }}">הכל</a>
     {% for s in ['חדש','בטיפול','נשלחה הצעה','נסגר','לא רלוונטי'] %}<a class="{% if selected == s %}active{% endif %}" href="{{ url_for('admin_dashboard', status=s, q=search) }}">{{ s }}</a>{% endfor %}
   </div>
-  <div class="table-wrap"><table><thead><tr><th>תאריך</th><th>לקוח ויצירת קשר</th><th>סוג עבודה ושטח</th><th>פרטי הפרויקט</th><th>תקציב</th><th>סטטוס טיפול</th></tr></thead><tbody>
+  <div class="table-wrap"><table><thead><tr><th>תאריך</th><th>לקוח ויצירת קשר</th><th>שירות / מאפיין</th><th>פרטי הפנייה</th><th>תקציב</th><th>סטטוס טיפול</th></tr></thead><tbody>
   {% for lead in leads %}
   {% set lead_meta = metadata_by_lead.get(lead.id) %}
   <tr>
     <td class="date-cell">{{ lead.created_at.strftime('%d/%m/%Y<br>%H:%M')|safe if lead.created_at else '—' }}</td>
     <td><strong>{{ lead.name }}</strong><br><a href="tel:{{ lead.phone }}">{{ lead.phone }}</a>{% if lead.email %}<br><a href="mailto:{{ lead.email }}">{{ lead.email }}</a>{% endif %}<br><small>{{ lead.city or 'יישוב לא צוין' }}</small><br><small>מקור: {{ lead_meta.source if lead_meta else 'website' }}</small>{% if lead_meta and lead_meta.priority != 'normal' %}<br><small>עדיפות: {{ lead_meta.priority }}</small>{% endif %}<div class="lead-actions"><a href="tel:{{ lead.phone }}">חיוג</a>{% set wa_phone = lead.phone|replace(' ','')|replace('-','')|replace('+','')|replace('(','')|replace(')','') %}{% if wa_phone.startswith('0') %}{% set wa_phone = '972' ~ wa_phone[1:] %}{% endif %}<a href="https://wa.me/{{ wa_phone }}" target="_blank" rel="noopener">WhatsApp</a></div></td>
-    <td><strong>{{ lead.service }}</strong>{% if lead.area %}<br><small>{{ lead.area|int }} מ״ר</small>{% endif %}</td>
+    <td><strong>{{ lead.service }}</strong>{% if business.modules.get('area_capture', business.modules.get('estimate_calculator', false)) and lead.area %}<br><small>{{ lead.area|int }}</small>{% endif %}</td>
     <td class="details-cell">{{ lead.details or 'לא נמסרו פרטים נוספים' }}{% if lead_meta and lead_meta.ai_summary %}<br><small>סיכום AI: {{ lead_meta.ai_summary }}</small>{% endif %}</td>
     <td>{{ lead.budget or 'לא צוין' }}</td>
     <td><form method="post" action="/admin/leads/{{ lead.id }}/status"><input type="hidden" name="csrf_token" value="{{ csrf_token() }}"><input type="hidden" name="q" value="{{ search }}"><input type="hidden" name="return_status" value="{{ selected }}"><select name="status" aria-label="עדכון סטטוס עבור {{ lead.name }}" onchange="this.form.submit()">{% for s in ['חדש','בטיפול','נשלחה הצעה','נסגר','לא רלוונטי'] %}<option value="{{ s }}" {% if lead.status == s %}selected{% endif %}>{{ s }}</option>{% endfor %}</select></form></td>
