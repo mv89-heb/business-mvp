@@ -281,6 +281,14 @@
           {% endif %}
           {% if execution_result %}
             <h3 class="result-subtitle">PROVISIONING RESULT</h3>
+            {% if execution_result.status in ['running', 'queued'] and execution_result.workflow_id %}
+              <div class="result-banner success" data-execution-status-url="{{ url_for('execution_status', workflow_id=execution_result.workflow_id) }}" aria-live="polite">
+                <strong>ההקמה מתבצעת ברקע</strong>
+                <span data-execution-status-text>הבקשה נשמרה. ניתן להמתין כאן; אין לשלוח שוב את בקשת ההקמה.</span>
+              </div>
+            {% elif execution_result.status == 'interrupted' %}
+              <div class="result-banner error" role="alert"><strong>תהליך ההקמה הופסק</strong><span>{{ execution_result.error }}</span></div>
+            {% endif %}
             <pre>{{ execution_result|tojson(indent=2) }}</pre>
             {% if execution_result.status == 'completed' and execution_result.workflow_id %}
               <form method="post" action="{{ url_for('download_handover_pack') }}" class="handover-download-form">
