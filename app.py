@@ -323,7 +323,7 @@ def create_app(test_config=None):
         except ValueError:
             area = None
         if area is not None and not 1 <= area <= 100000:
-            flash("שטח העבודה אינו תקין.", "error")
+            flash("הערך המספרי שהוזן אינו תקין.", "error")
             return redirect(url_for("index") + "#contact")
         if app.config["BUSINESS_CONFIG"].get("modules", {}).get("estimate_calculator", False):
             low, high = _estimate(area or 0)
@@ -419,7 +419,7 @@ def create_app(test_config=None):
         output = io.StringIO()
         writer = csv.writer(output)
         writer.writerow(["תאריך", "שם", "טלפון", "דוא״ל", "יישוב", "סוג עבודה",
-                         "שטח במ״ר", "תקציב", "פרטים", "סטטוס"])
+                         "כמות / מאפיין", "תקציב", "פרטים", "סטטוס"])
         for lead in leads:
             writer.writerow([
                 lead.created_at.strftime("%Y-%m-%d %H:%M") if lead.created_at else "",
