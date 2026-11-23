@@ -40,7 +40,7 @@ def test_bootstrap_rejects_unsafe_slug(tmp_path):
         bootstrap(tmp_path / "bad", slug="../bad")
 
 def test_environment_check_reports_missing_names_only():
-    assert validate_runtime_environment({}) == ["SECRET_KEY", "DATABASE_URL", "ADMIN_PASSWORD or ADMIN_PASSWORD_HASH"]
+    assert validate_runtime_environment({}) == ["SECRET_KEY", "DATABASE_URL", "ADMIN_PASSWORD_HASH"]
 
 def test_whatsapp_sender_is_not_available():
     from business_app.integrations.whatsapp_cloud import send_message

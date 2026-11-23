@@ -54,6 +54,6 @@ def validate_runtime_environment(env=None):
         missing.append("SECRET_KEY")
     if not values.get("DATABASE_URL"):
         missing.append("DATABASE_URL")
-    if not (values.get("ADMIN_PASSWORD") or values.get("ADMIN_PASSWORD_HASH")):
-        missing.append("ADMIN_PASSWORD or ADMIN_PASSWORD_HASH")
+    if not values.get("ADMIN_PASSWORD_HASH"):
+        missing.append("ADMIN_PASSWORD_HASH")
     return missing
