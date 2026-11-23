@@ -124,6 +124,15 @@ def _ai_free_text_enabled():
     return os.getenv("AI_ALLOW_FREE_TEXT", "").strip().lower() == "true"
 
 
+def _safe_csv_cell(value):
+    """Neutralize spreadsheet formula prefixes in untrusted exported text."""
+    text = "" if value is None else str(value)
+    significant = text.lstrip(" \t\r\n")
+    if significant.startswith(("=", "+", "-", "@")):
+        return "'" + text
+    return text
+
+
 def _automation_authorized():
     expected = os.getenv("AUTOMATION_WEBHOOK_SECRET", "").strip()
     authorization = request.headers.get("Authorization", "")
@@ -377,9 +386,12 @@ def create_app(test_config=None):
         for lead in leads:
             writer.writerow([
                 lead.created_at.strftime("%Y-%m-%d %H:%M") if lead.created_at else "",
-                lead.name, lead.phone, lead.email or "", lead.city or "", lead.service,
-                lead.area if lead.area is not None else "", lead.budget or "",
-                lead.details or "", lead.status
+                _safe_csv_cell(lead.name), _safe_csv_cell(lead.phone),
+                _safe_csv_cell(lead.email or ""), _safe_csv_cell(lead.city or ""),
+                _safe_csv_cell(lead.service),
+                lead.area if lead.area is not None else "",
+                _safe_csv_cell(lead.budget or ""), _safe_csv_cell(lead.details or ""),
+                _safe_csv_cell(lead.status),
             ])
         response = app.response_class(
             output.getvalue(), mimetype="text/csv; charset=utf-8",
