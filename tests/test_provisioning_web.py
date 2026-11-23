@@ -1036,3 +1036,17 @@ def test_execution_runs_in_background_and_exposes_durable_status(monkeypatch):
     provisioning_web._EXECUTION_JOBS[plan["plan_id"]].result(timeout=10)
     completed = client.get(f"/execute/status/{plan['plan_id']}")
     assert completed.get_json()["status"] == "completed"
+
+
+def test_developer_login_supports_non_ascii_passwords():
+    password = "סיסמה-מאובטחת-לבדיקה-123"
+    app = create_provisioning_app({
+        "TESTING": True,
+        "SECRET_KEY": "test-session-secret-that-is-at-least-32-chars",
+        "PROVISIONING_PASSWORD": password,
+        "WTF_CSRF_ENABLED": False,
+        "PROVISIONING_STATE_DIR": tempfile.mkdtemp(prefix="business-studio-unicode-login-"),
+    })
+    response = app.test_client().post("/login", data={"password": password})
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/wizard")
