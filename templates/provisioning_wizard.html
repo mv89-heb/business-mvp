@@ -217,7 +217,7 @@
                   {% for provider, title in [('github','GitHub'),('neon','Neon'),('render','Render')] %}
                     {% set status = customer_connection_statuses.get(provider) if customer_connection_statuses else none %}
                     <article class="provider-card">
-                      <div class="provider-head"><span class="provider-logo">{{ provider[:1]|upper }}</span><span class="status-chip {{ 'success' if status and status.verified_at else 'warning' }}">{{ 'מאומת' if status and status.verified_at else 'לא מחובר' }}</span></div>
+                      <div class="provider-head"><span class="provider-logo">{{ provider[:1]|upper }}</span><span class="status-chip {{ 'success' if status and status.verified_at else 'warning' }}">{{ 'מאומת' if status and status.verified_at else 'לא מוגדר' }}</span></div>
                       <strong class="provider-name">{{ title }}</strong>
                       {% if status %}
                         <p class="provider-caption">{{ status.metadata.get('account') or status.metadata.get('organization_id') or status.metadata.get('workspace_id') or 'חיבור שמור' }}</p>
