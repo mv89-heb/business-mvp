@@ -158,6 +158,7 @@ def test_preflight_route_runs_read_only_and_unlocks_execution(monkeypatch):
     response = client.post("/preflight", data={
         "business_name": "עסק בדיקה",
         "slug": "test-business",
+        "ownership_mode": "managed",
         "category": "services",
         "modules": ["lead_capture", "lead_management"],
     })
@@ -298,7 +299,7 @@ def test_execution_route_runs_workflow_only_after_explicit_approval(monkeypatch)
     client.post("/login", data={"password": "developer-test-password"})
     from business_app.provisioning import build_provisioning_plan
     plan = build_provisioning_plan(
-        business_name="עסק בדיקה", slug="test-business", category="services",
+        business_name="עסק בדיקה", slug="test-business", category="services", ownership_mode="managed",
         modules=["lead_capture", "lead_management"],
     )
     from business_app.provisioning_web import _plan_fingerprint
@@ -307,6 +308,7 @@ def test_execution_route_runs_workflow_only_after_explicit_approval(monkeypatch)
     response = client.post("/execute", data={
         "business_name": "עסק בדיקה",
         "slug": "test-business",
+        "ownership_mode": "managed",
         "category": "services",
         "modules": ["lead_capture", "lead_management"],
         "approval": "CREATE",
@@ -421,6 +423,7 @@ def test_execution_preserves_brand_profile_after_preflight(monkeypatch):
     profile = {
         "business_name": "עסק בדיקה",
         "slug": "test-business",
+        "ownership_mode": "managed",
         "category": "services",
         "modules": ["lead_capture", "lead_management"],
         "tagline": "פתרונות מקצועיים לבית",
@@ -837,3 +840,78 @@ def test_wizard_defaults_to_customer_owned_and_exposes_managed_opt_in():
     assert 'name="ownership_mode" value="managed"' in page
     assert "חשבונות הלקוח — מומלץ" in page
     assert "אירוח מנוהל בחשבונות שלי" in page
+
+
+def test_customer_connection_save_verifies_and_never_echoes_provider_tokens(monkeypatch):
+    import business_app.provisioning_web as provisioning_web
+    from business_app.provisioning.connections import StoredProviderConnection
+
+    secrets = {
+        "github": "ghp_customer_token_do_not_echo",
+        "neon": "neon_customer_token_do_not_echo",
+        "render": "render_customer_token_do_not_echo",
+    }
+    saved = []
+
+    class FakeStore:
+        def __init__(self, **kwargs):
+            pass
+        def save(self, customer_id, provider, credentials, metadata, verified=False):
+            saved.append((customer_id, provider, credentials, metadata, verified))
+            return None
+        def statuses(self, customer_id):
+            return {
+                provider: StoredProviderConnection(customer_id, provider, metadata, "2026-11-23T00:00:00+00:00")
+                for provider, metadata in (
+                    ("github", {"account": "customer-github"}),
+                    ("neon", {"organization_id": "org-123"}),
+                    ("render", {"workspace_id": "workspace-123"}),
+                )
+            }
+
+    class FakeGitHub:
+        def __init__(self, token=None):
+            assert token == secrets["github"]
+        def check_connection(self):
+            return {"account": "customer-github", "connected": True}
+
+    class FakeNeon:
+        def __init__(self, token=None, org_id=None):
+            assert token == secrets["neon"]
+            assert org_id == "org-123"
+        def check_connection(self):
+            return {"connected": True}
+
+    class FakeRender:
+        def __init__(self, token=None, workspace_id=None):
+            assert token == secrets["render"]
+            assert workspace_id == "workspace-123"
+        def check_connection(self):
+            return {"connected": True, "workspace_selected": True}
+
+    monkeypatch.setattr(provisioning_web, "ProviderConnectionStore", FakeStore)
+    monkeypatch.setattr(provisioning_web, "CredentialVault", lambda: object())
+    monkeypatch.setattr(provisioning_web, "GitHubProvider", FakeGitHub)
+    monkeypatch.setattr(provisioning_web, "NeonProvider", FakeNeon)
+    monkeypatch.setattr(provisioning_web, "RenderProvider", FakeRender)
+
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.post("/connections/save", data={
+        "business_name": "עסק בדיקה",
+        "slug": "customer-one",
+        "category": "services",
+        "modules": ["lead_capture", "lead_management"],
+        "github_token": secrets["github"],
+        "neon_token": secrets["neon"],
+        "neon_org_id": "org-123",
+        "render_token": secrets["render"],
+        "render_workspace_id": "workspace-123",
+    })
+    page = response.get_data(as_text=True)
+    assert response.status_code == 200
+    assert all(secret not in page for secret in secrets.values())
+    assert len(saved) == 3
+    assert all(item[0] == "customer-one" and item[4] is True for item in saved)
+    with client.session_transaction() as session:
+        assert all(secret not in repr(dict(session)) for secret in secrets.values())

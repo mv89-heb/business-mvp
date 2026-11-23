@@ -73,8 +73,11 @@ class CredentialVault:
         expected_keys = {"github": {"token"}, "neon": {"token"}, "render": {"token"}}[provider]
         if not isinstance(credentials, dict) or set(credentials) != expected_keys:
             raise ConnectionVaultError("The provider credential payload has an unsupported shape")
-        if any(not isinstance(k, str) or not isinstance(v, str) or not v.strip() for k, v in credentials.items()):
-            raise ConnectionVaultError("Provider credentials must be non-empty text values")
+        if any(
+            not isinstance(k, str) or not isinstance(v, str) or not v.strip() or len(v) > 8192
+            for k, v in credentials.items()
+        ):
+            raise ConnectionVaultError("Provider credentials must be non-empty text values within the size limit")
         nonce = secrets.token_bytes(12)
         plaintext = json.dumps(credentials, separators=(",", ":"), sort_keys=True).encode("utf-8")
         ciphertext = AESGCM(self._key).encrypt(nonce, plaintext, aad)
@@ -178,6 +181,30 @@ class ProviderConnectionStore:
         credentials = self.vault.decrypt(customer_id, provider, row[0])
         return credentials, StoredProviderConnection(customer_id, provider, metadata, verified_at)
 
+
+    def statuses(self, customer_id: str) -> dict[str, StoredProviderConnection]:
+        """Return non-secret connection status only; do not decrypt credentials."""
+        if not isinstance(customer_id, str) or not CUSTOMER_ID_RE.fullmatch(customer_id):
+            raise ConnectionVaultError("Invalid customer connection scope")
+        with self._connect() as connection:
+            self._ensure_schema(connection)
+            rows = connection.execute("""
+                SELECT provider, metadata, verified_at
+                FROM provisioning_provider_connections
+                WHERE customer_id = %s
+            """, (customer_id,)).fetchall()
+        result = {}
+        for provider, metadata, verified_at in rows:
+            if provider not in PROVIDERS:
+                continue
+            if not isinstance(metadata, dict):
+                metadata = json.loads(metadata or "{}")
+            result[provider] = StoredProviderConnection(
+                customer_id, provider, metadata,
+                verified_at.isoformat() if verified_at else None,
+            )
+        return result
+
     def delete(self, customer_id: str, provider: str) -> bool:
         customer_id, provider = _validate_scope(customer_id, provider)
         with self._connect() as connection:
@@ -187,3 +214,42 @@ class ProviderConnectionStore:
                 WHERE customer_id = %s AND provider = %s
             """, (customer_id, provider))
             return cursor.rowcount > 0
+
+
+
+def load_customer_provider_adapters(store: ProviderConnectionStore, customer_id: str):
+    """Resolve only verified credentials stored for this exact customer; never use env fallback."""
+    from .providers import GitHubProvider, NeonProvider, RenderProvider
+
+    resolved = {}
+    for provider in ("github", "neon", "render"):
+        record = store.get(customer_id, provider)
+        if not record:
+            raise ConnectionVaultError(f"Customer {provider} connection is not configured")
+        credentials, metadata = record
+        if not metadata.verified_at:
+            raise ConnectionVaultError(f"Customer {provider} connection has not been verified")
+        resolved[provider] = (credentials, metadata)
+
+    github_credentials, github_metadata = resolved["github"]
+    neon_credentials, neon_metadata = resolved["neon"]
+    render_credentials, render_metadata = resolved["render"]
+    github_owner = github_metadata.metadata.get("account")
+    org_id = neon_metadata.metadata.get("organization_id")
+    workspace_id = render_metadata.metadata.get("workspace_id")
+    if not isinstance(github_owner, str) or not github_owner.strip():
+        raise ConnectionVaultError("Customer GitHub account identity is missing")
+    if not isinstance(org_id, str) or not org_id.strip():
+        raise ConnectionVaultError("Customer Neon organization is missing")
+    if not isinstance(workspace_id, str) or not workspace_id.strip():
+        raise ConnectionVaultError("Customer Render workspace is missing")
+
+    providers = {
+        "github": GitHubProvider(token=github_credentials["token"]),
+        "neon": NeonProvider(token=neon_credentials["token"], org_id=org_id),
+        "render": RenderProvider(token=render_credentials["token"], workspace_id=workspace_id),
+    }
+    for provider in providers.values():
+        provider._business_studio_customer_id = customer_id
+        provider._business_studio_verified_connection = True
+    return providers, github_owner
