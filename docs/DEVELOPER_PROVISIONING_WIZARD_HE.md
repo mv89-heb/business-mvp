@@ -244,20 +244,28 @@ py -m business_app.provisioning.execute --plan .\\work\\test-business-plan.json
 
 ## פריסת Developer Studio ב־Render — מצב גישה מרחוק
 
-האשף רץ כתהליך נפרד מהאפליקציה העסקית. יש ליצור Web Service ייעודי שמחובר למאגר הזה ולענף `main`, עם הפקודות:
+האשף רץ כתהליך נפרד מהאפליקציה העסקית. השירות הקיים במרחב Render הוא `business-developer-studio` בכתובת:
 
+`https://business-developer-studio.onrender.com`
+
+הגדרות השירות שנבדקו ב־Render:
+- Repository: `mv89-heb/business-mvp`, branch: `main`.
 - Build: `pip install -r requirements.txt`
-- Start: `gunicorn --workers 1 --threads 4 --timeout 120 provisioning_wsgi:app`
-- Health check: `/healthz`
-- Runtime: Python 3.11, Frankfurt, Free (רק אם המסלול זמין בחשבון).
+- Start: `gunicorn --workers 1 --bind 0.0.0.0:$PORT --timeout 60 provisioning_wsgi:app`
+- Runtime: Python, Frankfurt, Free.
+- יש להגדיר ידנית ב־Render Dashboard את Health Check Path ל־`/healthz`. בבדיקה האחרונה השדה היה ריק, ולכן Render עדיין לא השתמש בנתיב הבריאות הייעודי.
 
 משתני סביבה נדרשים ב־Render:
 - `PROVISIONING_PUBLIC_ACCESS=true`
-- `PROVISIONING_ALLOWED_HOSTS=business-mvp-iqem.onrender.com` (hostname מדויק בלבד, בלי scheme או path)
+- `PROVISIONING_ALLOWED_HOSTS=business-developer-studio.onrender.com` — hostname מדויק בלבד, בלי scheme או path.
 - `PROVISIONING_SESSION_SECRET` — סוד אקראי חזק באורך 32 תווים לפחות.
 - `PROVISIONING_PASSWORD` — סיסמה אקראית ייעודית באורך 32 תווים לפחות; לא סיסמה שמשמשת במקום אחר.
 - `PROVISIONING_RATE_LIMIT_STORAGE_URI=memory://` כברירת מחדל.
+- `DATABASE_URL` או `PROVISIONING_DATABASE_URL` — מחרוזת חיבור PostgreSQL של פרויקט Neon הייעודי ל־Business Studio. יש להעתיק אותה ישירות ממסך Neon אל Render Environment; לעולם לא להדביק אותה בצ'אט, ב־GitHub או בלוגים.
+- `CUSTOMER_CREDENTIALS_ENCRYPTION_KEY` — מפתח אקראי של 32 bytes בקידוד URL-safe Base64. יש לייצר מפתח חדש, לשמור אותו רק ב־Render Secret Environment ולשמור עותק גיבוי בכספת סודות מאובטחת. אין לשנות או לייצר מחדש את המפתח לאחר שנשמרו חיבורים מוצפנים, אחרת לא ניתן יהיה לפענח אותם.
 
-במצב זה האפליקציה אינה בודקת loopback, אלא דורשת Host מדויק, HTTPS, session cookie מאובטח, CSRF פעיל, HSTS והגבלת ניסיונות. יש להשאיר worker יחיד כדי שמגבלת הניסיונות בזיכרון לא תתפצל בין תהליכים. אין לפרוס את האשף דרך `wsgi:app`, שמפעיל את אפליקציית הלידים. אין להוסיף סודות GitHub/Neon/Render עד שהשירות מוגן ונבדק; לאחר מכן יש להוסיף רק מפתחות עם ההרשאות המזעריות הנדרשות.
+**בדיקת מוכנות:** לאחר שמירת המשתנים והפעלת השירות, פתח את `https://business-developer-studio.onrender.com/healthz`. תשובת HTTP 200 עם `{"status":"ok"}` מעידה שבדיקת החיבור למסד הנתונים ומפתח ההצפנה עברה. תשובת 503 פירושה שאחד מתנאי המוכנות חסר או נכשל. אין להחשיב GET למסך ההתחברות או HTTP 200 של דף הבית כהוכחה שמסד הנתונים והמפתח תקינים. אם הנתיב אינו נגיש מבחוץ, בדוק את ה־Request Logs ואת Health Check ב־Render; אל תעקוף את בדיקת המוכנות.
+
+במצב זה האפליקציה דורשת Host מדויק, HTTPS, session cookie מאובטח, CSRF פעיל, HSTS והגבלת ניסיונות. יש להשאיר worker יחיד כדי שמגבלת הניסיונות בזיכרון לא תתפצל בין תהליכים. אין לפרוס את האשף דרך `wsgi:app`, שמפעיל את אפליקציית הלידים. אין להוסיף סודות GitHub/Neon/Render עד שהשירות מוגן ונבדק; לאחר מכן יש להוסיף רק מפתחות עם ההרשאות המזעריות הנדרשות.
 
 **הגבלת אבטחה:** סיסמה חזקה והגבלת ניסיונות מגנות על מסך הכניסה, אך אינן מספקות MFA או Zero Trust. לפני חיבור מפתחות ענן בעלי הרשאות כתיבה, מומלץ להוסיף Cloudflare Access או VPN, ולהפעיל התראות על ניסיונות כניסה. אין לשתף את כתובת האשף או את הסיסמה.
