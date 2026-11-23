@@ -257,15 +257,28 @@ class ProvisioningWorkflow:
     def _normalize_repository_url(value):
         return (value or "").strip().rstrip("/").removesuffix(".git").casefold()
 
+    def _require_customer_owned_connections(self, plan):
+        """Reject customer-owned plans unless every adapter carries this customer's verified scope."""
+        if plan.get("ownership_mode", "managed") != "customer_owned":
+            return
+        slug = ((plan.get("business") or {}).get("slug") or "")
+        if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
+            raise ProviderError("Customer-owned provisioning requires a valid customer scope")
+        for name, provider in (("GitHub", self.github), ("Neon", self.neon), ("Render", self.render)):
+            if (
+                getattr(provider, "_business_studio_customer_id", None) != slug
+                or getattr(provider, "_business_studio_verified_connection", False) is not True
+            ):
+                raise ProviderError(
+                    f"Customer-owned provisioning requires a verified {name} connection for this exact customer. "
+                    "Developer credentials are never used as a fallback."
+                )
+
     def preflight(self, plan, *, github_owner, known_resources=None):
         """Inspect provider access and require identity matches for previously created resources."""
         if not isinstance(plan, dict) or plan.get("mode") != "dry_run":
             raise ProviderError("Preflight requires a dry-run provisioning plan")
-        if plan.get("ownership_mode", "managed") == "customer_owned":
-            raise ProviderError(
-                "Customer-owned provisioning is blocked until customer-scoped GitHub, Neon and Render connections are verified. "
-                "The wizard will not fall back to developer account credentials."
-            )
+        self._require_customer_owned_connections(plan)
         business = plan.get("business") or {}
         slug = business.get("slug")
         if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
@@ -422,11 +435,7 @@ class ProvisioningWorkflow:
             raise ProviderError("A customer admin password of at least 14 characters is required")
         if not isinstance(plan, dict) or plan.get("mode") != "dry_run":
             raise ProviderError("Only a valid dry-run provisioning plan can be executed")
-        if plan.get("ownership_mode", "managed") == "customer_owned":
-            raise ProviderError(
-                "Customer-owned provisioning is blocked until customer-scoped GitHub, Neon and Render connections are verified. "
-                "No developer credentials were used."
-            )
+        self._require_customer_owned_connections(plan)
         business = plan.get("business") or {}
         slug = business.get("slug")
         if not isinstance(slug, str) or not slug:
