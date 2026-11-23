@@ -675,6 +675,7 @@ class ProvisioningWorkflow:
                 "ADMIN_PASSWORD_HASH": generate_password_hash(admin_password),
                 "PYTHON_VERSION": "3.11.9",
                 "FLASK_ENV": "production",
+                "TRUST_PROXY_HEADERS": "true",
             }
             for secret_name in (
                 "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN",
