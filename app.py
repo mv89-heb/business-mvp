@@ -46,7 +46,7 @@ class Lead(db.Model):
     estimate_min = db.Column(db.Integer)
     estimate_max = db.Column(db.Integer)
     status = db.Column(db.String(24), nullable=False, default="חדש")
-    preset = db.Column(db.String(40), nullable=False, default="contractor")
+    preset = db.Column(db.String(40), nullable=False, default="business")
     consent_at = db.Column(db.DateTime(timezone=True))
 
 
