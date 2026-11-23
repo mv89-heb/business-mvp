@@ -750,7 +750,7 @@ def test_remote_healthz_is_public_but_https_only_for_non_loopback_clients(monkey
     )
     from cryptography.hazmat.primitives import serialization
     from cryptography.hazmat.primitives.asymmetric import rsa
-    command_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    command_key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
     command_key_pem = command_key.private_bytes(
         serialization.Encoding.PEM,
         serialization.PrivateFormat.PKCS8,
@@ -1115,6 +1115,34 @@ def test_remote_healthz_rejects_malformed_persistent_command_key(monkeypatch):
         base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii"),
     )
     monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64", "not-a-valid-base64-private-key")
+    monkeypatch.setattr(WorkflowStateStore, "check_connection", lambda self: True)
+
+    response = _make_remote_health_client().get(
+        "/healthz", base_url="https://studio.example.com"
+    )
+    assert response.status_code == 503
+    assert response.get_json() == {"status": "unavailable"}
+
+
+def test_remote_healthz_rejects_rsa_key_below_3072_bits(monkeypatch):
+    import base64
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from business_app.provisioning.workflow import WorkflowStateStore
+
+    monkeypatch.setenv("PROVISIONING_PUBLIC_ACCESS", "true")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://health-check.invalid/business_studio")
+    monkeypatch.setenv(
+        "CUSTOMER_CREDENTIALS_ENCRYPTION_KEY",
+        base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii"),
+    )
+    weak_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    weak_pem = weak_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64", base64.b64encode(weak_pem).decode("ascii"))
     monkeypatch.setattr(WorkflowStateStore, "check_connection", lambda self: True)
 
     response = _make_remote_health_client().get(
