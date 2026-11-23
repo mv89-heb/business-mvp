@@ -38,6 +38,7 @@ def _empty_form_values():
     return {
         "business_name": "",
         "slug": "",
+        "ownership_mode": "customer_owned",
         "category": "services",
         "modules": ["lead_capture", "lead_management"],
         "tagline": "",
@@ -57,6 +58,7 @@ def _read_form_values(form):
     values.update({
         "business_name": form.get("business_name", ""),
         "slug": form.get("slug", ""),
+        "ownership_mode": form.get("ownership_mode", "customer_owned"),
         "category": form.get("category", "services"),
         "modules": form.getlist("modules"),
         "tagline": form.get("tagline", ""),
@@ -124,6 +126,8 @@ def _audit_event(app, event, **details):
 def _plan_fingerprint(plan):
     """Bind approval to the exact business, module and infrastructure choices."""
     relevant = {
+        "ownership_mode": plan.get("ownership_mode", "managed"),
+        "ownership": plan.get("ownership"),
         "business": plan.get("business"),
         "application": plan.get("application"),
         "infrastructure": plan.get("infrastructure"),
