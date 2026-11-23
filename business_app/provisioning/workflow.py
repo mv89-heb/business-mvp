@@ -261,6 +261,11 @@ class ProvisioningWorkflow:
         """Inspect provider access and require identity matches for previously created resources."""
         if not isinstance(plan, dict) or plan.get("mode") != "dry_run":
             raise ProviderError("Preflight requires a dry-run provisioning plan")
+        if plan.get("ownership_mode", "managed") == "customer_owned":
+            raise ProviderError(
+                "Customer-owned provisioning is blocked until customer-scoped GitHub, Neon and Render connections are verified. "
+                "The wizard will not fall back to developer account credentials."
+            )
         business = plan.get("business") or {}
         slug = business.get("slug")
         if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
@@ -417,6 +422,11 @@ class ProvisioningWorkflow:
             raise ProviderError("A customer admin password of at least 14 characters is required")
         if not isinstance(plan, dict) or plan.get("mode") != "dry_run":
             raise ProviderError("Only a valid dry-run provisioning plan can be executed")
+        if plan.get("ownership_mode", "managed") == "customer_owned":
+            raise ProviderError(
+                "Customer-owned provisioning is blocked until customer-scoped GitHub, Neon and Render connections are verified. "
+                "No developer credentials were used."
+            )
         business = plan.get("business") or {}
         slug = business.get("slug")
         if not isinstance(slug, str) or not slug:
