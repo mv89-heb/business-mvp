@@ -168,7 +168,7 @@ def build_provisioning_plan(
         raise ProvisioningInputError("Unknown business category")
     if not isinstance(region, str) or region not in SUPPORTED_REGIONS:
         raise ProvisioningInputError("Unsupported deployment region")
-    if ownership_mode not in {"customer_owned", "managed"}:
+    if not isinstance(ownership_mode, str) or ownership_mode not in {"customer_owned", "managed"}:
         raise ProvisioningInputError("Ownership mode must be customer_owned or managed")
 
     selected_modules = _normalize_modules(modules)
