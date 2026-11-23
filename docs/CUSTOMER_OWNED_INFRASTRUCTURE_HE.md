@@ -78,7 +78,7 @@
 
 הקוד הקיים עדיין משתמש במשתני סביבה גלובליים (`GITHUB_TOKEN`, `GITHUB_OWNER`, `NEON_API_KEY`, `NEON_ORG_ID`, `RENDER_API_KEY`, `RENDER_WORKSPACE_ID`) ובמתאמים שמקבלים credentials בעת יצירה. ממשק האשף כולל כעת בחירת בעלות, Customer-owned כברירת מחדל ו-Managed כבחירה מפורשת; Preflight ו-Provisioning חוסמים Customer-owned לפני כל קריאת ספק כדי למנוע fallback לחשבונות המפתח. **חיבורי לקוח פר-לקוח ו-Provisioning מלא עדיין אינם מיושמים**.
 
-אין להציג את אשף ההקמה כמי שיוצר כבר עכשיו בחשבונות הלקוח. אין להעביר את `GITHUB_OWNER=mv89-heb` או מפתחות סביבת המפתח כברירת מחדל לתהליכי לקוח. יש להשלים את שלבי OAuth / delegated credentials, בידוד חיבורים, בדיקות, ממשק בחירת בעלות ו-Preflight לפני הפעלת Customer-owned.
+אין להציג את אשף ההקמה כמי שיוצר כבר עכשיו בחשבונות הלקוח. אין להעביר את `GITHUB_OWNER=mv89-heb` או מפתחות סביבת המפתח כברירת מחדל לתהליכי לקוח. יש להשלים את שלבי OAuth / delegated credentials, אחסון חיבורים מאובטח פר-לקוח, תחימת משאבים ואימות Preflight מול אותם חיבורים לפני הפעלת Customer-owned.
 
 ## שלבי מימוש
 
