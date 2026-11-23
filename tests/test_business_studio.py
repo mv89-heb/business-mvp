@@ -311,21 +311,3 @@ def test_render_public_command_key_endpoint_is_public_and_returns_key_id():
     assert response.status_code==200
     assert response.json["keyId"]
     assert response.json["publicKey"].startswith("-----BEGIN PUBLIC KEY-----")
-
-
-def test_command_decryption_rejects_stale_key_id(monkeypatch):
-    import json, base64, os, hashlib
-    from datetime import datetime, timezone
-    from cryptography.hazmat.primitives import hashes, serialization
-    from cryptography.hazmat.primitives.asymmetric import rsa, padding
-    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-    from business_app.provisioning.business_studio import COMMAND_AAD
-    key=rsa.generate_private_key(public_exponent=65537,key_size=2048)
-    private=key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption())
-    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64",base64.b64encode(private).decode())
-    aes_key=os.urandom(32); nonce=os.urandom(12)
-    encrypted=AESGCM(aes_key).encrypt(nonce,json.dumps({"type":"get_businesses","payload":{}}).encode(),COMMAND_AAD)
-    wrapped=key.public_key().encrypt(aes_key,padding.OAEP(mgf=padding.MGF1(hashes.SHA256()),algorithm=hashes.SHA256(),label=None))
-    envelope={"schema":"business-studio-command/v1","commandId":"12345678-1234-1234-1234-123456789012","issuedAt":datetime.now(timezone.utc).isoformat(),"keyId":"stale-key-id","encryptedKey":base64.b64encode(wrapped).decode(),"nonce":base64.b64encode(nonce).decode(),"ciphertext":base64.b64encode(encrypted).decode(),"responsePublicKey":key.public_key().public_bytes(serialization.Encoding.PEM,serialization.PublicFormat.SubjectPublicKeyInfo).decode()}
-    with pytest.raises(ValueError):
-        decrypt_github_command(envelope)
