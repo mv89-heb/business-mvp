@@ -300,3 +300,16 @@ def test_render_proxy_fix_uses_original_client_ip_from_single_trusted_hop(tmp_pa
     assert response.get_json()["remote_addr"] == "198.51.100.24"
     with app.app_context():
         db.drop_all()
+
+
+def test_automation_bearer_auth_supports_non_ascii_secrets(monkeypatch):
+    from flask import Flask
+    from app import _automation_authorized
+
+    secret = "מפתח-אוטומציה-בדיקה"
+    monkeypatch.setenv("AUTOMATION_WEBHOOK_SECRET", secret)
+    app = Flask(__name__)
+    with app.test_request_context(headers={"Authorization": "Bearer " + secret}):
+        assert _automation_authorized()
+    with app.test_request_context(headers={"Authorization": "Bearer מפתח-שגוי"}):
+        assert not _automation_authorized()
