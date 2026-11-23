@@ -201,14 +201,16 @@
                   {% for provider, result in customer_connection_results.items() %}<span>{{ result.message }}</span>{% endfor %}
                 </div>
               {% endif %}
+              {% set neon_connection = customer_connection_statuses.get("neon") if customer_connection_statuses else none %}
+              {% set render_connection = customer_connection_statuses.get("render") if customer_connection_statuses else none %}
               <div class="panel connection-setup">
                 <div class="panel-heading"><div><div class="section-kicker">CUSTOMER PROVIDER ACCESS</div><h2>חיבור חשבונות הלקוח</h2><p class="panel-description">הזן מפתחות API שנוצרו בחשבונות הלקוח. כל מפתח נבדק לפני הצפנה ושמירה; הוא לא יוצג שוב ולא ייכנס ל-session או ללוגים.</p></div></div>
                 <div class="field-grid">
                   <div class="field"><label for="githubToken">GitHub Personal Access Token</label><input id="githubToken" name="github_token" type="password" autocomplete="new-password" placeholder="ghp_… או github_pat_…"><small class="hint">נבדקת זהות החשבון. הרשאת יצירת Repository תאומת שוב בזמן ההקמה.</small></div>
                   <div class="field"><label for="neonToken">Neon API Key</label><input id="neonToken" name="neon_token" type="password" autocomplete="new-password" placeholder="Neon API key"><small class="hint">המפתח נבדק מול הארגון שתציין.</small></div>
-                  <div class="field"><label for="neonOrgId">Neon Organization ID</label><input id="neonOrgId" name="neon_org_id" value="{{ form_values.neon_org_id|default('') }}" autocomplete="off" placeholder="org-…"></div>
+                  <div class="field"><label for="neonOrgId">Neon Organization ID</label><input id="neonOrgId" name="neon_org_id" value="{{ neon_connection.metadata.get('organization_id', '') if neon_connection else '' }}" autocomplete="off" placeholder="org-…"></div>
                   <div class="field"><label for="renderToken">Render API Key</label><input id="renderToken" name="render_token" type="password" autocomplete="new-password" placeholder="rnd_…"><small class="hint">המפתח נבדק מול סביבת העבודה שתציין.</small></div>
-                  <div class="field"><label for="renderWorkspaceId">Render Workspace ID</label><input id="renderWorkspaceId" name="render_workspace_id" value="{{ form_values.render_workspace_id|default('') }}" autocomplete="off" placeholder="tea-…"></div>
+                  <div class="field"><label for="renderWorkspaceId">Render Workspace ID</label><input id="renderWorkspaceId" name="render_workspace_id" value="{{ render_connection.metadata.get('workspace_id', '') if render_connection else '' }}" autocomplete="off" placeholder="tea-…"></div>
                 </div>
                 <div class="action-grid"><button class="button button-primary" type="submit" formaction="{{ url_for('save_customer_connections') }}">בדוק ושמור חיבורי לקוח</button></div>
                 <div class="provider-grid">
