@@ -948,7 +948,7 @@ def test_remote_healthz_requires_a_valid_customer_credential_encryption_key(monk
     assert response.status_code == 503
     assert response.get_json() == {"status": "unavailable"}
 
-    key = base64.urlsafe_b64encode(b"health-check-key-material-32bytes").decode("ascii")
+    key = base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii")
     monkeypatch.setenv("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY", key)
     response = client.get("/healthz", base_url="https://studio.example.com")
     assert response.status_code == 200
