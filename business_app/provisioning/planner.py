@@ -154,6 +154,7 @@ def build_provisioning_plan(
     accent_color: str = "#b88a54",
     font_family: str = "Heebo",
     services: Iterable[str] | None = None,
+    ownership_mode: str = "customer_owned",
 ) -> dict:
     """Build a deterministic dry-run plan; never contacts a provider or creates resources."""
     if not isinstance(business_name, str) or not business_name.strip():
@@ -167,6 +168,8 @@ def build_provisioning_plan(
         raise ProvisioningInputError("Unknown business category")
     if not isinstance(region, str) or region not in SUPPORTED_REGIONS:
         raise ProvisioningInputError("Unsupported deployment region")
+    if ownership_mode not in {"customer_owned", "managed"}:
+        raise ProvisioningInputError("Ownership mode must be customer_owned or managed")
 
     selected_modules = _normalize_modules(modules)
     tagline = _optional_text(tagline, "Tagline", 160)
@@ -248,6 +251,7 @@ def build_provisioning_plan(
         },
     ]
     identity = {
+        "ownership_mode": ownership_mode,
         "business": business_profile,
         "modules": selected_modules,
         "region": region,
@@ -260,6 +264,13 @@ def build_provisioning_plan(
         "plan_id": plan_id,
         "created_at": datetime.now(timezone.utc).isoformat(),
         "mode": "dry_run",
+        "ownership_mode": ownership_mode,
+        "ownership": {
+            "mode": ownership_mode,
+            "default": "customer_owned",
+            "target": "customer_accounts" if ownership_mode == "customer_owned" else "developer_managed_accounts",
+            "provisioning_ready": ownership_mode == "managed",
+        },
         "execution_status": "not_started",
         "business": business_profile,
         "application": {
@@ -290,7 +301,11 @@ def build_provisioning_plan(
             "separate_repository_database_and_service": True,
         },
         "requires_explicit_execution_approval": True,
-        "warnings": [
+        "warnings": ([
+            "Customer-owned mode is selected. Provisioning remains blocked until customer-scoped provider connections are implemented and verified.",
+        ] if ownership_mode == "customer_owned" else [
+            "Managed mode uses the developer-configured provider accounts. The developer remains responsible for hosting, billing, backups and customer exit.",
+        ]) + [
             "This is a dry-run plan. No provider API was called and no cloud resource was created.",
             "Only modules implemented in this starter can be selected; some require separate provider accounts and external workflow setup.",
             "The live provider account, quotas, free-tier eligibility and current prices are not verified by this plan.",
