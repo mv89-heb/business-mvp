@@ -215,3 +215,21 @@ def test_outbox_stops_after_maximum_attempts(monkeypatch):
     assert result["attempts"] == 5
     assert state["status"] == "FAILED"
     assert state["next_attempt_at"] is None
+
+
+
+def test_business_studio_schema_initializes_once_per_cached_store():
+    class CountingStore(business_studio.BusinessStudioStore):
+        def __init__(self):
+            super().__init__(database_url="postgresql://unit-test.invalid/test")
+            self.schema_calls = 0
+
+        def _ensure_schema(self, connection):
+            self.schema_calls += 1
+
+    store = CountingStore()
+    store._ensure_schema_once(object())
+    store._ensure_schema_once(object())
+    store._ensure_schema_once(object())
+
+    assert store.schema_calls == 1
