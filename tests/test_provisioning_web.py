@@ -1,5 +1,6 @@
 import json
 import re
+import tempfile
 
 from business_app.provisioning_web import create_provisioning_app
 
@@ -10,6 +11,7 @@ def make_client(audit_path=None):
         "SECRET_KEY": "test-session-secret-that-is-at-least-32-chars",
         "PROVISIONING_PASSWORD": "developer-test-password",
         "WTF_CSRF_ENABLED": False,
+        "PROVISIONING_STATE_DIR": tempfile.mkdtemp(prefix="business-studio-test-runs-"),
     }
     if audit_path is not None:
         config["PROVISIONING_AUDIT_PATH"] = str(audit_path)
