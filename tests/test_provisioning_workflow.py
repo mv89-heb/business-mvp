@@ -703,3 +703,49 @@ def test_customer_owned_execution_fails_closed_before_provider_calls():
             approval="CREATE",
             neon_free_tier_verified=True,
         )
+
+
+def _mark_customer_owned_adapters(workflow):
+    for provider in (workflow.github, workflow.neon, workflow.render):
+        provider._business_studio_customer_id = "test-business"
+        provider._business_studio_verified_connection = True
+
+
+def test_customer_owned_execution_revalidates_live_provider_connections_before_writes(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    _mark_customer_owned_adapters(workflow)
+    plan = make_plan()
+    plan["ownership_mode"] = "customer_owned"
+
+    result = workflow.run(
+        plan,
+        github_owner="developer",
+        admin_password="a-very-long-test-password",
+        approval="CREATE",
+        neon_free_tier_verified=True,
+    )
+
+    assert result["status"] == "completed"
+    assert github.published is True
+
+
+def test_customer_owned_execution_rejects_changed_github_identity_before_writes(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    _mark_customer_owned_adapters(workflow)
+    workflow.github.check_connection = lambda: {
+        "provider": "github", "connected": True, "account": "someone-else",
+    }
+    plan = make_plan()
+    plan["ownership_mode"] = "customer_owned"
+
+    with pytest.raises(ProviderError, match="does not match the customer-owned repository target"):
+        workflow.run(
+            plan,
+            github_owner="developer",
+            admin_password="a-very-long-test-password",
+            approval="CREATE",
+            neon_free_tier_verified=True,
+        )
+
+    assert github.published is False
+    assert github.ensure_calls == 0
