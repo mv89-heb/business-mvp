@@ -19,6 +19,10 @@ from flask_limiter.util import get_remote_address
 from werkzeug.middleware.proxy_fix import ProxyFix
 
 from business_app.provisioning.providers import GitHubProvider, NeonProvider, RenderProvider
+from business_app.provisioning.connections import (
+    ConnectionVaultError, CredentialVault, ProviderConnectionStore,
+    load_customer_provider_adapters,
+)
 from business_app.provisioning.providers.http import ProviderError
 from business_app.provisioning.workflow import ProvisioningWorkflow, WorkflowStateStore
 from business_app.provisioning.handover_generator import build_handover_pack, HandoverValidationError
@@ -186,6 +190,33 @@ def create_provisioning_app(test_config=None):
     limiter = Limiter(key_func=get_remote_address, default_limits=[], storage_uri=storage_uri)
     limiter.init_app(app)
 
+
+    def _provider_connection_store():
+        database_url = (
+            app.config.get("PROVISIONING_DATABASE_URL")
+            or os.getenv("DATABASE_URL", "")
+        ).strip()
+        return ProviderConnectionStore(database_url=database_url, vault=CredentialVault())
+
+    def _customer_connection_statuses(customer_id):
+        if not customer_id:
+            return {}
+        try:
+            return _provider_connection_store().statuses(customer_id)
+        except Exception:
+            return {}
+
+    def _workflow_for_plan(plan):
+        if plan.get("ownership_mode", "managed") == "customer_owned":
+            customer_id = (plan.get("business") or {}).get("slug", "")
+            store = _provider_connection_store()
+            providers, owner = load_customer_provider_adapters(store, customer_id)
+            workflow = ProvisioningWorkflow(
+                github=providers["github"], neon=providers["neon"], render=providers["render"]
+            )
+            return workflow, owner
+        return ProvisioningWorkflow(), os.getenv("GITHUB_OWNER", "").strip()
+
     @app.context_processor
     def inject_deployment_context():
         return {"remote_access": app.config["PROVISIONING_PUBLIC_ACCESS"]}
@@ -333,6 +364,121 @@ def create_provisioning_app(test_config=None):
         )
 
 
+
+    @app.post("/connections/save")
+    @developer_required
+    def save_customer_connections():
+        form_values = _read_form_values(request.form)
+        customer_id = request.form.get("slug", "").strip()
+        results = {}
+        try:
+            if not customer_id or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", customer_id):
+                raise ConnectionVaultError("יש להזין מזהה עסק תקין לפני חיבור ספקים.")
+            store = _provider_connection_store()
+            github_token = request.form.get("github_token", "").strip()
+            neon_token = request.form.get("neon_token", "").strip()
+            render_token = request.form.get("render_token", "").strip()
+
+            if github_token:
+                try:
+                    provider = GitHubProvider(token=github_token)
+                    identity = provider.check_connection()
+                    store.save(
+                        customer_id, "github", {"token": github_token},
+                        {"account": identity.get("account", "")}, verified=True,
+                    )
+                    results["github"] = {"connected": True, "message": f"GitHub אומת: {identity.get('account', '')}"}
+                    _audit_event(app, "customer_provider_connection", provider="github", connected=True, business_slug=customer_id)
+                except ProviderError:
+                    results["github"] = {"connected": False, "message": "אימות GitHub נכשל. בדוק את המפתח והרשאות החשבון."}
+                    _audit_event(app, "customer_provider_connection", provider="github", connected=False, business_slug=customer_id, reason="provider_error")
+
+            neon_org_id = request.form.get("neon_org_id", "").strip()
+            if neon_token:
+                try:
+                    if not neon_org_id:
+                        raise ConnectionVaultError("יש להזין Neon Organization ID.")
+                    provider = NeonProvider(token=neon_token, org_id=neon_org_id)
+                    provider.check_connection()
+                    store.save(
+                        customer_id, "neon", {"token": neon_token},
+                        {"organization_id": neon_org_id}, verified=True,
+                    )
+                    results["neon"] = {"connected": True, "message": "Neon אומת מול הארגון שנבחר."}
+                    _audit_event(app, "customer_provider_connection", provider="neon", connected=True, business_slug=customer_id)
+                except (ProviderError, ConnectionVaultError):
+                    results["neon"] = {"connected": False, "message": "אימות Neon נכשל. בדוק מפתח API ו־Organization ID."}
+                    _audit_event(app, "customer_provider_connection", provider="neon", connected=False, business_slug=customer_id, reason="provider_error")
+
+            render_workspace_id = request.form.get("render_workspace_id", "").strip()
+            if render_token:
+                try:
+                    if not render_workspace_id:
+                        raise ConnectionVaultError("יש להזין Render Workspace ID.")
+                    provider = RenderProvider(token=render_token, workspace_id=render_workspace_id)
+                    result = provider.check_connection()
+                    if result.get("workspace_selected") is not True:
+                        raise ProviderError("Render workspace was not verified")
+                    store.save(
+                        customer_id, "render", {"token": render_token},
+                        {"workspace_id": render_workspace_id}, verified=True,
+                    )
+                    results["render"] = {"connected": True, "message": "Render אומת מול סביבת העבודה שנבחרה."}
+                    _audit_event(app, "customer_provider_connection", provider="render", connected=True, business_slug=customer_id)
+                except (ProviderError, ConnectionVaultError):
+                    results["render"] = {"connected": False, "message": "אימות Render נכשל. בדוק מפתח API ו־Workspace ID."}
+                    _audit_event(app, "customer_provider_connection", provider="render", connected=False, business_slug=customer_id, reason="provider_error")
+
+            if not results:
+                results["general"] = {"connected": False, "message": "הזן מפתח אחד לפחות כדי לבצע חיבור."}
+            statuses = store.statuses(customer_id)
+        except ConnectionVaultError as exc:
+            results["general"] = {"connected": False, "message": str(exc)}
+            statuses = {}
+        except Exception:
+            results["general"] = {"connected": False, "message": "לא ניתן לשמור את החיבור. לא נשמרו פרטי אימות גלויים."}
+            statuses = {}
+        return render_template(
+            "provisioning_wizard.html",
+            login_required=False,
+            categories=BUSINESS_CATEGORIES,
+            modules=SUPPORTED_MODULES,
+            form_values=form_values,
+            customer_connection_results=results,
+            customer_connection_statuses=statuses,
+            connection_results=None,
+        )
+
+    @app.post("/connections/remove")
+    @developer_required
+    def remove_customer_connection():
+        form_values = _read_form_values(request.form)
+        customer_id = request.form.get("slug", "").strip()
+        provider = request.form.get("provider", "").strip()
+        results = {}
+        try:
+            store = _provider_connection_store()
+            removed = store.delete(customer_id, provider)
+            results[provider] = {
+                "connected": False,
+                "message": "החיבור הוסר." if removed else "לא נמצא חיבור להסרה.",
+            }
+            statuses = store.statuses(customer_id)
+            _audit_event(app, "customer_provider_connection_removed", provider=provider, connected=False, business_slug=customer_id)
+        except Exception:
+            results["general"] = {"connected": False, "message": "לא ניתן להסיר את החיבור."}
+            statuses = {}
+        return render_template(
+            "provisioning_wizard.html",
+            login_required=False,
+            categories=BUSINESS_CATEGORIES,
+            modules=SUPPORTED_MODULES,
+            form_values=form_values,
+            customer_connection_results=results,
+            customer_connection_statuses=statuses,
+            connection_results=None,
+        )
+
     @app.post("/storage/check")
     @developer_required
     def storage_check():
@@ -372,7 +518,8 @@ def create_provisioning_app(test_config=None):
         try:
             plan = build_provisioning_plan(**form_values)
             owner = os.getenv("GITHUB_OWNER", "").strip()
-            report = ProvisioningWorkflow().preflight(plan, github_owner=owner)
+            workflow, owner = _workflow_for_plan(plan)
+            report = workflow.preflight(plan, github_owner=owner)
             session["preflight_fingerprint"] = _plan_fingerprint(plan)
             _audit_event(app, "preflight_success", plan_id=plan.get("plan_id"), business_slug=plan.get("business", {}).get("slug"))
         except (ProvisioningInputError, ProviderError) as exc:
@@ -412,9 +559,10 @@ def create_provisioning_app(test_config=None):
             if request.form.get("confirm_zero_cost") != "yes":
                 raise ProviderError("לא התקבל אישור מפורש לכך שעלות Neon תהיה אפס.")
             _audit_event(app, "provisioning_started", plan_id=plan.get("plan_id"), business_slug=plan.get("business", {}).get("slug"))
-            result = ProvisioningWorkflow().run(
+            workflow, owner = _workflow_for_plan(plan)
+            result = workflow.run(
                 plan,
-                github_owner=os.getenv("GITHUB_OWNER", "").strip(),
+                github_owner=owner,
                 admin_password=request.form.get("admin_password", ""),
                 approval=request.form.get("approval", ""),
                 neon_free_tier_verified=True,
@@ -497,6 +645,7 @@ def create_provisioning_app(test_config=None):
             plan=plan,
             error=error,
             connection_results=None,
+            customer_connection_statuses=_customer_connection_statuses((form_values or {}).get("slug", "")),
         )
 
     app.register_blueprint(create_business_studio_blueprint())
