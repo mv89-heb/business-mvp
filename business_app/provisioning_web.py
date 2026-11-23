@@ -22,7 +22,7 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 from business_app.provisioning.providers import GitHubProvider, NeonProvider, RenderProvider
 from business_app.provisioning.connections import (
     ConnectionVaultError, CredentialVault, ProviderConnectionStore,
-    load_customer_provider_adapters,
+    load_customer_provider_adapters, load_encryption_key,
 )
 from business_app.provisioning.providers.http import ProviderError
 from business_app.provisioning.workflow import ProvisioningWorkflow, WorkflowStateStore
@@ -244,11 +244,22 @@ def create_provisioning_app(test_config=None):
 
     @app.get("/healthz")
     def healthz():
-        # A configured durable database is part of the service's health contract.
+        # A remotely hosted developer wizard cannot safely accept customer
+        # credentials unless both durable storage and the encryption key exist.
         database_url = (
             app.config.get("PROVISIONING_DATABASE_URL")
             or os.getenv("DATABASE_URL", "")
         ).strip()
+        if app.config["PROVISIONING_PUBLIC_ACCESS"] and not database_url:
+            return {"status": "unavailable"}, 503
+        if app.config["PROVISIONING_PUBLIC_ACCESS"]:
+            try:
+                load_encryption_key(
+                    os.getenv("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY", "").strip()
+                    or app.config.get("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY")
+                )
+            except Exception:
+                return {"status": "unavailable"}, 503
         if database_url:
             try:
                 from business_app.provisioning.workflow import WorkflowStateStore
