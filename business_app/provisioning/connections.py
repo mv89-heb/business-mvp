@@ -70,8 +70,9 @@ class CredentialVault:
 
     def encrypt(self, customer_id: str, provider: str, credentials: dict[str, str]) -> str:
         aad = self._aad(customer_id, provider)
-        if not isinstance(credentials, dict) or not credentials:
-            raise ConnectionVaultError("Provider credentials are required")
+        expected_keys = {"github": {"token"}, "neon": {"token"}, "render": {"token"}}[provider]
+        if not isinstance(credentials, dict) or set(credentials) != expected_keys:
+            raise ConnectionVaultError("The provider credential payload has an unsupported shape")
         if any(not isinstance(k, str) or not isinstance(v, str) or not v.strip() for k, v in credentials.items()):
             raise ConnectionVaultError("Provider credentials must be non-empty text values")
         nonce = secrets.token_bytes(12)
@@ -139,8 +140,14 @@ class ProviderConnectionStore:
         safe_metadata = {k: v for k, v in metadata.items() if k in allowed}
         if any(not isinstance(v, (str, int, list)) for v in safe_metadata.values()):
             raise ConnectionVaultError("Provider account metadata contains unsupported values")
+        if "scopes" in safe_metadata and (
+            not isinstance(safe_metadata["scopes"], list)
+            or any(not isinstance(scope, str) or len(scope) > 128 for scope in safe_metadata["scopes"])
+        ):
+            raise ConnectionVaultError("Provider scopes metadata is invalid")
+        if any(isinstance(v, str) and len(v) > 256 for v in safe_metadata.values()):
+            raise ConnectionVaultError("Provider account metadata is too long")
         encrypted = self.vault.encrypt(customer_id, provider, credentials)
-        import json
         with self._connect() as connection:
             self._ensure_schema(connection)
             connection.execute("""
