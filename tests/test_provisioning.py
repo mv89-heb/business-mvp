@@ -183,3 +183,22 @@ def test_export_starter_applies_business_profile_and_modules(tmp_path):
     assert [item["name"] for item in config["content"]["services"]] == ["שירות ראשון", "שירות שני"]
     assert config["modules"]["lead_capture"] is True
     assert not (destination / "business_app" / "provisioning").exists()
+
+
+def test_customer_owned_is_default_and_managed_requires_explicit_selection():
+    customer_plan = make_plan()
+    managed_plan = make_plan(ownership_mode="managed")
+
+    assert customer_plan["ownership_mode"] == "customer_owned"
+    assert customer_plan["ownership"]["target"] == "customer_accounts"
+    assert customer_plan["ownership"]["provisioning_ready"] is False
+    assert any("customer-scoped provider connections" in item for item in customer_plan["warnings"])
+    assert managed_plan["ownership_mode"] == "managed"
+    assert managed_plan["ownership"]["target"] == "developer_managed_accounts"
+    assert managed_plan["ownership"]["provisioning_ready"] is True
+    assert customer_plan["plan_id"] != managed_plan["plan_id"]
+
+
+def test_invalid_ownership_mode_is_rejected():
+    with pytest.raises(ProvisioningInputError, match="Ownership mode"):
+        make_plan(ownership_mode="automatic")
