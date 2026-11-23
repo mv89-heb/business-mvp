@@ -9,6 +9,8 @@ from __future__ import annotations
 import hashlib
 import hmac
 import re
+
+from business_app.security import constant_time_text_equal
 from datetime import datetime, timezone
 
 
@@ -31,7 +33,7 @@ def verify_webhook_challenge(mode: str, token: str, expected_token: str, challen
     """Return Meta's challenge only for a valid subscription handshake."""
     if mode != "subscribe" or not token or not expected_token or not challenge:
         return None
-    if not hmac.compare_digest(str(token), str(expected_token)):
+    if not constant_time_text_equal(str(token), str(expected_token)):
         return None
     return str(challenge)
 
