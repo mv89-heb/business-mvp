@@ -150,6 +150,7 @@ GitHub Actions מריץ בדיקות Python ובדיקות נוספות המוג
 - [אינטגרציות ספקים](docs/PROVIDER_INTEGRATIONS_HE.md)
 - [ארכיטקטורת מערכת הלידים והאוטומציה](docs/LEAD_MANAGEMENT_ARCHITECTURE_HE.md)
 - [שכפול Starter לפרויקט חדש](docs/CLONING.md)
+- [תיק מסירה אוטומטי ללקוח](docs/HANDOVER.md)
 - [תבנית GitHub](docs/GITHUB_TEMPLATE_REPOSITORY.md)
 - [Business Studio API](docs/BUSINESS_STUDIO_API_HE.md)
 - [ערוץ הפקודות GitHub → Render](docs/GITHUB_RENDER_COMMAND_RELAY_HE.md)
