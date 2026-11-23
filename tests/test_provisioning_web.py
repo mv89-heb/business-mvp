@@ -158,6 +158,7 @@ def test_preflight_route_runs_read_only_and_unlocks_execution(monkeypatch):
     response = client.post("/preflight", data={
         "business_name": "עסק בדיקה",
         "slug": "test-business",
+        "ownership_mode": "managed",
         "category": "services",
         "modules": ["lead_capture", "lead_management"],
     })
@@ -298,7 +299,7 @@ def test_execution_route_runs_workflow_only_after_explicit_approval(monkeypatch)
     client.post("/login", data={"password": "developer-test-password"})
     from business_app.provisioning import build_provisioning_plan
     plan = build_provisioning_plan(
-        business_name="עסק בדיקה", slug="test-business", category="services",
+        business_name="עסק בדיקה", slug="test-business", category="services", ownership_mode="managed",
         modules=["lead_capture", "lead_management"],
     )
     from business_app.provisioning_web import _plan_fingerprint
@@ -307,6 +308,7 @@ def test_execution_route_runs_workflow_only_after_explicit_approval(monkeypatch)
     response = client.post("/execute", data={
         "business_name": "עסק בדיקה",
         "slug": "test-business",
+        "ownership_mode": "managed",
         "category": "services",
         "modules": ["lead_capture", "lead_management"],
         "approval": "CREATE",
@@ -421,6 +423,7 @@ def test_execution_preserves_brand_profile_after_preflight(monkeypatch):
     profile = {
         "business_name": "עסק בדיקה",
         "slug": "test-business",
+        "ownership_mode": "managed",
         "category": "services",
         "modules": ["lead_capture", "lead_management"],
         "tagline": "פתרונות מקצועיים לבית",
