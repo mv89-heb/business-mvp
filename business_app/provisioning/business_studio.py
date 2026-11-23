@@ -673,7 +673,12 @@ def create_business_studio_blueprint(store_factory=None):
             or current_app.config.get("SQLALCHEMY_DATABASE_URI")
             or os.getenv("DATABASE_URL", "")
         )
-        return BusinessStudioStore(database_url)
+        with _BUSINESS_STUDIO_STORE_LOCK:
+            cached = current_app.extensions.get("business_studio_store")
+            if cached is None:
+                cached = BusinessStudioStore(database_url)
+                current_app.extensions["business_studio_store"] = cached
+            return cached
 
     @bp.before_request
     def require_developer():
