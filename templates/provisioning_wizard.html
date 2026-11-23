@@ -180,6 +180,21 @@
             <div class="panel">
               <div class="panel-heading"><div><div class="section-kicker">04 / INFRASTRUCTURE</div><h2>תשתיות, חיבורים ואישור</h2><p class="panel-description">כל המשאבים ייווצרו בנפרד עבור העסק. אין גישה לנתוני פרויקטים אחרים.</p></div><span class="status-chip success">מבודד לפרויקט</span></div>
               {% if connection_results is not none %}<div class="notice success"><strong>הבדיקה הושלמה</strong><span>תוצאות החיבור עודכנו. פרטי אימות וסודות אינם מוצגים.</span></div>{% endif %}
+              <div class="panel ownership-choice">
+                <div class="panel-heading"><div><div class="section-kicker">RESOURCE OWNERSHIP</div><h2>למי שייכות התשתיות?</h2><p class="panel-description">ברירת המחדל היא חשבונות הלקוח. חשבונות המפתח זמינים רק במסלול אירוח מנוהל.</p></div></div>
+                <label class="module-option ownership-option">
+                  <input type="radio" name="ownership_mode" value="customer_owned" {% if form_values.ownership_mode|default('customer_owned') == 'customer_owned' %}checked{% endif %}>
+                  <span class="module-check" aria-hidden="true"></span>
+                  <span class="module-copy"><strong>חשבונות הלקוח — מומלץ</strong><small>הלקוח הוא הבעלים של GitHub, Neon ו־Render. נדרש חיבור מאומת לכל ספק. עד להשלמת חיבורי לקוח, האשף יחסום הקמה ולא ישתמש בחשבונות המפתח.</small></span>
+                  <span class="module-state setup">ברירת מחדל</span>
+                </label>
+                <label class="module-option ownership-option">
+                  <input type="radio" name="ownership_mode" value="managed" {% if form_values.ownership_mode|default('customer_owned') == 'managed' %}checked{% endif %}>
+                  <span class="module-check" aria-hidden="true"></span>
+                  <span class="module-copy"><strong>אירוח מנוהל בחשבונות שלי</strong><small>המשאבים ייווצרו בחשבונות הספקים שהוגדרו ב־Render. אתה אחראי לעלויות, גיבויים, תחזוקה והעברה/יציאה של הלקוח.</small></span>
+                  <span class="module-state available">בחירה מפורשת</span>
+                </label>
+              </div>
               <div class="provider-grid">
                 {% for provider, title, description in [('github','GitHub','מאגר קוד פרטי לפרויקט'),('neon','Neon','מסד PostgreSQL מבודד'),('render','Render','שירות Web ופריסה אוטומטית')] %}
                   {% set result = connection_results.get(provider) if connection_results else none %}

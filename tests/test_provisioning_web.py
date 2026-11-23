@@ -824,3 +824,16 @@ def test_handover_download_refuses_incomplete_workflow(monkeypatch):
 
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/wizard")
+
+
+def test_wizard_defaults_to_customer_owned_and_exposes_managed_opt_in():
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.get("/wizard")
+    page = response.get_data(as_text=True)
+
+    assert response.status_code == 200
+    assert 'name="ownership_mode" value="customer_owned" checked' in page
+    assert 'name="ownership_mode" value="managed"' in page
+    assert "חשבונות הלקוח — מומלץ" in page
+    assert "אירוח מנוהל בחשבונות שלי" in page
