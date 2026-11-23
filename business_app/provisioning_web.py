@@ -20,7 +20,8 @@ from werkzeug.middleware.proxy_fix import ProxyFix
 
 from business_app.provisioning.providers import GitHubProvider, NeonProvider, RenderProvider
 from business_app.provisioning.providers.http import ProviderError
-from business_app.provisioning.workflow import ProvisioningWorkflow
+from business_app.provisioning.workflow import ProvisioningWorkflow, WorkflowStateStore
+from business_app.provisioning.handover_generator import build_handover_pack, HandoverValidationError
 from business_app.provisioning.business_studio import create_business_studio_blueprint
 
 from business_app.provisioning import (
@@ -432,6 +433,41 @@ def create_provisioning_app(test_config=None):
             connection_results=None,
             execution_result=result,
         )
+
+    @app.post("/handover/download")
+    @developer_required
+    def download_handover_pack():
+        workflow_id = request.form.get("workflow_id", "").strip()
+        try:
+            state = WorkflowStateStore(
+                database_url=app.config.get("PROVISIONING_DATABASE_URL") or os.getenv("DATABASE_URL")
+            ).load(workflow_id)
+            if not state:
+                raise HandoverValidationError("לא נמצא תהליך הקמה שמור עבור המזהה שסופק.")
+            pack = build_handover_pack(state)
+            _audit_event(
+                app, "handover_pack_generated",
+                plan_id=state.get("plan_id"), business_slug=state.get("business_slug"),
+                status="completed",
+            )
+            from flask import send_file
+            import io
+            response = send_file(
+                io.BytesIO(pack["zip_bytes"]),
+                mimetype="application/zip",
+                as_attachment=True,
+                download_name=f"{state['business_slug']}-handover.zip",
+                max_age=0,
+            )
+            response.headers["Cache-Control"] = "no-store"
+            response.headers["Pragma"] = "no-cache"
+            return response
+        except HandoverValidationError as exc:
+            flash(str(exc), "error")
+        except Exception:
+            app.logger.warning("Handover pack generation failed; sensitive workflow data was not logged")
+            flash("לא ניתן להפיק תיק מסירה. ודא שתהליך ההקמה הושלם ושמצב התהליך נשמר.", "error")
+        return redirect(url_for("wizard"))
 
     @app.route("/wizard", methods=["GET", "POST"])
     @developer_required
