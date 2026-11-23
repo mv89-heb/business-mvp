@@ -16,6 +16,7 @@ from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy import desc, func, or_
 from werkzeug.security import check_password_hash
+from werkzeug.middleware.proxy_fix import ProxyFix
 
 from business_app.config import load_business_config
 from business_app.integrations.google_sheets import send_lead_created
@@ -195,9 +196,14 @@ def create_app(test_config=None):
         SESSION_COOKIE_SAMESITE="Lax",
         SESSION_COOKIE_SECURE=_is_production(),
         MAX_CONTENT_LENGTH=64 * 1024,
+        TRUST_PROXY_HEADERS=os.getenv("TRUST_PROXY_HEADERS", "false").strip().lower() == "true",
     )
     if test_config:
         app.config.update(test_config)
+    # Render terminates TLS and forwards the original client IP. Trust exactly
+    # one proxy hop, and only when explicitly enabled by the deployment config.
+    if app.config.get("TRUST_PROXY_HEADERS"):
+        app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
     if _is_production() and not (os.getenv("ADMIN_PASSWORD") or os.getenv("ADMIN_PASSWORD_HASH")):
         app.logger.warning("Admin login is unavailable until ADMIN_PASSWORD or ADMIN_PASSWORD_HASH is configured.")
     db.init_app(app)
