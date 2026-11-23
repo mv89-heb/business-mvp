@@ -175,9 +175,23 @@ class BusinessStudioStore:
                 status TEXT NOT NULL DEFAULT 'PENDING',
                 attempts INTEGER NOT NULL DEFAULT 0,
                 last_error TEXT,
+                next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                delivered_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
+        """)
+        conn.execute("""
+            ALTER TABLE business_automation_outbox
+            ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        """)
+        conn.execute("""
+            ALTER TABLE business_automation_outbox
+            ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS ix_business_outbox_due
+            ON business_automation_outbox (status, next_attempt_at, updated_at)
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS studio_command_inbox (
