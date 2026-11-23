@@ -14,7 +14,7 @@ from flask_limiter import Limiter
 from flask_wtf.csrf import CSRFProtect
 from flask_limiter.util import get_remote_address
 from flask_sqlalchemy import SQLAlchemy
-from sqlalchemy import desc, func, or_
+from sqlalchemy import desc, event, func, inspect, or_, text
 from werkzeug.security import check_password_hash
 from werkzeug.middleware.proxy_fix import ProxyFix
 
@@ -36,6 +36,7 @@ class Lead(db.Model):
     created_at = db.Column(db.DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     name = db.Column(db.String(120), nullable=False)
     phone = db.Column(db.String(30), nullable=False)
+    phone_normalized = db.Column(db.String(32), index=True)
     email = db.Column(db.String(254))
     city = db.Column(db.String(100))
     service = db.Column(db.String(40), nullable=False)
@@ -47,6 +48,12 @@ class Lead(db.Model):
     status = db.Column(db.String(24), nullable=False, default="חדש")
     preset = db.Column(db.String(40), nullable=False, default="contractor")
     consent_at = db.Column(db.DateTime(timezone=True))
+
+
+@event.listens_for(Lead, "before_insert")
+@event.listens_for(Lead, "before_update")
+def _sync_lead_phone_normalized(mapper, connection, target):
+    target.phone_normalized = normalize_phone(target.phone)
 
 
 class Setting(db.Model):
@@ -140,15 +147,41 @@ def _automation_authorized():
     return bool(expected and supplied and constant_time_text_equal(supplied, expected))
 
 
+def _ensure_lead_phone_normalized_schema():
+    """Add and backfill the indexed normalized phone column for existing databases."""
+    table_name = Lead.__tablename__
+    columns = {column["name"] for column in inspect(db.engine).get_columns(table_name)}
+    if "phone_normalized" not in columns:
+        if db.engine.dialect.name == "postgresql":
+            ddl = f"ALTER TABLE {table_name} ADD COLUMN IF NOT EXISTS phone_normalized VARCHAR(32)"
+        else:
+            ddl = f"ALTER TABLE {table_name} ADD COLUMN phone_normalized VARCHAR(32)"
+        with db.engine.begin() as connection:
+            connection.execute(text(ddl))
+    with db.engine.begin() as connection:
+        connection.execute(text(
+            f"CREATE INDEX IF NOT EXISTS ix_{table_name}_phone_normalized "
+            f"ON {table_name} (phone_normalized)"
+        ))
+    pending = db.session.execute(
+        db.select(Lead).where(Lead.phone_normalized.is_(None))
+    ).scalars().all()
+    for lead in pending:
+        lead.phone_normalized = normalize_phone(lead.phone)
+    if pending:
+        db.session.commit()
+
+
 def _find_lead_by_phone(phone):
     normalized = normalize_phone(phone)
     if len(normalized) < 7:
         return None
-    candidates = db.session.execute(
-        db.select(Lead).where(Lead.phone.endswith(normalized[-8:]))
-        .order_by(desc(Lead.created_at)).limit(20)
-    ).scalars().all()
-    return next((item for item in candidates if normalize_phone(item.phone) == normalized), None)
+    return db.session.execute(
+        db.select(Lead)
+        .where(Lead.phone_normalized == normalized)
+        .order_by(desc(Lead.created_at))
+        .limit(1)
+    ).scalars().first()
 
 
 def _is_production():
@@ -233,6 +266,7 @@ def create_app(test_config=None):
 
     with app.app_context():
         db.create_all()
+        _ensure_lead_phone_normalized_schema()
 
     @app.get("/health")
     @limiter.exempt
