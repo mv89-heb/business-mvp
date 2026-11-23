@@ -143,7 +143,11 @@ def _find_lead_by_phone(phone):
 
 
 def _is_production():
-    return os.getenv("FLASK_ENV", "").strip().lower() == "production"
+    return (
+        os.getenv("FLASK_ENV", "").strip().lower() == "production"
+        or os.getenv("TRUST_PROXY_HEADERS", "").strip().lower() == "true"
+        or os.getenv("RENDER", "").strip().lower() == "true"
+    )
 
 
 def _runtime_configuration(test_config=None):
@@ -151,15 +155,18 @@ def _runtime_configuration(test_config=None):
     secret_key = os.getenv("SECRET_KEY", "").strip() or overrides.get("SECRET_KEY")
     database_url = os.getenv("DATABASE_URL", "").strip() or overrides.get("SQLALCHEMY_DATABASE_URI")
 
-    if _is_production() and not secret_key:
-        raise RuntimeError("SECRET_KEY must be configured before starting in production.")
+    if not secret_key:
+        if overrides.get("TESTING") is True:
+            secret_key = "test-only-secret-key-never-use-in-production"
+        else:
+            raise RuntimeError("SECRET_KEY must be configured before starting the application.")
     if _is_production() and not database_url:
         raise RuntimeError("DATABASE_URL must be configured before starting in production.")
 
     database_url = database_url or "sqlite:///local.db"
     if database_url.startswith("postgres://"):
         database_url = database_url.replace("postgres://", "postgresql://", 1)
-    return secret_key or "local-development-only-change-me", database_url
+    return secret_key, database_url
 
 
 def _estimate(area):
@@ -205,8 +212,8 @@ def create_app(test_config=None):
     # one proxy hop, and only when explicitly enabled by the deployment config.
     if app.config.get("TRUST_PROXY_HEADERS"):
         app.wsgi_app = ProxyFix(app.wsgi_app, x_for=1, x_proto=1)
-    if _is_production() and not (os.getenv("ADMIN_PASSWORD") or os.getenv("ADMIN_PASSWORD_HASH")):
-        app.logger.warning("Admin login is unavailable until ADMIN_PASSWORD or ADMIN_PASSWORD_HASH is configured.")
+    if not os.getenv("ADMIN_PASSWORD_HASH", "").strip():
+        app.logger.warning("Admin login is unavailable until ADMIN_PASSWORD_HASH is configured.")
     db.init_app(app)
     limiter.init_app(app)
     csrf.init_app(app)
@@ -312,11 +319,8 @@ def create_app(test_config=None):
     def admin_login():
         if request.method == "POST":
             password = request.form.get("password", "")
-            configured = os.getenv("ADMIN_PASSWORD", "")
-            hashed = os.getenv("ADMIN_PASSWORD_HASH", "")
-            valid = bool(configured and password == configured)
-            if hashed:
-                valid = check_password_hash(hashed, password)
+            hashed = os.getenv("ADMIN_PASSWORD_HASH", "").strip()
+            valid = bool(hashed and check_password_hash(hashed, password))
             if valid:
                 session.clear()
                 session["admin"] = True
