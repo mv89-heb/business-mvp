@@ -54,8 +54,6 @@ def _empty_form_values():
         "primary_color": "#172b25",
         "accent_color": "#b88a54",
         "font_family": "Heebo",
-        "neon_org_id": "",
-        "render_workspace_id": "",
         "services": [],
     }
 
@@ -76,8 +74,6 @@ def _read_form_values(form):
         "primary_color": form.get("primary_color", "#172b25"),
         "accent_color": form.get("accent_color", "#b88a54"),
         "font_family": form.get("font_family", "Heebo"),
-        "neon_org_id": form.get("neon_org_id", "").strip(),
-        "render_workspace_id": form.get("render_workspace_id", "").strip(),
         "services": [
             item.strip() for item in form.get("services", "").split(",") if item.strip()
         ],
@@ -522,7 +518,6 @@ def create_provisioning_app(test_config=None):
         error = None
         try:
             plan = build_provisioning_plan(**form_values)
-            owner = os.getenv("GITHUB_OWNER", "").strip()
             workflow, owner = _workflow_for_plan(plan)
             report = workflow.preflight(plan, github_owner=owner)
             session["preflight_fingerprint"] = _plan_fingerprint(plan)
@@ -545,6 +540,7 @@ def create_provisioning_app(test_config=None):
             preflight_report=report,
             error=error,
             connection_results=None,
+            customer_connection_statuses=_customer_connection_statuses((form_values or {}).get("slug", "")),
         )
 
     @app.post("/execute")
@@ -573,7 +569,7 @@ def create_provisioning_app(test_config=None):
                 neon_free_tier_verified=True,
             )
             _audit_event(app, "provisioning_completed", plan_id=plan.get("plan_id"), business_slug=plan.get("business", {}).get("slug"), status="completed")
-        except (ProvisioningInputError, ProviderError) as exc:
+        except (ProvisioningInputError, ProviderError, ConnectionVaultError) as exc:
             _audit_event(app, "provisioning_failure", reason=type(exc).__name__)
             error = str(exc)
         except Exception:
@@ -589,6 +585,7 @@ def create_provisioning_app(test_config=None):
             error=error,
             connection_results=None,
             execution_result=result,
+            customer_connection_statuses=_customer_connection_statuses((form_values or {}).get("slug", "")),
         )
 
     @app.post("/handover/download")
