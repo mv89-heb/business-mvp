@@ -515,12 +515,14 @@ _COMMAND_PRIVATE_KEY_LOCK = threading.Lock()
 
 
 def _get_command_private_key():
-    """Use an explicitly configured Render secret, or a per-process key on the single Render worker."""
+    """Load a stable Render secret; only local mode may generate an ephemeral key."""
     from cryptography.hazmat.primitives import serialization
     global _COMMAND_PRIVATE_KEY
     encoded = os.getenv("STUDIO_COMMAND_PRIVATE_KEY_B64", "").strip()
     if encoded:
         return serialization.load_pem_private_key(base64.b64decode(encoded, validate=True), password=None)
+    if os.getenv("PROVISIONING_PUBLIC_ACCESS", "").strip().lower() == "true":
+        raise RuntimeError("STUDIO_COMMAND_PRIVATE_KEY_B64 is required for remote command relay.")
     if _COMMAND_PRIVATE_KEY is None:
         with _COMMAND_PRIVATE_KEY_LOCK:
             if _COMMAND_PRIVATE_KEY is None:
