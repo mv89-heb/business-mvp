@@ -256,3 +256,47 @@ def test_production_requires_explicit_secret_and_database(monkeypatch, tmp_path)
     with app.app_context():
         db.drop_all()
 
+
+
+def _remote_address_test_app(tmp_path, trust_proxy_headers):
+    from flask import jsonify, request
+
+    app = create_app({
+        "TESTING": True,
+        "SECRET_KEY": "test-secret",
+        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'proxy.db'}",
+        "RATELIMIT_ENABLED": False,
+        "TRUST_PROXY_HEADERS": trust_proxy_headers,
+    })
+    app.add_url_rule(
+        "/_test/remote-address",
+        "test_remote_address",
+        lambda: jsonify(remote_addr=request.remote_addr),
+    )
+    return app
+
+
+def test_forwarded_ip_is_ignored_when_proxy_trust_is_disabled(tmp_path):
+    app = _remote_address_test_app(tmp_path, False)
+    with app.test_client() as client:
+        response = client.get(
+            "/_test/remote-address",
+            headers={"X-Forwarded-For": "198.51.100.24"},
+            environ_overrides={"REMOTE_ADDR": "10.0.0.8"},
+        )
+    assert response.get_json()["remote_addr"] == "10.0.0.8"
+    with app.app_context():
+        db.drop_all()
+
+
+def test_render_proxy_fix_uses_original_client_ip_from_single_trusted_hop(tmp_path):
+    app = _remote_address_test_app(tmp_path, True)
+    with app.test_client() as client:
+        response = client.get(
+            "/_test/remote-address",
+            headers={"X-Forwarded-For": "198.51.100.24"},
+            environ_overrides={"REMOTE_ADDR": "10.0.0.8"},
+        )
+    assert response.get_json()["remote_addr"] == "198.51.100.24"
+    with app.app_context():
+        db.drop_all()

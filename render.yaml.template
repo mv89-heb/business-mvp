@@ -21,6 +21,8 @@ services:
         sync: false
       - key: FLASK_ENV
         value: production
+      - key: TRUST_PROXY_HEADERS
+        value: "true"
       - key: ESTIMATE_BASE_RATE
         value: "0"
       - key: ESTIMATE_RATE_PER_SQM

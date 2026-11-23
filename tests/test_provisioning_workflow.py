@@ -90,6 +90,7 @@ class FakeRender:
         assert kwargs["env_vars"]["DATABASE_URL"].startswith("postgresql://")
         assert "ADMIN_PASSWORD" not in kwargs["env_vars"]
         assert kwargs["env_vars"]["FLASK_ENV"] == "production"
+        assert kwargs["env_vars"]["TRUST_PROXY_HEADERS"] == "true"
         assert check_password_hash(kwargs["env_vars"]["ADMIN_PASSWORD_HASH"], "a-very-long-test-password")
         assert len(kwargs["env_vars"]["SECRET_KEY"]) >= 40
         return {"created": self.created, "service": {
