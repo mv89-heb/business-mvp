@@ -8,7 +8,7 @@
   <title>Business Studio | סביבת פיתוח</title>
   <link rel="stylesheet" href="{{ url_for('static', filename='css/provisioning.css') }}?v=3">
   <link rel="stylesheet" href="{{ url_for('static', filename='css/wizard-premium.css') }}?v=3">
-  <script defer src="{{ url_for('static', filename='js/provisioning.js') }}?v=2"></script>
+  <script defer src="{{ url_for('static', filename='js/provisioning.js') }}?v=3"></script>
 </head>
 <body class="studio-body" data-initial-step="{{ 3 if connection_results is not none or plan or preflight_report or execution_result or error else 0 }}">
 {% if login_required or not session.get('developer') %}
