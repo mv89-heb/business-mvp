@@ -354,7 +354,7 @@ def create_provisioning_app(test_config=None):
                 )
                 if not os.getenv("STUDIO_COMMAND_PRIVATE_KEY_B64", "").strip():
                     return {"status": "unavailable"}, 503
-                _get_command_private_key()
+                _get_command_private_key(require_persistent=True)
             except Exception:
                 return {"status": "unavailable"}, 503
         if database_url:
