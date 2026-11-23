@@ -162,5 +162,6 @@ def test_customer_owned_workflow_requires_exact_verified_adapter_scope():
     workflow._require_customer_owned_connections(plan)
 
     adapters[1]._business_studio_customer_id = "other-customer"
-    with pytest.raises(Exception):
+    from business_app.provisioning.providers.http import ProviderError
+    with pytest.raises(ProviderError):
         workflow._require_customer_owned_connections(plan)
