@@ -73,8 +73,11 @@ class CredentialVault:
         expected_keys = {"github": {"token"}, "neon": {"token"}, "render": {"token"}}[provider]
         if not isinstance(credentials, dict) or set(credentials) != expected_keys:
             raise ConnectionVaultError("The provider credential payload has an unsupported shape")
-        if any(not isinstance(k, str) or not isinstance(v, str) or not v.strip() for k, v in credentials.items()):
-            raise ConnectionVaultError("Provider credentials must be non-empty text values")
+        if any(
+            not isinstance(k, str) or not isinstance(v, str) or not v.strip() or len(v) > 8192
+            for k, v in credentials.items()
+        ):
+            raise ConnectionVaultError("Provider credentials must be non-empty text values within the size limit")
         nonce = secrets.token_bytes(12)
         plaintext = json.dumps(credentials, separators=(",", ":"), sort_keys=True).encode("utf-8")
         ciphertext = AESGCM(self._key).encrypt(nonce, plaintext, aad)
