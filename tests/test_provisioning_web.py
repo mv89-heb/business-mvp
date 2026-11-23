@@ -749,3 +749,78 @@ def test_remote_healthz_is_public_but_https_only_for_non_loopback_clients():
     assert secure.status_code == 200
     assert secure.get_json() == {"status": "ok"}
     assert insecure.status_code == 404
+
+
+def test_handover_download_requires_developer_login():
+    client = make_client()
+    response = client.post("/handover/download", data={"workflow_id": "a" * 20})
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/login")
+
+
+def test_handover_download_returns_zip_for_completed_verified_workflow(monkeypatch):
+    import zipfile
+    import io
+    import business_app.provisioning_web as provisioning_web
+
+    state = {
+        "workflow_id": "a" * 20,
+        "plan_id": "a" * 20,
+        "business_slug": "sample-business",
+        "business_name": "עסק לדוגמה",
+        "modules": ["lead_capture", "lead_management"],
+        "status": "completed",
+        "resources": {
+            "github": {
+                "repository_id": 123,
+                "repository": "customer/sample-business",
+                "url": "https://github.com/customer/sample-business",
+            },
+            "neon": {"project_id": "neon-123", "project_name": "sample-business"},
+            "render": {
+                "service_id": "srv-123",
+                "service_name": "sample-business",
+                "url": "https://sample-business.onrender.com",
+                "health_url": "https://sample-business.onrender.com/health",
+            },
+        },
+    }
+
+    class FakeStore:
+        def __init__(self, database_url=None):
+            self.database_url = database_url
+
+        def load(self, workflow_id):
+            assert workflow_id == "a" * 20
+            return state
+
+    monkeypatch.setattr(provisioning_web, "WorkflowStateStore", FakeStore)
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.post("/handover/download", data={"workflow_id": "a" * 20})
+
+    assert response.status_code == 200
+    assert response.mimetype == "application/zip"
+    assert "sample-business-handover.zip" in response.headers["Content-Disposition"]
+    with zipfile.ZipFile(io.BytesIO(response.data)) as archive:
+        assert set(archive.namelist()) == {"HANDOVER_GUIDE.md", "TECHNICAL_INVENTORY.json"}
+        assert "עסק לדוגמה" in archive.read("HANDOVER_GUIDE.md").decode("utf-8")
+
+
+def test_handover_download_refuses_incomplete_workflow(monkeypatch):
+    import business_app.provisioning_web as provisioning_web
+
+    class FakeStore:
+        def __init__(self, database_url=None):
+            pass
+
+        def load(self, workflow_id):
+            return {"status": "running", "business_slug": "sample-business", "resources": {}}
+
+    monkeypatch.setattr(provisioning_web, "WorkflowStateStore", FakeStore)
+    client = make_client()
+    client.post("/login", data={"password": "developer-test-password"})
+    response = client.post("/handover/download", data={"workflow_id": "a" * 20})
+
+    assert response.status_code == 302
+    assert response.headers["Location"].endswith("/wizard")
