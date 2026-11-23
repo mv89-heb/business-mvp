@@ -325,7 +325,10 @@ def create_app(test_config=None):
         if area is not None and not 1 <= area <= 100000:
             flash("שטח העבודה אינו תקין.", "error")
             return redirect(url_for("index") + "#contact")
-        low, high = _estimate(area or 0)
+        if app.config["BUSINESS_CONFIG"].get("modules", {}).get("estimate_calculator", False):
+            low, high = _estimate(area or 0)
+        else:
+            low, high = None, None
         lead = Lead(name=name, phone=phone, email=email or None,
                     city=request.form.get("city", "").strip()[:100],
                     service=service, area=area,
