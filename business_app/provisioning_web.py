@@ -7,6 +7,7 @@ import hmac
 import ipaddress
 import json
 import os
+import re
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -53,6 +54,8 @@ def _empty_form_values():
         "primary_color": "#172b25",
         "accent_color": "#b88a54",
         "font_family": "Heebo",
+        "neon_org_id": "",
+        "render_workspace_id": "",
         "services": [],
     }
 
@@ -73,6 +76,8 @@ def _read_form_values(form):
         "primary_color": form.get("primary_color", "#172b25"),
         "accent_color": form.get("accent_color", "#b88a54"),
         "font_family": form.get("font_family", "Heebo"),
+        "neon_org_id": form.get("neon_org_id", "").strip(),
+        "render_workspace_id": form.get("render_workspace_id", "").strip(),
         "services": [
             item.strip() for item in form.get("services", "").split(",") if item.strip()
         ],
@@ -522,7 +527,7 @@ def create_provisioning_app(test_config=None):
             report = workflow.preflight(plan, github_owner=owner)
             session["preflight_fingerprint"] = _plan_fingerprint(plan)
             _audit_event(app, "preflight_success", plan_id=plan.get("plan_id"), business_slug=plan.get("business", {}).get("slug"))
-        except (ProvisioningInputError, ProviderError) as exc:
+        except (ProvisioningInputError, ProviderError, ConnectionVaultError) as exc:
             session.pop("preflight_fingerprint", None)
             _audit_event(app, "preflight_failure", reason=type(exc).__name__)
             error = str(exc)
