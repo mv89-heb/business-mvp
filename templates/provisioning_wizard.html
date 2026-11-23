@@ -235,6 +235,14 @@
           {% if execution_result %}
             <h3 class="result-subtitle">PROVISIONING RESULT</h3>
             <pre>{{ execution_result|tojson(indent=2) }}</pre>
+            {% if execution_result.status == 'completed' and execution_result.workflow_id %}
+              <form method="post" action="{{ url_for('download_handover_pack') }}" class="handover-download-form">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token() }}">
+                <input type="hidden" name="workflow_id" value="{{ execution_result.workflow_id }}">
+                <button type="submit" class="button button-primary">הורדת תיק מסירה ללקוח (ZIP)</button>
+                <p class="hint">הקובץ כולל מדריך בעברית ומלאי טכני ללא סיסמאות או מפתחות. בעלות ואינטגרציות שלא אומתו יסומנו בהתאם.</p>
+              </form>
+            {% endif %}
           {% endif %}
         </section>
 

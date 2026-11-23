@@ -143,7 +143,10 @@ class WorkflowStateStore:
     def _safe_state(workflow_id, state):
         safe_state = {
             "workflow_id": workflow_id, "plan_id": state.get("plan_id"),
-            "business_slug": state.get("business_slug"), "status": state.get("status"),
+            "business_slug": state.get("business_slug"),
+            "business_name": str(state.get("business_name") or state.get("business_slug") or "")[:200],
+            "modules": [str(item)[:80] for item in state.get("modules", []) if isinstance(item, str)][:20],
+            "status": state.get("status"),
             "step": state.get("step"), "resources": state.get("resources", {}),
             "history": state.get("history", []), "updated_at": _utc_now(),
             "error": state.get("error"),
@@ -454,6 +457,8 @@ class ProvisioningWorkflow:
         state = state or {
             "plan_id": plan.get("plan_id"),
             "business_slug": slug,
+            "business_name": str(business.get("name") or slug)[:200],
+            "modules": list((plan.get("application") or {}).get("modules") or []),
             "status": "not_started",
             "step": "not_started",
             "resources": {},
