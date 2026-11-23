@@ -317,7 +317,10 @@ def create_app(test_config=None):
         if request.form.get("contact_consent") != "on":
             flash("יש לאשר יצירת קשר כדי לשלוח את הפנייה.", "error")
             return redirect(url_for("index") + "#contact")
-        area_raw = request.form.get("area", "").strip()
+        area_capture_enabled = app.config["BUSINESS_CONFIG"].get("modules", {}).get(
+            "area_capture", app.config["BUSINESS_CONFIG"].get("modules", {}).get("estimate_calculator", False)
+        )
+        area_raw = request.form.get("area", "").strip() if area_capture_enabled else ""
         try:
             area = int(area_raw) if area_raw else None
         except ValueError:
