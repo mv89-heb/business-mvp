@@ -1,5 +1,6 @@
 """Generate a verified, secret-free customer handover ZIP."""
 from __future__ import annotations
+import html
 import io
 import json
 import re
@@ -40,8 +41,20 @@ def _safe_identifier(value):
     return text
 
 def _markdown_cell(value):
-    text = str(value or "לא זמין").replace("\r", " ").replace("\n", " ").replace("|", "\\|")
+    text = str(value or "לא זמין").replace("\r", " ").replace("\n", " ")
+    text = html.escape(text, quote=False).replace("|", "\\|")
     return text[:240]
+
+
+def _safe_business_name(value, fallback):
+    text = str(value or fallback).strip()[:200]
+    if _SECRET_KEY.search(text) or re.search(
+        r"(?i)\\b(?:password|token|secret|api[_-]?key)\\s*[:=]", text
+    ):
+        return fallback
+    if re.search(r"(?i)(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)", text):
+        return fallback
+    return text or fallback
 
 def _resource_inventory(resources):
     github = resources.get("github") if isinstance(resources.get("github"), dict) else {}
@@ -96,7 +109,7 @@ def build_handover_pack(state):
     if missing:
         raise HandoverValidationError("Handover acceptance failed; missing: " + ", ".join(missing))
 
-    name = _markdown_cell(state.get("business_name") or slug)
+    business_name = _safe_business_name(state.get("business_name"), slug)\n    name = _markdown_cell(business_name)
     modules = state.get("modules") if isinstance(state.get("modules"), list) else []
     modules = sorted({str(item)[:80] for item in modules if isinstance(item, str)})
     generated_at = datetime.now(timezone.utc).isoformat()
@@ -185,7 +198,7 @@ def build_handover_pack(state):
         "schema_version": 1,
         "generated_at": generated_at,
         "workflow_id": workflow_id,
-        "business": {"name": str(state.get("business_name") or slug)[:200], "slug": slug, "modules": modules},
+        "business": {"name": business_name, "slug": slug, "modules": modules},
         "provisioning": {"status": "completed", "render_health_verified": True},
         "ownership": {
             "status": "not_verified",
