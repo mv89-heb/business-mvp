@@ -676,7 +676,7 @@ def test_workflow_merges_github_pr_only_after_ci_passes(tmp_path, monkeypatch):
 
 
 def test_customer_owned_preflight_fails_closed_before_provider_calls():
-    workflow = ProvisioningWorkflow()
+    workflow = ProvisioningWorkflow(github=object(), neon=object(), render=object())
     plan = {
         "mode": "dry_run",
         "ownership_mode": "customer_owned",
@@ -688,7 +688,7 @@ def test_customer_owned_preflight_fails_closed_before_provider_calls():
 
 
 def test_customer_owned_execution_fails_closed_before_provider_calls():
-    workflow = ProvisioningWorkflow()
+    workflow = ProvisioningWorkflow(github=object(), neon=object(), render=object())
     plan = {
         "mode": "dry_run",
         "ownership_mode": "customer_owned",
