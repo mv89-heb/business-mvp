@@ -732,7 +732,16 @@ def test_remote_render_loopback_head_probe_returns_200():
     assert response.data == b""
 
 
-def test_remote_healthz_is_public_but_https_only_for_non_loopback_clients():
+def test_remote_healthz_is_public_but_https_only_for_non_loopback_clients(monkeypatch):
+    import base64
+    from business_app.provisioning.workflow import WorkflowStateStore
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://health-check.invalid/business_studio")
+    monkeypatch.setenv(
+        "CUSTOMER_CREDENTIALS_ENCRYPTION_KEY",
+        base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii"),
+    )
+    monkeypatch.setattr(WorkflowStateStore, "check_connection", lambda self: True)
     config = {
         "TESTING": True,
         "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
