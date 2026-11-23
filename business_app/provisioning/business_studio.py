@@ -9,6 +9,7 @@ import base64
 import hashlib
 import hmac
 import json
+from functools import lru_cache
 import os
 import re
 import threading
@@ -544,9 +545,15 @@ GITHUB_REPOSITORY = "mv89-heb/business-mvp"
 GITHUB_WORKFLOW_REF = "mv89-heb/business-mvp/.github/workflows/studio-command.yml@refs/heads/main"
 
 
+@lru_cache(maxsize=1)
+def _github_jwks_client():
+    import jwt
+    return jwt.PyJWKClient("https://token.actions.githubusercontent.com/.well-known/jwks")
+
+
 def verify_github_actions_identity(token):
     import jwt
-    client = jwt.PyJWKClient("https://token.actions.githubusercontent.com/.well-known/jwks")
+    client = _github_jwks_client()
     signing_key = client.get_signing_key_from_jwt(token)
     claims = jwt.decode(
         token, signing_key.key, algorithms=["RS256"],
@@ -567,17 +574,79 @@ def verify_github_actions_identity(token):
     return claims
 
 
+def command_envelope_aad(envelope):
+    """Canonical AAD binding every security-relevant outer envelope field."""
+    if not isinstance(envelope, dict) or envelope.get("schema") != "business-studio-command/v2":
+        raise ValueError("Unsupported command envelope.")
+    fields = ("commandId", "issuedAt", "responsePublicKey", "keyId")
+    metadata = {}
+    for field in fields:
+        value = envelope.get(field)
+        if not isinstance(value, str) or not value:
+            raise ValueError(f"Command envelope field '{field}' is required.")
+        metadata[field] = value
+    if not re.fullmatch(r"[0-9a-f]{24}", metadata["keyId"]):
+        raise ValueError("Command envelope key id is invalid.")
+    return b"business-studio-command:v2:" + json.dumps(
+        {"schema": envelope["schema"], **metadata},
+        sort_keys=True,
+        ensure_ascii=False,
+        separators=(",", ":"),
+    ).encode("utf-8")
+
+
+def encrypt_github_command(command, render_public_key_pem, response_public_key_pem,
+                           command_id=None, issued_at=None):
+    """Build a v2 command envelope whose outer metadata is authenticated by AES-GCM."""
+    from cryptography.hazmat.primitives import hashes, serialization
+    from cryptography.hazmat.primitives.asymmetric import padding
+    from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+    import secrets
+
+    if not isinstance(command, dict) or not isinstance(command.get("payload", {}), dict):
+        raise ValueError("Command must be an object with an object payload.")
+    render_public_key = serialization.load_pem_public_key(render_public_key_pem.encode("utf-8"))
+    response_public_key = serialization.load_pem_public_key(response_public_key_pem.encode("utf-8"))
+    if not hasattr(render_public_key, "encrypt") or not hasattr(response_public_key, "encrypt"):
+        raise ValueError("Command keys must be RSA public keys.")
+    envelope = {
+        "schema": "business-studio-command/v2",
+        "commandId": command_id or str(uuid4()),
+        "keyId": _command_key_id(render_public_key_pem),
+        "issuedAt": issued_at or datetime.now(timezone.utc).isoformat(),
+        "responsePublicKey": response_public_key_pem,
+    }
+    aad = command_envelope_aad(envelope)
+    aes_key = secrets.token_bytes(32)
+    nonce = secrets.token_bytes(12)
+    plaintext = json.dumps(command, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    ciphertext = AESGCM(aes_key).encrypt(nonce, plaintext, aad)
+    encrypted_key = render_public_key.encrypt(
+        aes_key,
+        padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                     algorithm=hashes.SHA256(), label=None),
+    )
+    return {
+        **envelope,
+        "encryptedKey": base64.b64encode(encrypted_key).decode("ascii"),
+        "nonce": base64.b64encode(nonce).decode("ascii"),
+        "ciphertext": base64.b64encode(ciphertext).decode("ascii"),
+    }
+
+
 def decrypt_github_command(envelope):
     from cryptography.hazmat.primitives import hashes, serialization
     from cryptography.hazmat.primitives.asymmetric import padding
     from cryptography.hazmat.primitives.ciphers.aead import AESGCM
 
-    if not isinstance(envelope, dict) or envelope.get("schema") != "business-studio-command/v1":
-        raise ValueError("Unsupported command envelope.")
+    aad = command_envelope_aad(envelope)
     private_key = _get_command_private_key()
     public_key_pem = _command_public_key_pem(private_key)
-    if envelope.get("keyId") and envelope["keyId"] != _command_key_id(public_key_pem):
+    if envelope["keyId"] != _command_key_id(public_key_pem):
         raise ValueError("Command was encrypted for a stale Render key.")
+    response_public_key = serialization.load_pem_public_key(envelope["responsePublicKey"].encode("utf-8"))
+    if not hasattr(response_public_key, "encrypt"):
+        raise ValueError("Command response key must be an RSA public key.")
     aes_key = private_key.decrypt(
         base64.b64decode(envelope["encryptedKey"], validate=True),
         padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
@@ -587,15 +656,17 @@ def decrypt_github_command(envelope):
     ciphertext = base64.b64decode(envelope["ciphertext"], validate=True)
     if len(ciphertext) > 131072:
         raise ValueError("Command payload is too large.")
-    plaintext = AESGCM(aes_key).decrypt(nonce, ciphertext, COMMAND_AAD)
+    plaintext = AESGCM(aes_key).decrypt(nonce, ciphertext, aad)
     command = json.loads(plaintext.decode("utf-8"))
     if not isinstance(command, dict) or not isinstance(command.get("payload", {}), dict):
         raise ValueError("Invalid command payload.")
-    issued_at = datetime.fromisoformat(str(envelope["issuedAt"]).replace("Z", "+00:00"))
+    issued_at = datetime.fromisoformat(envelope["issuedAt"].replace("Z", "+00:00"))
+    if issued_at.tzinfo is None:
+        raise ValueError("Command issue time must include a timezone.")
     age = (datetime.now(timezone.utc) - issued_at.astimezone(timezone.utc)).total_seconds()
     if age < -300 or age > 86400:
         raise ValueError("Command envelope has expired.")
-    return command, envelope.get("responsePublicKey")
+    return command, envelope["responsePublicKey"]
 
 
 def encrypt_command_response(result, response_public_key_pem):
