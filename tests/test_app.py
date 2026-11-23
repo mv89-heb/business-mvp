@@ -331,3 +331,35 @@ def test_testing_mode_uses_only_an_explicit_test_secret_fallback(monkeypatch, tm
         "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test-secret.db'}",
     })
     assert app.config["SECRET_KEY"] == "test-only-secret-key-never-use-in-production"
+
+
+def test_admin_csv_export_neutralizes_formula_injection(client):
+    import csv
+    import io
+    from app import Lead
+
+    with client.application.app_context():
+        db.session.add(Lead(
+            name="=HYPERLINK(\"https://evil.example\",\"click\")",
+            phone="+cmd|'/C calc'!A0",
+            email="=1+1@example.test",
+            city="@SUM(1,1)",
+            service="-1+2",
+            budget="=WEBSERVICE(\"https://evil.example\")",
+            details="\t=1+1",
+            status="חדש",
+        ))
+        db.session.commit()
+
+    client.post("/admin/login", data={"password": "test-admin-password"})
+    response = client.get("/admin/export.csv")
+    rows = list(csv.reader(io.StringIO(response.get_data(as_text=True).lstrip("\ufeff"))))
+    exported = rows[1]
+
+    assert exported[1].startswith("'=")
+    assert exported[2].startswith("'+")
+    assert exported[3].startswith("'=")
+    assert exported[4].startswith("'@")
+    assert exported[5].startswith("'-")
+    assert exported[7].startswith("'=")
+    assert exported[8].startswith("'\t=")
