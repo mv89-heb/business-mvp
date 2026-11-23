@@ -49,7 +49,7 @@ def _markdown_cell(value):
 def _safe_business_name(value, fallback):
     text = str(value or fallback).strip()[:200]
     if _SECRET_KEY.search(text) or re.search(
-        r"(?i)\\b(?:password|token|secret|api[_-]?key)\\s*[:=]", text
+        r"(?i)(?:password|token|secret|api[_-]?key)[ \t]*[:=]", text
     ):
         return fallback
     if re.search(r"(?i)(?:gh[pousr]_[A-Za-z0-9_]+|github_pat_[A-Za-z0-9_]+)", text):
@@ -109,7 +109,8 @@ def build_handover_pack(state):
     if missing:
         raise HandoverValidationError("Handover acceptance failed; missing: " + ", ".join(missing))
 
-    business_name = _safe_business_name(state.get("business_name"), slug)\n    name = _markdown_cell(business_name)
+    business_name = _safe_business_name(state.get("business_name"), slug)
+    name = _markdown_cell(business_name)
     modules = state.get("modules") if isinstance(state.get("modules"), list) else []
     modules = sorted({str(item)[:80] for item in modules if isinstance(item, str)})
     generated_at = datetime.now(timezone.utc).isoformat()
