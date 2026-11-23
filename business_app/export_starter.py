@@ -29,7 +29,7 @@ EXPORT_TREE_FILES = (
     "tests/test_app.py",
     "tests/test_lead_integrations.py",
     "tests/test_whatsapp_cloud.py",
-    "starter/tests/test_customer_starter.py",
+    "tests/test_customer_starter.py",
 )
 # Scan source trees for symlinks, but do not copy them wholesale.
 SCAN_DIRECTORIES = ("business_app", "integrations", "static", "templates", "tests", ".github", "docs", "starter")
