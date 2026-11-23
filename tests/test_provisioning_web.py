@@ -732,7 +732,16 @@ def test_remote_render_loopback_head_probe_returns_200():
     assert response.data == b""
 
 
-def test_remote_healthz_is_public_but_https_only_for_non_loopback_clients():
+def test_remote_healthz_is_public_but_https_only_for_non_loopback_clients(monkeypatch):
+    import base64
+    from business_app.provisioning.workflow import WorkflowStateStore
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://health-check.invalid/business_studio")
+    monkeypatch.setenv(
+        "CUSTOMER_CREDENTIALS_ENCRYPTION_KEY",
+        base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii"),
+    )
+    monkeypatch.setattr(WorkflowStateStore, "check_connection", lambda self: True)
     config = {
         "TESTING": True,
         "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
@@ -915,3 +924,50 @@ def test_customer_connection_save_verifies_and_never_echoes_provider_tokens(monk
     assert all(item[0] == "customer-one" and item[4] is True for item in saved)
     with client.session_transaction() as session:
         assert all(secret not in repr(dict(session)) for secret in secrets.values())
+
+
+def _make_remote_health_client():
+    return create_provisioning_app({
+        "TESTING": True,
+        "SECRET_KEY": "remote-health-test-session-secret-32-chars",
+        "PROVISIONING_PASSWORD": "remote-health-test-password-long-enough",
+        "PROVISIONING_PUBLIC_ACCESS": True,
+        "PROVISIONING_ALLOWED_HOSTS": ["studio.example.com"],
+    }).test_client()
+
+
+def test_remote_healthz_requires_durable_storage(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY", raising=False)
+    client = _make_remote_health_client()
+    response = client.get("/healthz", base_url="https://studio.example.com")
+    assert response.status_code == 503
+    assert response.get_json() == {"status": "unavailable"}
+
+
+def test_remote_healthz_requires_a_valid_customer_credential_encryption_key(monkeypatch):
+    import base64
+    from business_app.provisioning.workflow import WorkflowStateStore
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://health-check.invalid/business_studio")
+    monkeypatch.delenv("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY", raising=False)
+    monkeypatch.setattr(WorkflowStateStore, "check_connection", lambda self: True)
+    client = _make_remote_health_client()
+    response = client.get("/healthz", base_url="https://studio.example.com")
+    assert response.status_code == 503
+    assert response.get_json() == {"status": "unavailable"}
+
+    key = base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii")
+    monkeypatch.setenv("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY", key)
+    response = client.get("/healthz", base_url="https://studio.example.com")
+    assert response.status_code == 200
+    assert response.get_json() == {"status": "ok"}
+
+
+def test_remote_healthz_does_not_disclose_missing_configuration(monkeypatch):
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    monkeypatch.delenv("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY", raising=False)
+    client = _make_remote_health_client()
+    response = client.get("/healthz", base_url="https://studio.example.com")
+    assert "DATABASE_URL" not in response.get_data(as_text=True)
+    assert "CUSTOMER_CREDENTIALS_ENCRYPTION_KEY" not in response.get_data(as_text=True)
