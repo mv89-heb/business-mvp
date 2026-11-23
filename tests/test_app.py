@@ -314,3 +314,19 @@ def test_automation_bearer_auth_supports_non_ascii_secrets(monkeypatch):
         assert _automation_authorized()
     with app.test_request_context(headers={"Authorization": "Bearer מפתח-שגוי"}):
         assert not _automation_authorized()
+
+
+def test_application_refuses_to_start_without_a_session_secret(monkeypatch, tmp_path):
+    monkeypatch.delenv("SECRET_KEY", raising=False)
+    with pytest.raises(RuntimeError, match="SECRET_KEY must be configured"):
+        create_app({
+            "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'missing-secret.db'}",
+        })
+
+
+def test_testing_mode_uses_only_an_explicit_test_secret_fallback(tmp_path):
+    app = create_app({
+        "TESTING": True,
+        "SQLALCHEMY_DATABASE_URI": f"sqlite:///{tmp_path / 'test-secret.db'}",
+    })
+    assert app.config["SECRET_KEY"] == "test-only-secret-key-never-use-in-production"
