@@ -109,6 +109,18 @@ def test_handover_requires_a_real_http_health_url():
         build_handover_pack(state)
 
 
+def test_handover_escapes_html_and_does_not_publish_secret_like_business_name():
+    state = completed_state(business_name='<script>alert(1)</script>')
+    pack = build_handover_pack(state)
+    assert '<script>' not in pack["guide"]
+    assert '&lt;script&gt;' in pack["guide"]
+
+    state = completed_state(business_name='password=should-not-appear')
+    pack = build_handover_pack(state)
+    assert "password=should-not-appear" not in pack["guide"]
+    assert pack["inventory"]["business"]["name"] == "sample-business"
+
+
 def test_handover_marks_unselected_integrations_as_not_selected():
     state = completed_state(modules=["lead_capture", "lead_management"])
     pack = build_handover_pack(state)
