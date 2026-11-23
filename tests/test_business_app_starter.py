@@ -1,4 +1,6 @@
 import json
+import subprocess
+import sys
 import pytest
 from business_app.bootstrap import bootstrap
 from business_app.config import BusinessConfigError, load_business_config, validate_runtime_environment
@@ -71,14 +73,42 @@ def test_clean_export_excludes_live_customer_configuration_and_developer_tools(t
     assert not (exported / "business_app" / "provisioning").exists()
     assert not (exported / "business_app" / "provisioning_web.py").exists()
     assert not (exported / "templates" / "provisioning_wizard.html").exists()
-    assert not (exported / "docs" / "DEVELOPER_PROVISIONING_WIZARD_HE.md").exists()
-    assert not (exported / "docs" / "PROVIDER_INTEGRATIONS_HE.md").exists()
+    assert not (exported / "docs").exists()
+    assert not (exported / "business_app" / "export_starter.py").exists()
+    assert not (exported / "templates" / "business_studio.html").exists()
+    assert not (exported / "static" / "business-studio.js").exists()
+    assert not (exported / "static" / "css" / "provisioning.css").exists()
+    assert not (exported / "static" / "css" / "wizard-premium.css").exists()
+    assert not (exported / "static" / "js" / "provisioning.js").exists()
+    assert not (exported / ".github" / "workflows" / "studio-command.yml").exists()
+    assert not (exported / "RUN-BUSINESS-STARTER.ps1").exists()
     assert not (exported / "tests" / "test_provisioning.py").exists()
     assert not (exported / "tests" / "test_provisioning_web.py").exists()
     assert not (exported / "tests" / "test_provisioning_workflow.py").exists()
     assert not (exported / "tests" / "test_provider_adapters.py").exists()
     assert (exported / "tests" / "test_app.py").is_file()
-    assert (exported / "tests" / "test_business_app_starter.py").is_file()
+    assert (exported / "tests" / "test_customer_starter.py").is_file()
+    assert (exported / "tests" / "test_lead_integrations.py").is_file()
+    assert (exported / "tests" / "test_whatsapp_cloud.py").is_file()
+    assert not (exported / "tests" / "test_business_studio.py").exists()
+    assert not (exported / "tests" / "test_handover_generator.py").exists()
+    assert not (exported / "tests" / "test_provider_connections.py").exists()
+    assert not (exported / "tests" / "test_provider_adapters.py").exists()
+
+    workflow = (exported / ".github" / "workflows" / "tests.yml").read_text(encoding="utf-8")
+    assert "python -m pytest -q" in workflow
+    assert "powershell-syntax" not in workflow
+    assert "studio-command" not in workflow
+
+    # Run the actual customer repository test suite, not a source-repository approximation.
+    result = subprocess.run(
+        [sys.executable, "-m", "pytest", "-q"],
+        cwd=exported,
+        capture_output=True,
+        text=True,
+        timeout=180,
+    )
+    assert result.returncode == 0, result.stdout + "\n" + result.stderr
 
 
 def test_clean_export_refuses_nonempty_destination(tmp_path):
