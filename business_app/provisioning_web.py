@@ -624,6 +624,7 @@ def create_provisioning_app(test_config=None):
             preflight_report=report,
             error=error,
             connection_results=None,
+            execution_result=execution_result,
             customer_connection_statuses=_customer_connection_statuses((form_values or {}).get("slug", "")),
         )
 
@@ -766,9 +767,11 @@ def create_provisioning_app(test_config=None):
     def wizard():
         plan = None
         error = None
+        execution_result = None
         form_values = _empty_form_values()
         if request.method == "POST":
             session.pop("preflight_fingerprint", None)
+            session.pop("last_execution_workflow_id", None)
             form_values = _read_form_values(request.form)
             try:
                 plan = build_provisioning_plan(**form_values)
@@ -776,6 +779,19 @@ def create_provisioning_app(test_config=None):
                 error = str(exc)
             except (TypeError, ValueError):
                 error = "הנתונים שהוזנו אינם תקינים."
+        else:
+            workflow_id = session.get("last_execution_workflow_id")
+            if workflow_id:
+                try:
+                    saved_state = _workflow_state_store().load(workflow_id)
+                    if saved_state:
+                        execution_result = _execution_result_from_state(workflow_id, saved_state)
+                except Exception:
+                    execution_result = {
+                        "workflow_id": workflow_id,
+                        "status": "unavailable",
+                        "error": "לא ניתן לטעון את מצב ההקמה השמור.",
+                    }
         return render_template(
             "provisioning_wizard.html",
             login_required=False,
