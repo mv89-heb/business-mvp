@@ -88,6 +88,12 @@ def _ignore_export_artifacts(directory, names):
 
 def _validate_export_tree(source_root):
     """Reject symlinks instead of following paths outside the source repository."""
+    for relative in FILES:
+        current = source_root
+        for part in Path(relative).parts:
+            current = current / part
+            if current.is_symlink():
+                raise ValueError(f"Starter source contains a symbolic link: {relative}")
     for relative in EXTRA_SOURCE_FILES:
         candidate = source_root / relative
         current = source_root
