@@ -819,6 +819,7 @@ def create_provisioning_app(test_config=None):
             plan=plan,
             error=error,
             connection_results=None,
+            execution_result=execution_result,
             customer_connection_statuses=_customer_connection_statuses((form_values or {}).get("slug", "")),
         )
 
