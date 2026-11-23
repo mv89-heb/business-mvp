@@ -7,7 +7,8 @@ from app import create_app, db
 
 @pytest.fixture()
 def client(tmp_path):
-    os.environ["ADMIN_PASSWORD"] = "test-admin-password"
+    os.environ.pop("ADMIN_PASSWORD", None)
+    os.environ["ADMIN_PASSWORD_HASH"] = generate_password_hash("test-admin-password")
     business_config = load_business_config()
     business_config["modules"]["estimate_calculator"] = True
     business_config["integrations"]["google_sheets_webhook"]["enabled"] = True
