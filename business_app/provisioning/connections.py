@@ -178,6 +178,30 @@ class ProviderConnectionStore:
         credentials = self.vault.decrypt(customer_id, provider, row[0])
         return credentials, StoredProviderConnection(customer_id, provider, metadata, verified_at)
 
+
+    def statuses(self, customer_id: str) -> dict[str, StoredProviderConnection]:
+        """Return non-secret connection status only; do not decrypt credentials."""
+        if not isinstance(customer_id, str) or not CUSTOMER_ID_RE.fullmatch(customer_id):
+            raise ConnectionVaultError("Invalid customer connection scope")
+        with self._connect() as connection:
+            self._ensure_schema(connection)
+            rows = connection.execute("""
+                SELECT provider, metadata, verified_at
+                FROM provisioning_provider_connections
+                WHERE customer_id = %s
+            """, (customer_id,)).fetchall()
+        result = {}
+        for provider, metadata, verified_at in rows:
+            if provider not in PROVIDERS:
+                continue
+            if not isinstance(metadata, dict):
+                metadata = json.loads(metadata or "{}")
+            result[provider] = StoredProviderConnection(
+                customer_id, provider, metadata,
+                verified_at.isoformat() if verified_at else None,
+            )
+        return result
+
     def delete(self, customer_id: str, provider: str) -> bool:
         customer_id, provider = _validate_scope(customer_id, provider)
         with self._connect() as connection:
