@@ -274,11 +274,35 @@ class ProvisioningWorkflow:
                     "No developer credentials were used; the wizard will not fall back to developer account credentials."
                 )
 
+    def _check_customer_owned_provider_identity(self, plan, *, github_owner):
+        """Revalidate live provider credentials and exact customer targets immediately before writes."""
+        if plan.get("ownership_mode", "managed") != "customer_owned":
+            return {}
+        connections = {
+            "github": self.github.check_connection(),
+            "neon": self.neon.check_connection(),
+            "render": self.render.check_connection(),
+        }
+        for provider_name, result in connections.items():
+            if not isinstance(result, dict) or result.get("connected") is not True:
+                raise ProviderError(f"{provider_name.title()} connection could not be verified")
+        if connections["render"].get("workspace_selected") is not True:
+            raise ProviderError("Render did not verify access to the selected workspace")
+        connected_github_account = connections["github"].get("account")
+        if (
+            not isinstance(connected_github_account, str)
+            or not isinstance(github_owner, str)
+            or connected_github_account.casefold() != github_owner.casefold()
+        ):
+            raise ProviderError("GitHub authenticated account does not match the customer-owned repository target")
+        return connections
+
     def preflight(self, plan, *, github_owner, known_resources=None):
         """Inspect provider access and require identity matches for previously created resources."""
         if not isinstance(plan, dict) or plan.get("mode") != "dry_run":
             raise ProviderError("Preflight requires a dry-run provisioning plan")
         self._require_customer_owned_connections(plan)
+        self._check_customer_owned_provider_identity(plan, github_owner=github_owner)
         business = plan.get("business") or {}
         slug = business.get("slug")
         if not isinstance(slug, str) or not re.fullmatch(r"[a-z0-9]+(?:-[a-z0-9]+)*", slug):
@@ -333,9 +357,7 @@ class ProvisioningWorkflow:
         if connections["render"].get("workspace_selected") is not True:
             raise ProviderError("Render did not verify access to the selected workspace")
         if plan.get("ownership_mode", "managed") == "customer_owned":
-            connected_github_account = connections["github"].get("account")
-            if not isinstance(connected_github_account, str) or connected_github_account.casefold() != github_owner.casefold():
-                raise ProviderError("GitHub authenticated account does not match the customer-owned repository target")
+            self._check_customer_owned_provider_identity(plan, github_owner=github_owner)
 
         repository = self.github.get_repository(github_owner, slug)
         if repository and repository.get("private") is not True:
