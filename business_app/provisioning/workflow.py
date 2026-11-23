@@ -271,7 +271,7 @@ class ProvisioningWorkflow:
             ):
                 raise ProviderError(
                     f"Customer-owned provisioning requires a verified {name} connection for this exact customer. "
-                    "Developer credentials are never used as a fallback."
+                    "No developer credentials were used; the wizard will not fall back to developer account credentials."
                 )
 
     def preflight(self, plan, *, github_owner, known_resources=None):
