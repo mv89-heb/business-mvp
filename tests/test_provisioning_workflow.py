@@ -673,3 +673,33 @@ def test_workflow_merges_github_pr_only_after_ci_passes(tmp_path, monkeypatch):
     assert "github_pull_request" in steps
     assert "github_ci" in steps
     assert "github_merge" in steps
+
+
+def test_customer_owned_preflight_fails_closed_before_provider_calls():
+    workflow = ProvisioningWorkflow()
+    plan = {
+        "mode": "dry_run",
+        "ownership_mode": "customer_owned",
+        "business": {"slug": "customer-business"},
+    }
+
+    with pytest.raises(ProviderError, match="will not fall back"):
+        workflow.preflight(plan, github_owner="developer")
+
+
+def test_customer_owned_execution_fails_closed_before_provider_calls():
+    workflow = ProvisioningWorkflow()
+    plan = {
+        "mode": "dry_run",
+        "ownership_mode": "customer_owned",
+        "business": {"slug": "customer-business"},
+    }
+
+    with pytest.raises(ProviderError, match="No developer credentials were used"):
+        workflow.run(
+            plan,
+            github_owner="developer",
+            admin_password="a-very-long-test-password",
+            approval="CREATE",
+            neon_free_tier_verified=True,
+        )
