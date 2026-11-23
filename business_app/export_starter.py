@@ -10,7 +10,29 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FILES = (".env.example", ".gitignore", "app.py", "wsgi.py", "requirements.txt", "pytest.ini")
-DIRECTORIES = ("business_app", "integrations", "static", "templates", "tests", ".github", "docs")
+# Explicit customer-runtime allowlist. Never recursively copy developer-owned folders.
+EXPORT_TREE_FILES = (
+    "business_app/__init__.py",
+    "business_app/bootstrap.py",
+    "business_app/config.py",
+    "business_app/integrations/__init__.py",
+    "business_app/integrations/email.py",
+    "business_app/integrations/google_sheets.py",
+    "business_app/integrations/whatsapp_cloud.py",
+    "static/css/app.css",
+    "static/js/app.js",
+    "templates/admin.html",
+    "templates/admin_login.html",
+    "templates/base.html",
+    "templates/index.html",
+    "templates/thanks.html",
+    "tests/test_app.py",
+    "tests/test_lead_integrations.py",
+    "tests/test_whatsapp_cloud.py",
+    "starter/tests/test_customer_starter.py",
+)
+# Scan source trees for symlinks, but do not copy them wholesale.
+SCAN_DIRECTORIES = ("business_app", "integrations", "static", "templates", "tests", ".github", "docs", "starter")
 EXTRA_SOURCE_FILES = ("config/business.template.json", "render.yaml.template", "starter/README.md")
 
 # Developer-only provisioning must never enter a customer application.
@@ -73,7 +95,7 @@ def _validate_export_tree(source_root):
             current = current / part
             if current.is_symlink():
                 raise ValueError(f"Starter source contains a symbolic link: {relative}")
-    for directory in DIRECTORIES:
+    for directory in SCAN_DIRECTORIES:
         root = source_root / directory
         if root.is_symlink():
             raise ValueError(f"Starter source contains a symbolic link: {directory}")
@@ -98,29 +120,43 @@ def export_starter(target, business_name, slug, modules=None, business_profile=N
     if destination.exists() and any(destination.iterdir()):
         raise FileExistsError(f"Destination must be empty: {destination}")
 
-    # Validate before copying anything: copytree follows symlinks by default,
-    # which could otherwise pull credentials or customer files from outside ROOT.
-    for filename in FILES:
-        source_file = ROOT / filename
-        if source_file.is_symlink():
-            raise ValueError(f"Starter source contains a symbolic link: {filename}")
+    # Validate every source tree before copying. Export itself uses only explicit
+    # paths below; developer tools, wizard assets and private docs are never copied.
     _validate_export_tree(ROOT)
 
     destination.mkdir(parents=True, exist_ok=True)
-    for filename in FILES:
-        source = ROOT / filename
-        if source.is_file() and filename != ".env":
-            shutil.copy2(source, destination / filename)
+    for relative in (*FILES, *EXPORT_TREE_FILES):
+        source = ROOT / relative
+        if not source.is_file():
+            raise FileNotFoundError(f"Required Starter source file is missing: {relative}")
+        target_path = destination / relative
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target_path)
 
-    for directory in DIRECTORIES:
-        source = ROOT / directory
-        if source.is_dir():
-            shutil.copytree(
-                source,
-                destination / directory,
-                dirs_exist_ok=True,
-                ignore=_ignore_export_artifacts,
-            )
+    # Customer repositories get minimal CI without developer-only PowerShell or relay jobs.
+    workflow_path = destination / ".github" / "workflows" / "tests.yml"
+    workflow_path.parent.mkdir(parents=True, exist_ok=True)
+    workflow_path.write_text(
+        "name: Customer Starter Tests\n"
+        "on:\n"
+        "  push:\n"
+        "    branches: [main]\n"
+        "  pull_request:\n"
+        "    branches: [main]\n"
+        "permissions:\n"
+        "  contents: read\n"
+        "jobs:\n"
+        "  test:\n"
+        "    runs-on: ubuntu-latest\n"
+        "    steps:\n"
+        "      - uses: actions/checkout@v4\n"
+        "      - uses: actions/setup-python@v5\n"
+        "        with:\n"
+        "          python-version: \"3.11\"\n"
+        "      - run: pip install -r requirements.txt\n"
+        "      - run: python -m pytest -q\n",
+        encoding="utf-8",
+    )
 
     config_dir = destination / "config"
     config_dir.mkdir(exist_ok=True)
