@@ -227,7 +227,7 @@ class BusinessStudioStore:
 
     def list_businesses(self):
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             rows = conn.execute("""
                 SELECT business_id, slug, name, industry, is_template, status,
                        source_business_id, config, created_at
@@ -241,7 +241,7 @@ class BusinessStudioStore:
 
     def get_source_config(self, business_id):
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             row = conn.execute(
                 "SELECT config FROM business_catalog WHERE business_id = %s AND status = 'ACTIVE'",
                 (business_id,),
@@ -252,7 +252,7 @@ class BusinessStudioStore:
 
     def list_proposals(self):
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             rows = conn.execute("""
                 SELECT proposal_id, name, slug, industry, source_business_id,
                        status, payload, business_id, webhook_status, created_at
@@ -269,7 +269,7 @@ class BusinessStudioStore:
         proposal_id = str(uuid4())
         source_id = payload["sourceBusinessId"]
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             source = conn.execute(
                 "SELECT config FROM business_catalog WHERE business_id = %s AND status = 'ACTIVE'",
                 (source_id,),
@@ -295,7 +295,7 @@ class BusinessStudioStore:
     def create_task(self, title, description="", proposal_id=None, priority="NORMAL"):
         task_id = str(uuid4())
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             if proposal_id:
                 found = conn.execute(
                     "SELECT 1 FROM business_proposals WHERE proposal_id = %s", (proposal_id,)
@@ -311,7 +311,7 @@ class BusinessStudioStore:
 
     def list_tasks(self):
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             rows = conn.execute("""
                 SELECT task_id, proposal_id, title, description, status, priority, created_at
                 FROM business_tasks ORDER BY created_at DESC LIMIT 200
@@ -326,7 +326,7 @@ class BusinessStudioStore:
 
     def list_commands(self):
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             rows = conn.execute("""
                 SELECT command_id, github_issue_number, command_type, status,
                        result, error_code, created_at, updated_at
@@ -341,7 +341,7 @@ class BusinessStudioStore:
 
     def accept_command(self, command_id, issue_number, command_type, payload):
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             inserted = conn.execute("""
                 INSERT INTO studio_command_inbox
                     (command_id, github_issue_number, command_type, payload, status)
@@ -361,7 +361,7 @@ class BusinessStudioStore:
 
     def complete_command(self, command_id, status, result=None, error_code=None):
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             conn.execute("""
                 UPDATE studio_command_inbox
                 SET status = %s, result = %s::jsonb, error_code = %s, updated_at = NOW()
@@ -372,7 +372,7 @@ class BusinessStudioStore:
     def approve_proposal(self, proposal_id):
         business_id = str(uuid4())
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             row = conn.execute("""
                 SELECT name, slug, industry, source_business_id, payload, status
                 FROM business_proposals WHERE proposal_id = %s FOR UPDATE
@@ -406,7 +406,7 @@ class BusinessStudioStore:
 
     def reject_proposal(self, proposal_id):
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             row = conn.execute("""
                 UPDATE business_proposals SET status = 'REJECTED', updated_at = NOW()
                 WHERE proposal_id = %s AND status = 'PENDING_APPROVAL'
@@ -428,7 +428,7 @@ class BusinessStudioStore:
         max_attempts = 5
         lease_seconds = 120
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             # Recover abandoned leases that have exhausted their retry budget.
             conn.execute("""
                 UPDATE business_automation_outbox
@@ -473,7 +473,7 @@ class BusinessStudioStore:
             retry_delay = None if status == "FAILED" else min(3600, 30 * (2 ** (attempts - 1)))
 
         with self._connect() as conn:
-            self._ensure_schema(conn)
+            self._ensure_schema_once(conn)
             if retry_delay is None:
                 conn.execute("""
                     UPDATE business_automation_outbox
