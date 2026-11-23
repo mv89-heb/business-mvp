@@ -274,15 +274,16 @@ class ProvisioningWorkflow:
                     "No developer credentials were used; the wizard will not fall back to developer account credentials."
                 )
 
-    def _check_customer_owned_provider_identity(self, plan, *, github_owner):
+    def _check_customer_owned_provider_identity(self, plan, *, github_owner, connections=None):
         """Revalidate live provider credentials and exact customer targets immediately before writes."""
         if plan.get("ownership_mode", "managed") != "customer_owned":
             return {}
-        connections = {
-            "github": self.github.check_connection(),
-            "neon": self.neon.check_connection(),
-            "render": self.render.check_connection(),
-        }
+        if connections is None:
+            connections = {
+                "github": self.github.check_connection(),
+                "neon": self.neon.check_connection(),
+                "render": self.render.check_connection(),
+            }
         for provider_name, result in connections.items():
             if not isinstance(result, dict) or result.get("connected") is not True:
                 raise ProviderError(f"{provider_name.title()} connection could not be verified")
@@ -357,7 +358,7 @@ class ProvisioningWorkflow:
         if connections["render"].get("workspace_selected") is not True:
             raise ProviderError("Render did not verify access to the selected workspace")
         if plan.get("ownership_mode", "managed") == "customer_owned":
-            self._check_customer_owned_provider_identity(plan, github_owner=github_owner)
+            self._check_customer_owned_provider_identity(plan, github_owner=github_owner, connections=connections)
 
         repository = self.github.get_repository(github_owner, slug)
         if repository and repository.get("private") is not True:
