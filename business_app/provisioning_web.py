@@ -8,6 +8,8 @@ import ipaddress
 import json
 import os
 import re
+from concurrent.futures import ThreadPoolExecutor
+from threading import Lock
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -37,6 +39,11 @@ from business_app.provisioning import (
 )
 
 csrf = CSRFProtect()
+
+# One background provisioning task at a time; progress itself is persisted in Neon.
+_EXECUTION_EXECUTOR = ThreadPoolExecutor(max_workers=1, thread_name_prefix="business-provisioning")
+_EXECUTION_JOBS = {}
+_EXECUTION_JOBS_LOCK = Lock()
 
 
 def _empty_form_values():
@@ -215,8 +222,94 @@ def create_provisioning_app(test_config=None):
             workflow = ProvisioningWorkflow(
                 github=providers["github"], neon=providers["neon"], render=providers["render"]
             )
+            workflow.state_store = _workflow_state_store()
             return workflow, owner
-        return ProvisioningWorkflow(), os.getenv("GITHUB_OWNER", "").strip()
+        workflow = ProvisioningWorkflow()
+        workflow.state_store = _workflow_state_store()
+        return workflow, os.getenv("GITHUB_OWNER", "").strip()
+
+    def _workflow_state_store():
+        database_url = (
+            app.config.get("PROVISIONING_DATABASE_URL")
+            or os.getenv("DATABASE_URL", "")
+        ).strip()
+        return WorkflowStateStore(
+            root=app.config.get("PROVISIONING_STATE_DIR"),
+            database_url=database_url,
+        )
+
+    def _run_provisioning_background(plan, admin_password):
+        workflow_id = plan.get("plan_id") or (plan.get("business") or {}).get("slug", "")
+        with app.app_context():
+            try:
+                workflow, owner = _workflow_for_plan(plan)
+                result = workflow.run(
+                    plan,
+                    github_owner=owner,
+                    admin_password=admin_password,
+                    approval="CREATE",
+                    neon_free_tier_verified=True,
+                )
+                store = _workflow_state_store()
+                state = store.load(workflow_id) or {}
+                if state.get("status") != "completed":
+                    state.update({
+                        "plan_id": plan.get("plan_id"),
+                        "business_slug": (plan.get("business") or {}).get("slug", ""),
+                        "business_name": (plan.get("business") or {}).get("name", ""),
+                        "status": result.get("status", "completed"),
+                        "step": result.get("status", "completed"),
+                        "resources": result.get("resources", state.get("resources", {})),
+                        "history": state.get("history", []),
+                        "error": result.get("error"),
+                    })
+                    store.save(workflow_id, state)
+                _audit_event(
+                    app, "provisioning_completed", plan_id=plan.get("plan_id"),
+                    business_slug=(plan.get("business") or {}).get("slug"), status="completed",
+                )
+                return result
+            except Exception:
+                # Workflow.run records its own sanitized failure. This fallback
+                # covers failures that occur before the workflow can initialize.
+                try:
+                    store = _workflow_state_store()
+                    state = store.load(workflow_id) or {
+                        "plan_id": plan.get("plan_id"),
+                        "business_slug": (plan.get("business") or {}).get("slug", ""),
+                        "business_name": (plan.get("business") or {}).get("name", ""),
+                        "modules": list((plan.get("application") or {}).get("modules") or []),
+                        "resources": {},
+                        "history": [],
+                    }
+                    if state.get("status") in {"queued", "running", None}:
+                        state.update({
+                            "status": "failed",
+                            "step": state.get("step") or "initialization",
+                            "error": "לא ניתן לאתחל את תהליך ההקמה. בדוק חיבורי ספקים והפעל Preflight מחדש.",
+                        })
+                        store.save(workflow_id, state)
+                except Exception:
+                    app.logger.exception("Could not persist background provisioning failure state")
+                _audit_event(
+                    app, "provisioning_failure", plan_id=plan.get("plan_id"),
+                    business_slug=(plan.get("business") or {}).get("slug"), reason="background_execution_failed",
+                )
+                return {"workflow_id": workflow_id, "status": "failed"}
+
+    def _execution_result_from_state(workflow_id, state):
+        with _EXECUTION_JOBS_LOCK:
+            future = _EXECUTION_JOBS.get(workflow_id)
+        status = state.get("status", "unknown")
+        if status in {"queued", "running"} and (future is None or future.done()):
+            status = "interrupted"
+        return {
+            "workflow_id": workflow_id,
+            "status": status,
+            "step": state.get("step"),
+            "resources": state.get("resources", {}),
+            "error": state.get("error"),
+        }
 
     @app.context_processor
     def inject_deployment_context():
@@ -565,27 +658,60 @@ def create_provisioning_app(test_config=None):
             plan = build_provisioning_plan(**form_values)
             if session.get("preflight_fingerprint") != _plan_fingerprint(plan):
                 raise ProviderError("יש להריץ Preflight מוצלח לתוכנית הנוכחית לפני ביצוע.")
-            # Treat a successful preflight as a one-time execution gate; a retry
-            # must run a fresh read-only check before attempting provider writes.
+            # A successful preflight is a one-time execution gate.
             session.pop("preflight_fingerprint", None)
             if request.form.get("confirm_zero_cost") != "yes":
                 raise ProviderError("לא התקבל אישור מפורש לכך שעלות Neon תהיה אפס.")
-            _audit_event(app, "provisioning_started", plan_id=plan.get("plan_id"), business_slug=plan.get("business", {}).get("slug"))
-            workflow, owner = _workflow_for_plan(plan)
-            result = workflow.run(
-                plan,
-                github_owner=owner,
-                admin_password=request.form.get("admin_password", ""),
-                approval=request.form.get("approval", ""),
-                neon_free_tier_verified=True,
-            )
-            _audit_event(app, "provisioning_completed", plan_id=plan.get("plan_id"), business_slug=plan.get("business", {}).get("slug"), status="completed")
+            admin_password = request.form.get("admin_password", "")
+            if request.form.get("approval") != "CREATE":
+                raise ProviderError("נדרש אישור מפורש עם הטקסט CREATE.")
+            if len(admin_password) < 14:
+                raise ProviderError("סיסמת מנהל לפרויקט החדש חייבת להכיל לפחות 14 תווים.")
+
+            workflow_id = plan.get("plan_id") or (plan.get("business") or {}).get("slug", "")
+            store = _workflow_state_store()
+            saved_state = store.load(workflow_id)
+            if saved_state and saved_state.get("status") == "completed":
+                result = _execution_result_from_state(workflow_id, saved_state)
+            else:
+                with _EXECUTION_JOBS_LOCK:
+                    active = _EXECUTION_JOBS.get(workflow_id)
+                    if active is None or active.done():
+                        if not saved_state:
+                            saved_state = {
+                                "plan_id": plan.get("plan_id"),
+                                "business_slug": (plan.get("business") or {}).get("slug", ""),
+                                "business_name": (plan.get("business") or {}).get("name", ""),
+                                "modules": list((plan.get("application") or {}).get("modules") or []),
+                                "status": "queued",
+                                "step": "queued",
+                                "resources": {},
+                                "history": [],
+                                "error": None,
+                            }
+                        else:
+                            saved_state.update({"status": "queued", "step": "queued", "error": None})
+                        store.save(workflow_id, saved_state)
+                        _audit_event(
+                            app, "provisioning_started", plan_id=plan.get("plan_id"),
+                            business_slug=(plan.get("business") or {}).get("slug"),
+                        )
+                        _EXECUTION_JOBS[workflow_id] = _EXECUTION_EXECUTOR.submit(
+                            _run_provisioning_background, plan, admin_password,
+                        )
+                result = {
+                    "workflow_id": workflow_id,
+                    "status": "running",
+                    "step": "queued",
+                    "resources": {},
+                }
+            session["last_execution_workflow_id"] = workflow_id
         except (ProvisioningInputError, ProviderError, ConnectionVaultError) as exc:
             _audit_event(app, "provisioning_failure", reason=type(exc).__name__)
             error = str(exc)
         except Exception:
             _audit_event(app, "provisioning_failure", reason="unexpected_error")
-            error = "ההקמה נעצרה. פרטי שגיאה ונתוני אימות לא נחשפו; בדוק את מצב התהליך המקומי."
+            error = "לא ניתן להתחיל את ההקמה. בדוק אחסון מצב וחיבורי ספקים."
         return render_template(
             "provisioning_wizard.html",
             login_required=False,
@@ -599,14 +725,33 @@ def create_provisioning_app(test_config=None):
             customer_connection_statuses=_customer_connection_statuses((form_values or {}).get("slug", "")),
         )
 
+    @app.get("/execute/status/<workflow_id>")
+    @developer_required
+    def execution_status(workflow_id):
+        if not re.fullmatch(r"[A-Za-z0-9_-]{1,120}", workflow_id):
+            abort(404)
+        try:
+            state = _workflow_state_store().load(workflow_id)
+        except Exception:
+            return {"status": "unavailable"}, 503
+        with _EXECUTION_JOBS_LOCK:
+            future = _EXECUTION_JOBS.get(workflow_id)
+        if state is None:
+            if future is None:
+                abort(404)
+            return {"workflow_id": workflow_id, "status": "queued", "step": "queued"}
+        result = _execution_result_from_state(workflow_id, state)
+        result["history"] = state.get("history", [])[-12:]
+        if result["status"] == "interrupted":
+            result["error"] = "תהליך ההקמה הופסק עקב אתחול השירות. יש להריץ Preflight מחדש לפני ניסיון המשך."
+        return result
+
     @app.post("/handover/download")
     @developer_required
     def download_handover_pack():
         workflow_id = request.form.get("workflow_id", "").strip()
         try:
-            state = WorkflowStateStore(
-                database_url=app.config.get("PROVISIONING_DATABASE_URL") or os.getenv("DATABASE_URL")
-            ).load(workflow_id)
+            state = _workflow_state_store().load(workflow_id)
             if not state:
                 raise HandoverValidationError("לא נמצא תהליך הקמה שמור עבור המזהה שסופק.")
             pack = build_handover_pack(state)
@@ -639,9 +784,11 @@ def create_provisioning_app(test_config=None):
     def wizard():
         plan = None
         error = None
+        execution_result = None
         form_values = _empty_form_values()
         if request.method == "POST":
             session.pop("preflight_fingerprint", None)
+            session.pop("last_execution_workflow_id", None)
             form_values = _read_form_values(request.form)
             try:
                 plan = build_provisioning_plan(**form_values)
@@ -649,6 +796,19 @@ def create_provisioning_app(test_config=None):
                 error = str(exc)
             except (TypeError, ValueError):
                 error = "הנתונים שהוזנו אינם תקינים."
+        else:
+            workflow_id = session.get("last_execution_workflow_id")
+            if workflow_id:
+                try:
+                    saved_state = _workflow_state_store().load(workflow_id)
+                    if saved_state:
+                        execution_result = _execution_result_from_state(workflow_id, saved_state)
+                except Exception:
+                    execution_result = {
+                        "workflow_id": workflow_id,
+                        "status": "unavailable",
+                        "error": "לא ניתן לטעון את מצב ההקמה השמור.",
+                    }
         return render_template(
             "provisioning_wizard.html",
             login_required=False,
@@ -658,6 +818,7 @@ def create_provisioning_app(test_config=None):
             plan=plan,
             error=error,
             connection_results=None,
+            execution_result=execution_result,
             customer_connection_statuses=_customer_connection_statuses((form_values or {}).get("slug", "")),
         )
 
