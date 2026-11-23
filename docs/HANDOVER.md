@@ -1,19 +1,28 @@
-# Customer ownership handover checklist
+# תיק מסירה ללקוח (Handover Pack)
 
-A handover is complete only after the customer approves the work and receiving accounts are under the customer's control.
+Business Studio מפיק תיק מסירה לאחר שתהליך Provisioning הסתיים בהצלחה ובדיקת Render /health החזירה HTTP 200.
 
-- [ ] Written scope and authorization confirmed.
-- [ ] GitHub repository ownership or organization access transferred as agreed.
-- [ ] Render ownership, billing and deploy permissions agreed and verified.
-- [ ] Domain registrar and DNS access transferred/verified.
-- [ ] Database project, backups and credentials controlled by customer.
-- [ ] Google Sheet and Apps Script deployment created in customer's Google account; access restricted to authorized staff.
-- [ ] WhatsApp Business Account, number and Meta Business Portfolio authorized and customer-controlled before API setup.
-- [ ] All admin credentials and secrets rotated and delivered securely.
-- [ ] Data retention, privacy notice and authorized data transfer documented.
-- [ ] Backups and restore tested.
-- [ ] Production domain, HTTPS, health check and admin access verified.
-- [ ] Integrations tested with customer-approved test records.
-- [ ] Customer confirms receipt of access and operational documentation.
+## קבצים
 
-Do not mark an item complete based only on configuration or successful deployment; verify the actual account and workflow. WhatsApp remains disabled unless the owner explicitly authorizes it and official API/opt-in requirements are satisfied.
+- HANDOVER_GUIDE.md — מדריך מסירה בעברית הכולל קישורים, סטטוסים, מגבלות, עלויות וצ'ק־ליסט קבלה.
+- TECHNICAL_INVENTORY.json — מזהי GitHub, Neon ו־Render וסטטוסי אימות במבנה קריא למכונה.
+
+## תנאי הפקה
+
+- התהליך חייב להיות במצב completed.
+- נדרשים מזהה מאגר GitHub, מזהה פרויקט Neon, מזהה שירות Render וכתובת Health שנבדקה.
+- קובץ ZIP נוצר בזיכרון ונשלח למשתמש המאומת; הוא אינו נשמר בפרויקט הלקוח או בשרת.
+- אין לכלול סיסמאות, API keys, tokens, DATABASE_URL, Authorization headers או משתני סביבה.
+
+## כללי דיווח
+
+- הצלחת Provisioning ו־HTTP 200 ב־/health אינם מוכיחים שהטופס, ה־CRM או WhatsApp עברו בדיקת קבלה עסקית.
+- בחירת מודול WhatsApp או Webhooks אינה מוכיחה שהחיבור החיצוני פעיל.
+- גיבויים, שחזור, ניטור חיצוני, חשבונות ספקים ובעלות לקוח מסומנים כלא מאומתים עד שיש ראיה נפרדת.
+- לעולם אין לכתוב שהלקוח הוא בעל החשבונות רק משום שהמשאבים נוצרו בהצלחה. יש לאמת העברת בעלות והרשאות בנפרד.
+
+## הפעלה ובדיקות
+
+הפקת התיק מתבצעת מממשק האשף לאחר השלמת Provisioning, באמצעות כפתור הורדת ZIP. בדיקות הקבלה נמצאות ב־tests/test_handover_generator.py ובבדיקות מסלול ההורדה ב־tests/test_provisioning_web.py.
+
+לפני מסירה ללקוח יש להשלים את הצ'ק־ליסט שבמדריך ולבצע בדיקות אמיתיות לערוצים שנכללו בהיקף.
