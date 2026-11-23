@@ -1,4 +1,54 @@
 document.addEventListener("DOMContentLoaded", () => {
+  const executionProgress = document.querySelector("[data-execution-status-url]");
+  if (executionProgress) {
+    const statusText = executionProgress.querySelector("[data-execution-status-text]");
+    const stepLabels = {
+      queued: "ממתין לתחילת ההקמה",
+      preflight: "בודק הרשאות ותשתיות",
+      starter_export: "מכין את קובצי האתר וה־CRM",
+      github_repository: "יוצר מאגר GitHub פרטי",
+      github_branch: "מכין ענף פרסום",
+      github_publish: "מפרסם את קובצי הפרויקט",
+      github_pull_request: "פותח Pull Request",
+      github_ci: "ממתין לבדיקות GitHub Actions",
+      github_merge: "ממזג את גרסת הלקוח",
+      neon_project: "יוצר מסד נתונים ב־Neon",
+      neon_connection: "בודק חיבור למסד הנתונים",
+      render_service: "יוצר שירות Render",
+      render_environment: "מגדיר משתני סביבה",
+      health_check: "ממתין לבדיקת בריאות הפריסה",
+      completed: "ההקמה הושלמה",
+    };
+    const pollExecution = async () => {
+      try {
+        const response = await fetch(executionProgress.dataset.executionStatusUrl, {
+          credentials: "same-origin",
+          headers: { "Accept": "application/json" },
+          cache: "no-store",
+        });
+        if (!response.ok) throw new Error("status unavailable");
+        const data = await response.json();
+        if (statusText) {
+          const label = stepLabels[data.step] || stepLabels[data.status] || "ההקמה מתקדמת";
+          statusText.textContent = label + (data.status === "running" ? "…" : "");
+        }
+        if (["completed", "failed", "interrupted"].includes(data.status)) {
+          if (statusText) {
+            statusText.textContent = data.status === "completed"
+              ? "ההקמה הושלמה. טוען את התוצאות…"
+              : (data.error || "ההקמה נעצרה. טוען את פרטי המצב…");
+          }
+          window.setTimeout(() => window.location.reload(), 700);
+          return;
+        }
+      } catch (_) {
+        if (statusText) statusText.textContent = "ממתין לעדכון מצב מהשרת…";
+      }
+      window.setTimeout(pollExecution, 2500);
+    };
+    pollExecution();
+  }
+
   const form = document.querySelector('form[action$="/wizard"]');
   if (!form) return;
 
