@@ -233,7 +233,10 @@ def create_provisioning_app(test_config=None):
             app.config.get("PROVISIONING_DATABASE_URL")
             or os.getenv("DATABASE_URL", "")
         ).strip()
-        return WorkflowStateStore(database_url=database_url)
+        return WorkflowStateStore(
+            root=app.config.get("PROVISIONING_STATE_DIR"),
+            database_url=database_url,
+        )
 
     def _run_provisioning_background(plan, admin_password):
         workflow_id = plan.get("plan_id") or (plan.get("business") or {}).get("slug", "")
@@ -697,7 +700,6 @@ def create_provisioning_app(test_config=None):
                         _EXECUTION_JOBS[workflow_id] = _EXECUTION_EXECUTOR.submit(
                             _run_provisioning_background, plan, admin_password,
                         )
-                session["last_execution_workflow_id"] = workflow_id
                 result = {
                     "workflow_id": workflow_id,
                     "status": "running",
@@ -750,9 +752,7 @@ def create_provisioning_app(test_config=None):
     def download_handover_pack():
         workflow_id = request.form.get("workflow_id", "").strip()
         try:
-            state = WorkflowStateStore(
-                database_url=app.config.get("PROVISIONING_DATABASE_URL") or os.getenv("DATABASE_URL")
-            ).load(workflow_id)
+            state = _workflow_state_store().load(workflow_id)
             if not state:
                 raise HandoverValidationError("לא נמצא תהליך הקמה שמור עבור המזהה שסופק.")
             pack = build_handover_pack(state)
