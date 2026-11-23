@@ -195,6 +195,36 @@
                   <span class="module-state available">בחירה מפורשת</span>
                 </label>
               </div>
+              {% if customer_connection_results %}
+                <div class="notice {{ 'success' if customer_connection_results.values()|selectattr('connected')|list|length else 'warning' }}">
+                  <strong>תוצאות חיבורי הלקוח</strong>
+                  {% for provider, result in customer_connection_results.items() %}<span>{{ result.message }}</span>{% endfor %}
+                </div>
+              {% endif %}
+              <div class="panel connection-setup">
+                <div class="panel-heading"><div><div class="section-kicker">CUSTOMER PROVIDER ACCESS</div><h2>חיבור חשבונות הלקוח</h2><p class="panel-description">הזן מפתחות API שנוצרו בחשבונות הלקוח. כל מפתח נבדק לפני הצפנה ושמירה; הוא לא יוצג שוב ולא ייכנס ל-session או ללוגים.</p></div></div>
+                <div class="field-grid">
+                  <div class="field"><label for="githubToken">GitHub Personal Access Token</label><input id="githubToken" name="github_token" type="password" autocomplete="new-password" placeholder="ghp_… או github_pat_…"><small class="hint">נבדקת זהות החשבון. הרשאת יצירת Repository תאומת שוב בזמן ההקמה.</small></div>
+                  <div class="field"><label for="neonToken">Neon API Key</label><input id="neonToken" name="neon_token" type="password" autocomplete="new-password" placeholder="Neon API key"><small class="hint">המפתח נבדק מול הארגון שתציין.</small></div>
+                  <div class="field"><label for="neonOrgId">Neon Organization ID</label><input id="neonOrgId" name="neon_org_id" value="{{ form_values.neon_org_id|default('') }}" autocomplete="off" placeholder="org-…"></div>
+                  <div class="field"><label for="renderToken">Render API Key</label><input id="renderToken" name="render_token" type="password" autocomplete="new-password" placeholder="rnd_…"><small class="hint">המפתח נבדק מול סביבת העבודה שתציין.</small></div>
+                  <div class="field"><label for="renderWorkspaceId">Render Workspace ID</label><input id="renderWorkspaceId" name="render_workspace_id" value="{{ form_values.render_workspace_id|default('') }}" autocomplete="off" placeholder="tea-…"></div>
+                </div>
+                <div class="action-grid"><button class="button button-primary" type="submit" formaction="{{ url_for('save_customer_connections') }}">בדוק ושמור חיבורי לקוח</button></div>
+                <div class="provider-grid">
+                  {% for provider, title in [('github','GitHub'),('neon','Neon'),('render','Render')] %}
+                    {% set status = customer_connection_statuses.get(provider) if customer_connection_statuses else none %}
+                    <article class="provider-card">
+                      <div class="provider-head"><span class="provider-logo">{{ provider[:1]|upper }}</span><span class="status-chip {{ 'success' if status and status.verified_at else 'warning' }}">{{ 'מאומת' if status and status.verified_at else 'לא מחובר' }}</span></div>
+                      <strong class="provider-name">{{ title }}</strong>
+                      {% if status %}
+                        <p class="provider-caption">{{ status.metadata.get('account') or status.metadata.get('organization_id') or status.metadata.get('workspace_id') or 'חיבור שמור' }}</p>
+                        <button class="button button-quiet" type="submit" name="provider" value="{{ provider }}" formaction="{{ url_for('remove_customer_connection') }}">הסר חיבור</button>
+                      {% endif %}
+                    </article>
+                  {% endfor %}
+                </div>
+              </div>
               <div class="provider-grid">
                 {% for provider, title, description in [('github','GitHub','מאגר קוד פרטי לפרויקט'),('neon','Neon','מסד PostgreSQL מבודד'),('render','Render','שירות Web ופריסה אוטומטית')] %}
                   {% set result = connection_results.get(provider) if connection_results else none %}
