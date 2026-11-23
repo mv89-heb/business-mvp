@@ -464,18 +464,22 @@ class BusinessStudioStore:
 
         with self._connect() as conn:
             self._ensure_schema(conn)
-            conn.execute("""
-                UPDATE business_automation_outbox
-                SET status = %s,
-                    last_error = %s,
-                    next_attempt_at = CASE
-                        WHEN %s IS NULL THEN NULL
-                        ELSE NOW() + (%s * INTERVAL '1 second')
-                    END,
-                    delivered_at = CASE WHEN %s = 'SENT' THEN NOW() ELSE delivered_at END,
-                    updated_at = NOW()
-                WHERE event_id = %s AND status = 'SENDING'
-            """, (status, error, retry_delay, retry_delay, status, event_id))
+            if retry_delay is None:
+                conn.execute("""
+                    UPDATE business_automation_outbox
+                    SET status = %s, last_error = %s, next_attempt_at = NULL,
+                        delivered_at = CASE WHEN %s = 'SENT' THEN NOW() ELSE delivered_at END,
+                        updated_at = NOW()
+                    WHERE event_id = %s AND status = 'SENDING'
+                """, (status, error, status, event_id))
+            else:
+                conn.execute("""
+                    UPDATE business_automation_outbox
+                    SET status = %s, last_error = %s,
+                        next_attempt_at = NOW() + (%s * INTERVAL '1 second'),
+                        updated_at = NOW()
+                    WHERE event_id = %s AND status = 'SENDING'
+                """, (status, error, retry_delay, event_id))
             conn.execute("""
                 UPDATE business_proposals
                 SET webhook_status = %s, updated_at = NOW()
