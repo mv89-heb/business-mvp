@@ -15,7 +15,7 @@
     <a class="{% if not selected %}active{% endif %}" href="{{ url_for('admin_dashboard', q=search) }}">הכל</a>
     {% for s in ['חדש','בטיפול','נשלחה הצעה','נסגר','לא רלוונטי'] %}<a class="{% if selected == s %}active{% endif %}" href="{{ url_for('admin_dashboard', status=s, q=search) }}">{{ s }}</a>{% endfor %}
   </div>
-  <div class="table-wrap"><table><thead><tr><th>תאריך</th><th>לקוח ויצירת קשר</th><th>סוג עבודה ושטח</th><th>פרטי הפרויקט</th><th>תקציב</th><th>סטטוס טיפול</th></tr></thead><tbody>
+  <div class="table-wrap"><table><thead><tr><th>תאריך</th><th>לקוח ויצירת קשר</th><th>שירות / מאפיין</th><th>פרטי הפנייה</th><th>תקציב</th><th>סטטוס טיפול</th></tr></thead><tbody>
   {% for lead in leads %}
   {% set lead_meta = metadata_by_lead.get(lead.id) %}
   <tr>
