@@ -17,7 +17,7 @@ def send_lead_created(lead, app, integration_config):
         return
     payload = {"event":"lead.created","token":webhook_secret,"lead":{"id":lead.id,"created_at":lead.created_at.isoformat() if lead.created_at else None,"name":lead.name,"phone":lead.phone,"email":lead.email,"city":lead.city,"service":lead.service,"area_sqm":lead.area,"budget":lead.budget,"details":lead.details,"status":lead.status}}
     request_data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-    webhook_request = urllib.request.Request(webhook_url, data=request_data, headers={"Content-Type":"application/json","User-Agent":"EliCohenBusinessMVP/1.0"}, method="POST")
+    webhook_request = urllib.request.Request(webhook_url, data=request_data, headers={"Content-Type":"application/json","User-Agent":"BusinessStarter/1.0"}, method="POST")
     try:
         with urllib.request.urlopen(webhook_request, timeout=8) as response:
             if not 200 <= response.status < 300:
