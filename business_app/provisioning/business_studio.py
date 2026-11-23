@@ -514,13 +514,28 @@ _COMMAND_PRIVATE_KEY = None
 _COMMAND_PRIVATE_KEY_LOCK = threading.Lock()
 
 
-def _get_command_private_key():
-    """Use an explicitly configured Render secret, or a per-process key on the single Render worker."""
+def _get_command_private_key(*, require_persistent=None):
+    """Load a persistent RSA key remotely; permit an ephemeral key only for local development."""
     from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.rsa import RSAPrivateKey
+
     global _COMMAND_PRIVATE_KEY
+    remote_mode = (
+        os.getenv("PROVISIONING_PUBLIC_ACCESS", "").strip().lower() == "true"
+        or require_persistent is True
+    )
     encoded = os.getenv("STUDIO_COMMAND_PRIVATE_KEY_B64", "").strip()
     if encoded:
-        return serialization.load_pem_private_key(base64.b64decode(encoded, validate=True), password=None)
+        key = serialization.load_pem_private_key(
+            base64.b64decode(encoded, validate=True), password=None
+        )
+        if not isinstance(key, RSAPrivateKey):
+            raise RuntimeError("STUDIO_COMMAND_PRIVATE_KEY_B64 must contain an RSA private key.")
+        if remote_mode and key.key_size < 3072:
+            raise RuntimeError("STUDIO_COMMAND_PRIVATE_KEY_B64 must contain an RSA-3072 private key.")
+        return key
+    if remote_mode:
+        raise RuntimeError("STUDIO_COMMAND_PRIVATE_KEY_B64 is required for remote command relay.")
     if _COMMAND_PRIVATE_KEY is None:
         with _COMMAND_PRIVATE_KEY_LOCK:
             if _COMMAND_PRIVATE_KEY is None:

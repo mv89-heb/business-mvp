@@ -748,6 +748,15 @@ def test_remote_healthz_is_public_but_https_only_for_non_loopback_clients(monkey
         "CUSTOMER_CREDENTIALS_ENCRYPTION_KEY",
         base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii"),
     )
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    command_key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+    command_key_pem = command_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64", base64.b64encode(command_key_pem).decode("ascii"))
     monkeypatch.setattr(WorkflowStateStore, "check_connection", lambda self: True)
     config = {
         "TESTING": True,
@@ -955,18 +964,34 @@ def test_remote_healthz_requires_durable_storage(monkeypatch):
 
 def test_remote_healthz_requires_a_valid_customer_credential_encryption_key(monkeypatch):
     import base64
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
     from business_app.provisioning.workflow import WorkflowStateStore
 
+    monkeypatch.setenv("PROVISIONING_PUBLIC_ACCESS", "true")
     monkeypatch.setenv("DATABASE_URL", "postgresql://health-check.invalid/business_studio")
     monkeypatch.delenv("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY", raising=False)
+    monkeypatch.delenv("STUDIO_COMMAND_PRIVATE_KEY_B64", raising=False)
     monkeypatch.setattr(WorkflowStateStore, "check_connection", lambda self: True)
     client = _make_remote_health_client()
     response = client.get("/healthz", base_url="https://studio.example.com")
     assert response.status_code == 503
     assert response.get_json() == {"status": "unavailable"}
 
-    key = base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii")
-    monkeypatch.setenv("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY", key)
+    vault_key = base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii")
+    monkeypatch.setenv("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY", vault_key)
+
+    command_key = rsa.generate_private_key(public_exponent=65537, key_size=3072)
+    command_key_pem = command_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    monkeypatch.setenv(
+        "STUDIO_COMMAND_PRIVATE_KEY_B64",
+        base64.b64encode(command_key_pem).decode("ascii"),
+    )
+
     response = client.get("/healthz", base_url="https://studio.example.com")
     assert response.status_code == 200
     assert response.get_json() == {"status": "ok"}
@@ -1050,3 +1075,88 @@ def test_developer_login_supports_non_ascii_passwords():
     response = app.test_client().post("/login", data={"password": password})
     assert response.status_code == 302
     assert response.headers["Location"].endswith("/wizard")
+
+
+def test_remote_healthz_requires_a_valid_persistent_command_key(monkeypatch):
+    import base64
+    from business_app.provisioning.workflow import WorkflowStateStore
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql://health-check.invalid/business_studio")
+    monkeypatch.setenv(
+        "CUSTOMER_CREDENTIALS_ENCRYPTION_KEY",
+        base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii"),
+    )
+    monkeypatch.delenv("STUDIO_COMMAND_PRIVATE_KEY_B64", raising=False)
+    monkeypatch.setattr(WorkflowStateStore, "check_connection", lambda self: True)
+    app = create_provisioning_app({
+        "TESTING": True,
+        "SECRET_KEY": "remote-session-secret-that-is-at-least-32-characters",
+        "PROVISIONING_PASSWORD": "a-remote-password-with-at-least-32-characters",
+        "PROVISIONING_PUBLIC_ACCESS": True,
+        "PROVISIONING_ALLOWED_HOSTS": ["wizard.example.test"],
+        "WTF_CSRF_ENABLED": False,
+    })
+    response = app.test_client().get(
+        "/healthz",
+        base_url="https://wizard.example.test",
+        environ_base={"REMOTE_ADDR": "198.51.100.24"},
+    )
+    assert response.status_code == 503
+
+
+def test_remote_healthz_rejects_malformed_persistent_command_key(monkeypatch):
+    import base64
+    from business_app.provisioning.workflow import WorkflowStateStore
+
+    monkeypatch.setenv("PROVISIONING_PUBLIC_ACCESS", "true")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://health-check.invalid/business_studio")
+    monkeypatch.setenv(
+        "CUSTOMER_CREDENTIALS_ENCRYPTION_KEY",
+        base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii"),
+    )
+    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64", "not-a-valid-base64-private-key")
+    monkeypatch.setattr(WorkflowStateStore, "check_connection", lambda self: True)
+
+    response = _make_remote_health_client().get(
+        "/healthz", base_url="https://studio.example.com"
+    )
+    assert response.status_code == 503
+    assert response.get_json() == {"status": "unavailable"}
+
+
+def test_remote_healthz_rejects_rsa_key_below_3072_bits(monkeypatch):
+    import base64
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric import rsa
+    from business_app.provisioning.workflow import WorkflowStateStore
+
+    monkeypatch.setenv("PROVISIONING_PUBLIC_ACCESS", "true")
+    monkeypatch.setenv("DATABASE_URL", "postgresql://health-check.invalid/business_studio")
+    monkeypatch.setenv(
+        "CUSTOMER_CREDENTIALS_ENCRYPTION_KEY",
+        base64.urlsafe_b64encode(b"health-check-key-material-32byte").decode("ascii"),
+    )
+    weak_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
+    weak_pem = weak_key.private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    monkeypatch.setenv("STUDIO_COMMAND_PRIVATE_KEY_B64", base64.b64encode(weak_pem).decode("ascii"))
+    monkeypatch.setattr(WorkflowStateStore, "check_connection", lambda self: True)
+
+    response = _make_remote_health_client().get(
+        "/healthz", base_url="https://studio.example.com"
+    )
+    assert response.status_code == 503
+    assert response.get_json() == {"status": "unavailable"}
+
+
+def test_remote_command_key_loader_rejects_ephemeral_key_mode(monkeypatch):
+    import pytest
+    from business_app.provisioning.business_studio import _get_command_private_key
+
+    monkeypatch.setenv("PROVISIONING_PUBLIC_ACCESS", "true")
+    monkeypatch.delenv("STUDIO_COMMAND_PRIVATE_KEY_B64", raising=False)
+    with pytest.raises(RuntimeError, match="STUDIO_COMMAND_PRIVATE_KEY_B64 is required"):
+        _get_command_private_key()

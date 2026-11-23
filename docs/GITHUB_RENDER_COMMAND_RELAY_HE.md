@@ -36,7 +36,7 @@ For reliable operation across restarts, configure \`STUDIO_COMMAND_PRIVATE_KEY_B
 py -c "import base64; from cryptography.hazmat.primitives.asymmetric import rsa; from cryptography.hazmat.primitives import serialization; key=rsa.generate_private_key(public_exponent=65537,key_size=3072); pem=key.private_bytes(serialization.Encoding.PEM,serialization.PrivateFormat.PKCS8,serialization.NoEncryption()); print(base64.b64encode(pem).decode('ascii'))"
 \`\`\`
 
-If this variable is absent, the service currently falls back to a per-process RSA key. A Render restart then invalidates any command encrypted to the previous public key. Configure the persistent secret before relying on the relay for production commands. The public key endpoint remains the supported discovery mechanism.
+In remote mode (`PROVISIONING_PUBLIC_ACCESS=true`), this secret is mandatory: `/healthz` returns 503 and the command relay fails closed when it is absent or invalid. Per-process ephemeral RSA keys are permitted only in local development; they must not be used for the hosted Developer Studio. Keep the same private key across Render restarts so commands encrypted to the published public key remain decryptable. The public key endpoint remains the supported discovery mechanism.
 
 ## Neon
 
