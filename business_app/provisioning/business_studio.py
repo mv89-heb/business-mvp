@@ -102,6 +102,8 @@ class BusinessStudioStore:
         self.database_url = (database_url or os.getenv("DATABASE_URL", "")).strip()
         if not self.database_url:
             raise RuntimeError("DATABASE_URL אינו מוגדר עבור Business Studio.")
+        self._schema_ready = False
+        self._schema_lock = threading.Lock()
 
     def _connect(self):
         import psycopg
@@ -109,6 +111,14 @@ class BusinessStudioStore:
         if url.startswith("postgres://"):
             url = "postgresql://" + url[len("postgres://"):]
         return psycopg.connect(url, connect_timeout=8)
+
+    def _ensure_schema_once(self, conn):
+        if self._schema_ready:
+            return
+        with self._schema_lock:
+            if not self._schema_ready:
+                self._ensure_schema(conn)
+                self._schema_ready = True
 
     @staticmethod
     def _ensure_schema(conn):
@@ -492,6 +502,9 @@ class BusinessStudioStore:
             "nextAttemptInSeconds": retry_delay,
         }
 
+
+
+_BUSINESS_STUDIO_STORE_LOCK = threading.Lock()
 
 
 COMMAND_AAD = b"business-studio-command:v1"
