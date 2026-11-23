@@ -103,3 +103,64 @@ def test_postgres_store_is_customer_scoped_and_can_revoke(monkeypatch):
     delete_sql, params = fake.statements[-1]
     assert "WHERE customer_id = %s AND provider = %s" in delete_sql
     assert params == ("customer-one", "github")
+
+
+def test_customer_adapter_resolver_requires_all_verified_connections():
+    from business_app.provisioning.connections import (
+        StoredProviderConnection, load_customer_provider_adapters,
+    )
+
+    class Store:
+        def get(self, customer_id, provider):
+            metadata = {
+                "github": {"account": "customer-account"},
+                "neon": {"organization_id": "org-customer"},
+                "render": {"workspace_id": "workspace-customer"},
+            }[provider]
+            return (
+                {"token": f"{provider}-token"},
+                StoredProviderConnection(customer_id, provider, metadata, "2026-11-23T00:00:00+00:00"),
+            )
+
+    adapters, owner = load_customer_provider_adapters(Store(), "customer-one")
+    assert owner == "customer-account"
+    assert adapters["github"].client.token == "github-token"
+    assert adapters["neon"].client.token == "neon-token"
+    assert adapters["neon"].org_id == "org-customer"
+    assert adapters["render"].client.token == "render-token"
+    assert adapters["render"].workspace_id == "workspace-customer"
+    assert all(getattr(item, "_business_studio_customer_id") == "customer-one" for item in adapters.values())
+
+
+def test_customer_adapter_resolver_rejects_missing_or_unverified_connections():
+    from business_app.provisioning.connections import (
+        StoredProviderConnection, load_customer_provider_adapters,
+    )
+
+    class MissingStore:
+        def get(self, customer_id, provider):
+            if provider == "render":
+                return None
+            return ({"token": "x"}, StoredProviderConnection(customer_id, provider, {"account": "x"}, None))
+
+    with pytest.raises(ConnectionVaultError):
+        load_customer_provider_adapters(MissingStore(), "customer-one")
+
+
+def test_customer_owned_workflow_requires_exact_verified_adapter_scope():
+    from business_app.provisioning.workflow import ProvisioningWorkflow
+
+    class Adapter:
+        pass
+
+    adapters = [Adapter(), Adapter(), Adapter()]
+    for adapter in adapters:
+        adapter._business_studio_customer_id = "customer-one"
+        adapter._business_studio_verified_connection = True
+    workflow = ProvisioningWorkflow(github=adapters[0], neon=adapters[1], render=adapters[2])
+    plan = {"ownership_mode": "customer_owned", "business": {"slug": "customer-one"}}
+    workflow._require_customer_owned_connections(plan)
+
+    adapters[1]._business_studio_customer_id = "other-customer"
+    with pytest.raises(Exception):
+        workflow._require_customer_owned_connections(plan)
