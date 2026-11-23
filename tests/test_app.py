@@ -363,3 +363,42 @@ def test_admin_csv_export_neutralizes_formula_injection(client):
     assert exported[5].startswith("'-")
     assert exported[7].startswith("'=")
     assert exported[8].startswith("'\t=")
+
+
+def test_phone_deduplication_uses_exact_normalized_index(client):
+    from app import Lead, _find_lead_by_phone
+
+    with client.application.app_context():
+        lead = Lead(name="לקוח WhatsApp", phone="050-123-4567", service="בדיקה")
+        db.session.add(lead)
+        db.session.commit()
+
+        assert lead.phone_normalized == "0501234567"
+        match = _find_lead_by_phone("+972 50 123 4567")
+        assert match is not None
+        assert match.id == lead.id
+        assert _find_lead_by_phone("050-999-9999") is None
+
+
+def test_phone_normalization_migration_backfills_legacy_leads(client):
+    from sqlalchemy import update
+    import app as app_module
+    from app import Lead
+
+    with client.application.app_context():
+        lead = Lead(name="לקוח ישן", phone="972-50-123-4567", service="בדיקה")
+        db.session.add(lead)
+        db.session.commit()
+        db.session.execute(
+            update(Lead).where(Lead.id == lead.id).values(phone_normalized=None)
+        )
+        db.session.commit()
+
+        app_module._ensure_lead_phone_normalized_schema()
+        db.session.refresh(lead)
+        assert lead.phone_normalized == "0501234567"
+
+        # Startup migration is idempotent.
+        app_module._ensure_lead_phone_normalized_schema()
+        db.session.refresh(lead)
+        assert lead.phone_normalized == "0501234567"
