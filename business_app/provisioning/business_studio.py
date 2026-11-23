@@ -175,9 +175,23 @@ class BusinessStudioStore:
                 status TEXT NOT NULL DEFAULT 'PENDING',
                 attempts INTEGER NOT NULL DEFAULT 0,
                 last_error TEXT,
+                next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+                delivered_at TIMESTAMPTZ,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
                 updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
             )
+        """)
+        conn.execute("""
+            ALTER TABLE business_automation_outbox
+            ADD COLUMN IF NOT EXISTS next_attempt_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+        """)
+        conn.execute("""
+            ALTER TABLE business_automation_outbox
+            ADD COLUMN IF NOT EXISTS delivered_at TIMESTAMPTZ
+        """)
+        conn.execute("""
+            CREATE INDEX IF NOT EXISTS ix_business_outbox_due
+            ON business_automation_outbox (status, next_attempt_at, updated_at)
         """)
         conn.execute("""
             CREATE TABLE IF NOT EXISTS studio_command_inbox (
@@ -397,42 +411,86 @@ class BusinessStudioStore:
         secret = (webhook_secret or os.getenv("MAKE_WEBHOOK_SECRET", "")).strip()
         if not url or not secret:
             return {"status": "QUEUED_CONFIGURATION_REQUIRED"}
-        if urlsplit(url).scheme != "https" or not urlsplit(url).hostname:
+        parsed_url = urlsplit(url)
+        if parsed_url.scheme != "https" or not parsed_url.hostname:
             return {"status": "CONFIGURATION_ERROR", "message": "Make webhook must use HTTPS."}
+
+        max_attempts = 5
+        lease_seconds = 120
         with self._connect() as conn:
             self._ensure_schema(conn)
+            # Recover abandoned leases that have exhausted their retry budget.
+            conn.execute("""
+                UPDATE business_automation_outbox
+                SET status = 'FAILED',
+                    last_error = 'Webhook delivery lease expired after maximum attempts.',
+                    updated_at = NOW()
+                WHERE proposal_id = %s AND status = 'SENDING' AND attempts >= %s
+                  AND updated_at < NOW() - (%s * INTERVAL '1 second')
+            """, (proposal_id, max_attempts, lease_seconds))
+            # This single conditional UPDATE is the claim operation. Concurrent
+            # dispatchers cannot both transition the same row to SENDING.
             row = conn.execute("""
-                SELECT event_id, payload FROM business_automation_outbox
-                WHERE proposal_id = %s AND status IN ('PENDING', 'RETRY')
-            """, (proposal_id,)).fetchone()
-            if not row:
-                return {"status": "NOT_PENDING"}
-        body = json.dumps(row[1], ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+                UPDATE business_automation_outbox
+                SET status = 'SENDING', attempts = attempts + 1, updated_at = NOW()
+                WHERE proposal_id = %s AND attempts < %s
+                  AND (
+                    (status IN ('PENDING', 'RETRY') AND next_attempt_at <= NOW())
+                    OR
+                    (status = 'SENDING' AND updated_at < NOW() - (%s * INTERVAL '1 second'))
+                  )
+                RETURNING event_id, payload, attempts
+            """, (proposal_id, max_attempts, lease_seconds)).fetchone()
+        if not row:
+            return {"status": "NOT_DUE_OR_ALREADY_CLAIMED"}
+
+        event_id, payload, attempts = row
+        body = json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
         signature = hmac.new(secret.encode("utf-8"), body, hashlib.sha256).hexdigest()
         req = Request(url, data=body, headers={
             "Content-Type": "application/json",
             "X-Business-Studio-Signature": "sha256=" + signature,
-            "Idempotency-Key": row[0],
+            "Idempotency-Key": event_id,
         }, method="POST")
         try:
             with urlopen(req, timeout=8) as response:
                 if not 200 <= response.status < 300:
                     raise RuntimeError("Make webhook returned a non-success response")
-            status, error = "SENT", None
+            status, error, retry_delay = "SENT", None, None
         except (HTTPError, URLError, TimeoutError, RuntimeError, OSError, ValueError):
-            status, error = "RETRY", "Webhook delivery failed; event remains queued."
+            status = "FAILED" if attempts >= max_attempts else "RETRY"
+            error = "Webhook delivery failed; sensitive provider response was not stored."
+            retry_delay = None if status == "FAILED" else min(3600, 30 * (2 ** (attempts - 1)))
+
         with self._connect() as conn:
             self._ensure_schema(conn)
+            if retry_delay is None:
+                conn.execute("""
+                    UPDATE business_automation_outbox
+                    SET status = %s, last_error = %s, next_attempt_at = NULL,
+                        delivered_at = CASE WHEN %s = 'SENT' THEN NOW() ELSE delivered_at END,
+                        updated_at = NOW()
+                    WHERE event_id = %s AND status = 'SENDING'
+                """, (status, error, status, event_id))
+            else:
+                conn.execute("""
+                    UPDATE business_automation_outbox
+                    SET status = %s, last_error = %s,
+                        next_attempt_at = NOW() + (%s * INTERVAL '1 second'),
+                        updated_at = NOW()
+                    WHERE event_id = %s AND status = 'SENDING'
+                """, (status, error, retry_delay, event_id))
             conn.execute("""
-                UPDATE business_automation_outbox
-                SET status = %s, attempts = attempts + 1, last_error = %s, updated_at = NOW()
-                WHERE event_id = %s
-            """, (status, error, row[0]))
-            conn.execute("""
-                UPDATE business_proposals SET webhook_status = %s, updated_at = NOW()
+                UPDATE business_proposals
+                SET webhook_status = %s, updated_at = NOW()
                 WHERE proposal_id = %s
             """, (status, proposal_id))
-        return {"status": status, "message": error or "Webhook נשלח בהצלחה."}
+        return {
+            "status": status,
+            "message": error or "Webhook נשלח בהצלחה.",
+            "attempts": attempts,
+            "nextAttemptInSeconds": retry_delay,
+        }
 
 
 
