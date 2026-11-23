@@ -222,8 +222,11 @@ def create_provisioning_app(test_config=None):
             workflow = ProvisioningWorkflow(
                 github=providers["github"], neon=providers["neon"], render=providers["render"]
             )
+            workflow.state_store = _workflow_state_store()
             return workflow, owner
-        return ProvisioningWorkflow(), os.getenv("GITHUB_OWNER", "").strip()
+        workflow = ProvisioningWorkflow()
+        workflow.state_store = _workflow_state_store()
+        return workflow, os.getenv("GITHUB_OWNER", "").strip()
 
     def _workflow_state_store():
         database_url = (
@@ -244,6 +247,20 @@ def create_provisioning_app(test_config=None):
                     approval="CREATE",
                     neon_free_tier_verified=True,
                 )
+                store = _workflow_state_store()
+                state = store.load(workflow_id) or {}
+                if state.get("status") != "completed":
+                    state.update({
+                        "plan_id": plan.get("plan_id"),
+                        "business_slug": (plan.get("business") or {}).get("slug", ""),
+                        "business_name": (plan.get("business") or {}).get("name", ""),
+                        "status": result.get("status", "completed"),
+                        "step": result.get("status", "completed"),
+                        "resources": result.get("resources", state.get("resources", {})),
+                        "history": state.get("history", []),
+                        "error": result.get("error"),
+                    })
+                    store.save(workflow_id, state)
                 _audit_event(
                     app, "provisioning_completed", plan_id=plan.get("plan_id"),
                     business_slug=(plan.get("business") or {}).get("slug"), status="completed",
@@ -687,6 +704,7 @@ def create_provisioning_app(test_config=None):
                     "step": "queued",
                     "resources": {},
                 }
+            session["last_execution_workflow_id"] = workflow_id
         except (ProvisioningInputError, ProviderError, ConnectionVaultError) as exc:
             _audit_event(app, "provisioning_failure", reason=type(exc).__name__)
             error = str(exc)
