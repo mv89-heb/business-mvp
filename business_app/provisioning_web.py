@@ -29,7 +29,7 @@ from business_app.provisioning.connections import (
 from business_app.provisioning.providers.http import ProviderError
 from business_app.provisioning.workflow import ProvisioningWorkflow, WorkflowStateStore
 from business_app.provisioning.handover_generator import build_handover_pack, HandoverValidationError
-from business_app.provisioning.business_studio import create_business_studio_blueprint
+from business_app.provisioning.business_studio import _get_command_private_key, create_business_studio_blueprint
 from business_app.security import constant_time_text_equal
 
 from business_app.provisioning import (
@@ -352,6 +352,9 @@ def create_provisioning_app(test_config=None):
                     os.getenv("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY", "").strip()
                     or app.config.get("CUSTOMER_CREDENTIALS_ENCRYPTION_KEY")
                 )
+                if not os.getenv("STUDIO_COMMAND_PRIVATE_KEY_B64", "").strip():
+                    return {"status": "unavailable"}, 503
+                _get_command_private_key()
             except Exception:
                 return {"status": "unavailable"}, 503
         if database_url:
