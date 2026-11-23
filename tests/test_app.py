@@ -402,3 +402,9 @@ def test_phone_normalization_migration_backfills_legacy_leads(client):
         app_module._ensure_lead_phone_normalized_schema()
         db.session.refresh(lead)
         assert lead.phone_normalized == "0501234567"
+
+
+def test_neutral_starter_hides_contractor_area_field_by_default(client):
+    response = client.get("/")
+    assert response.status_code == 200
+    assert 'name="area"' not in response.get_data(as_text=True)
