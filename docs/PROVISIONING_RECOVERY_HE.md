@@ -10,14 +10,14 @@
 2. סמן ההתאוששות נשמר במצב התהליך לפני כל פעולת כתיבה. הוא מזהה את ניסיון ההקמה, אינו סוד ואינו credential.
 3. אם התהליך נעצר לאחר שמירת intent, ניסיון חוזר אינו שולח POST נוסף. הוא מבצע רק קריאות GET לאיתור משאב עם אותו סמן.
 4. גם תשובת HTTP 2xx עם JSON תקין תחבירית אך במבנה חסר או בלתי צפוי נחשבת לתוצאה עמומה. אין לסמן אותה ככישלון רגיל שמאפשר POST נוסף.
-4. משאב מאומץ רק לאחר התאמת הסמן וגם אימות owner/organization/workspace, region, source, branch, plan ו־CI לפי הספק.
+5. משאב מאומץ רק לאחר התאמת הסמן וגם אימות owner/organization/workspace, region, source, branch, plan ו־CI לפי הספק.
 6. כאשר לא ניתן להוכיח בעלות — התהליך נעצר במצב unknown. אין מחיקה אוטומטית ואין ניסיון יצירה נוסף.
 
 ## מיקום הסמן אצל כל ספק
 
 | ספק | מיקום הסמן | בדיקת התאוששות |
 |---|---|---|
-| GitHub | Repository description: Business application | Business Studio provisioning:<32 hex> | GET של Repository מדויק, private=true ו־description תואם |
+| GitHub | Repository description: `Business application \| Business Studio provisioning:<32 hex>` | GET של Repository מדויק, `private=true` ו־description תואם |
 | Neon | שם ענף ברירת־המחדל: main-bs-<12 hex> | GET של רשימת ענפי הפרויקט ואימות שהענף תואם ומסומן default |
 | Render | משתנה סביבה לא־סודי BUSINESS_STUDIO_PROVISIONING_ID | GET של משתני הסביבה בשירות ואימות ערך מדויק, ואז אימות Free / Frankfurt / checksPass |
 
