@@ -108,7 +108,9 @@ class GitHubProvider:
         except ProviderOperationUnknown as original:
             try:
                 reconciled = self.get_repository(owner, name)
-            except ProviderError:
+            except Exception:
+                # A failed or malformed read cannot prove that the create did
+                # not commit. Preserve the original ambiguous outcome.
                 raise original
             if reconciled:
                 if reconciled.get("private") is True and self.repository_has_provisioning_marker(
