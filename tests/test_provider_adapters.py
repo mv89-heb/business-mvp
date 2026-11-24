@@ -816,7 +816,7 @@ def test_github_malformed_create_success_response_is_ambiguous(payload):
     assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
 
 
-@pytest.mark.parametrize("payload", [[], None, "unexpected", {"id": "repo-1"}])
+@pytest.mark.parametrize("payload", [[], None, "unexpected", {"project": []}])
 def test_neon_malformed_create_success_response_is_ambiguous(payload):
     opener = FakeOpener([{"projects": []}, payload])
     provider = NeonProvider("token", org_id="org-1", opener=opener)
