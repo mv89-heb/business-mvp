@@ -1,11 +1,12 @@
 import os
 import json
+import re
 
 import pytest
 from werkzeug.security import check_password_hash
 
 from business_app.provisioning.workflow import ProvisioningWorkflow, WorkflowStateStore
-from business_app.provisioning.providers.http import ProviderError
+from business_app.provisioning.providers.http import ProviderError, ProviderOperationUnknown
 
 
 class FakeGitHub:
@@ -19,11 +20,18 @@ class FakeGitHub:
     def get_repository(self, owner, name):
         return None
 
-    def ensure_private_repository(self, owner, name, expected_repository_id=None):
+    def repository_has_provisioning_marker(self, repository, marker):
+        return repository.get("description") == (
+            f"Business application | Business Studio provisioning:{marker}"
+        )
+
+    def ensure_private_repository(self, owner, name, expected_repository_id=None,
+                                  provisioning_marker=None, allow_create=True):
         self.ensure_calls += 1
-        return {"created": True, "repository": {
+        return {"created": True, "recovered": False, "repository": {
             "id": 1, "private": True, "full_name": f"{owner}/{name}",
             "html_url": f"https://github.com/{owner}/{name}",
+            "description": f"Business application | Business Studio provisioning:{provisioning_marker}",
         }}
 
     def ensure_branch(self, owner, name, branch, *, base_branch="main"):
@@ -62,9 +70,14 @@ class FakeNeon:
     def check_connection(self):
         return {"provider": "neon", "connected": True, "visible_projects": 0}
 
-    def ensure_project(self, name, *, free_tier_verified=False, expected_project_id=None):
+    def project_has_provisioning_marker(self, project_id, marker):
+        return False
+
+    def ensure_project(self, name, *, free_tier_verified=False, expected_project_id=None,
+                       provisioning_marker=None, allow_create=True):
         assert free_tier_verified is True
-        return {"created": True, "project": {
+        assert provisioning_marker
+        return {"created": True, "recovered": False, "project": {
             "id": "neon-project-1", "name": name, "region_id": "aws-eu-central-1"
         }}
 
@@ -79,6 +92,7 @@ class FakeRender:
     def __init__(self, created=True):
         self.created = created
         self.reconciled = []
+        self.received_env = []
 
     def check_connection(self):
         return {"provider": "render", "connected": True, "workspace_selected": True}
@@ -86,13 +100,20 @@ class FakeRender:
     def list_services(self):
         return []
 
+    def service_has_provisioning_marker(self, service_id, marker):
+        return False
+
     def ensure_web_service(self, **kwargs):
         assert kwargs["env_vars"]["DATABASE_URL"].startswith("postgresql://")
+        assert kwargs["env_vars"]["BUSINESS_STUDIO_PROVISIONING_ID"] == kwargs["provisioning_marker"]
         assert "ADMIN_PASSWORD" not in kwargs["env_vars"]
         assert kwargs["env_vars"]["FLASK_ENV"] == "production"
         assert kwargs["env_vars"]["TRUST_PROXY_HEADERS"] == "true"
-        assert check_password_hash(kwargs["env_vars"]["ADMIN_PASSWORD_HASH"], "a-very-long-test-password")
-        assert len(kwargs["env_vars"]["SECRET_KEY"]) >= 40
+        self.received_env.append(dict(kwargs["env_vars"]))
+        if "ADMIN_PASSWORD_HASH" in kwargs["env_vars"]:
+            assert check_password_hash(kwargs["env_vars"]["ADMIN_PASSWORD_HASH"], "a-very-long-test-password")
+        if "SECRET_KEY" in kwargs["env_vars"]:
+            assert len(kwargs["env_vars"]["SECRET_KEY"]) >= 40
         return {"created": self.created, "service": {
             "id": "srv-123", "name": "test-business",
             "serviceDetails": {"url": "https://test-business.onrender.com"},
@@ -186,6 +207,14 @@ def test_workflow_creates_isolated_resources_and_persists_secret_free_state(tmp_
     assert state["resources"]["neon"]["org_id"] == "neon-org-approved"
     assert state["resources"]["render"]["service_id"] == "srv-123"
     assert state["resources"]["render"]["workspace_id"] == "workspace-approved"
+    assert re.fullmatch(r"[a-f0-9]{32}", state["provisioning_marker"])
+    assert {
+        key: operation["status"] for key, operation in state["resource_operations"].items()
+    } == {
+        "github_repository": "completed",
+        "neon_project": "completed",
+        "render_service": "completed",
+    }
 
 
 def test_workflow_failure_is_persisted_without_secrets(tmp_path, monkeypatch):
@@ -298,6 +327,58 @@ def test_retry_reconciles_existing_render_service_environment_before_health_chec
     assert "render_environment" in steps
     assert state["status"] == "completed"
 
+
+
+
+def test_recovery_retry_does_not_rotate_existing_render_secrets(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch, render_created=False)
+    marker = "d" * 32
+    workflow.state_store.save("plan-123456", {
+        "plan_id": "plan-123456",
+        "business_slug": "test-business",
+        "status": "failed",
+        "step": "health_check",
+        "resources": {"render": {"service_id": "srv-123"}},
+        "resource_operations": {
+            "render_service": {
+                "provider": "render",
+                "resource_name": "test-business",
+                "marker": marker,
+                "status": "completed",
+                "resource_id": "srv-123",
+            }
+        },
+        "provisioning_marker": marker,
+        "history": [],
+        "error": "previous health check did not finish",
+    })
+    monkeypatch.setattr(
+        workflow,
+        "preflight",
+        lambda *args, **kwargs: {
+            "read_only": True,
+            "writes_performed": False,
+            "resources": {},
+        },
+    )
+
+    result = workflow.run(
+        make_plan(),
+        github_owner="developer",
+        admin_password="a-very-long-test-password",
+        approval="CREATE",
+        neon_free_tier_verified=True,
+    )
+
+    assert result["status"] == "completed"
+    env_vars = workflow.render.received_env[-1]
+    assert "SECRET_KEY" not in env_vars
+    assert "ADMIN_PASSWORD_HASH" not in env_vars
+    assert "WHATSAPP_APP_SECRET" not in env_vars
+    assert "DATABASE_URL" in env_vars
+    assert "BUSINESS_STUDIO_PROVISIONING_ID" in env_vars
+    assert "SECRET_KEY" not in workflow.render.reconciled[-1][1]
+    assert "ADMIN_PASSWORD_HASH" not in workflow.render.reconciled[-1][1]
 
 def test_preflight_is_read_only_and_reports_planned_resources(tmp_path, monkeypatch):
     workflow, github = make_workflow(tmp_path, monkeypatch)
@@ -750,3 +831,105 @@ def test_customer_owned_execution_rejects_changed_github_identity_before_writes(
 
     assert github.published is False
     assert github.ensure_calls == 0
+
+
+
+def test_unknown_create_intent_is_persisted_and_never_reposted_on_retry(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    calls = {"count": 0}
+
+    def uncertain_create(owner, name, expected_repository_id=None,
+                         provisioning_marker=None, allow_create=True):
+        calls["count"] += 1
+        assert allow_create is True
+        raise ProviderOperationUnknown("GitHub write outcome is unknown; reconcile before retrying")
+
+    github.ensure_private_repository = uncertain_create
+
+    with pytest.raises(ProviderError, match="outcome is unknown"):
+        workflow.run(
+            make_plan(),
+            github_owner="developer",
+            admin_password="a-very-long-test-password",
+            approval="CREATE",
+            neon_free_tier_verified=True,
+        )
+
+    state_path = tmp_path / "state" / "plan-123456.json"
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    marker = state["provisioning_marker"]
+    assert re.fullmatch(r"[a-f0-9]{32}", marker)
+    assert state["resource_operations"]["github_repository"]["status"] == "unknown"
+    assert state["resource_operations"]["github_repository"]["marker"] == marker
+
+    with pytest.raises(ProviderError, match="still unknown"):
+        workflow.run(
+            make_plan(),
+            github_owner="developer",
+            admin_password="a-very-long-test-password",
+            approval="CREATE",
+            neon_free_tier_verified=True,
+        )
+
+    assert calls["count"] == 1
+    state = json.loads(state_path.read_text(encoding="utf-8"))
+    assert state["resource_operations"]["github_repository"]["status"] == "unknown"
+
+
+def test_preflight_recovers_only_github_repository_with_matching_marker(tmp_path, monkeypatch):
+    workflow, github = make_workflow(tmp_path, monkeypatch)
+    marker = "a" * 32
+    repository = {
+        "id": 77,
+        "private": True,
+        "full_name": "developer/test-business",
+        "html_url": "https://github.com/developer/test-business",
+        "description": f"Business application | Business Studio provisioning:{marker}",
+    }
+    workflow.github.get_repository = lambda owner, name: repository
+    workflow.github.repository_has_provisioning_marker = (
+        lambda existing, supplied: existing.get("description") == (
+            f"Business application | Business Studio provisioning:{supplied}"
+        )
+    )
+    report = workflow.preflight(
+        make_plan(),
+        github_owner="developer",
+        provisioning_marker=marker,
+        pending_operations={
+            "github_repository": {
+                "status": "unknown",
+                "marker": marker,
+                "resource_name": "developer/test-business",
+            }
+        },
+    )
+    assert report["resources"]["github"]["status"] == "existing_private"
+    assert github.ensure_calls == 0
+
+
+def test_state_store_persists_recovery_marker_and_operation_intent(tmp_path):
+    store = WorkflowStateStore(tmp_path / "state")
+    marker = "b" * 32
+    store.save("plan-recovery", {
+        "plan_id": "plan-recovery",
+        "business_slug": "recovery-business",
+        "status": "running",
+        "step": "github_repository",
+        "provisioning_marker": marker,
+        "resource_operations": {
+            "github_repository": {
+                "provider": "github",
+                "resource_name": "developer/recovery-business",
+                "marker": marker,
+                "status": "intent",
+            }
+        },
+        "resources": {},
+        "history": [],
+        "error": None,
+    })
+    restored = store.load("plan-recovery")
+    assert restored["provisioning_marker"] == marker
+    assert restored["resource_operations"]["github_repository"]["status"] == "intent"
+    assert restored["resource_operations"]["github_repository"]["marker"] == marker

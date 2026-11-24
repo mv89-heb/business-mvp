@@ -26,39 +26,116 @@ class GitHubProvider:
     def get_repository(self, owner, name):
         path = f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
         try:
-            return self.client.request("GET", path)
+            repository = self.client.request("GET", path)
+            if not isinstance(repository, dict) or not repository.get("id"):
+                raise ProviderError("GitHub returned an invalid repository response")
+            return repository
         except ProviderHTTPError as exc:
             if exc.status == 404:
                 return None
             raise
 
-    def ensure_private_repository(self, owner, name, description="Business application", *, expected_repository_id=None):
+    @staticmethod
+    def _valid_provisioning_marker(marker):
+        return (
+            isinstance(marker, str)
+            and len(marker) == 32
+            and all(character in "0123456789abcdef" for character in marker)
+        )
+
+    @staticmethod
+    def provisioning_description(marker):
+        return f"Business application | Business Studio provisioning:{marker}"
+
+    @classmethod
+    def repository_has_provisioning_marker(cls, repository, marker):
+        return (
+            isinstance(repository, dict)
+            and cls._valid_provisioning_marker(marker)
+            and repository.get("description") == cls.provisioning_description(marker)
+        )
+
+    def ensure_private_repository(self, owner, name, description="Business application", *,
+                                  expected_repository_id=None, provisioning_marker=None,
+                                  allow_create=True):
         if not owner or not name:
             raise ProviderConfigurationError("GitHub owner and repository name are required")
+        if provisioning_marker is not None and not self._valid_provisioning_marker(provisioning_marker):
+            raise ProviderError("Invalid provisioning recovery marker")
+        create_description = (
+            self.provisioning_description(provisioning_marker)
+            if provisioning_marker else description
+        )
         existing = self.get_repository(owner, name)
         if existing:
             if existing.get("private") is not True:
                 raise ProviderError("A repository with this name already exists but is not private")
-            if not expected_repository_id or str(existing.get("id")) != str(expected_repository_id):
-                raise ProviderError("An existing GitHub repository is not registered to this provisioning workflow")
-            return {"created": False, "repository": existing}
+            id_matches = (
+                expected_repository_id is not None
+                and str(existing.get("id")) == str(expected_repository_id)
+            )
+            marker_matches = self.repository_has_provisioning_marker(existing, provisioning_marker)
+            if not (id_matches or marker_matches):
+                if not allow_create:
+                    raise ProviderOperationUnknown(
+                        "GitHub repository creation is unresolved; its ownership marker is not yet verifiable"
+                    )
+                raise ProviderError(
+                    "An existing GitHub repository is not registered to this provisioning workflow"
+                )
+            return {
+                "created": False,
+                "recovered": bool(marker_matches and not id_matches),
+                "repository": existing,
+            }
+
+        if not allow_create:
+            raise ProviderOperationUnknown(
+                "GitHub repository creation remains unresolved; no second create request was sent"
+            )
 
         profile = self.check_connection()
         if owner.casefold() == profile["account"].casefold():
             path = "/user/repos"
         else:
             path = f"/orgs/{quote(owner, safe='')}/repos"
-        repository = self.client.request(
-            "POST", path,
-            payload={
-                "name": name, "description": description, "private": True,
-                "auto_init": True, "has_issues": True, "has_wiki": False,
-                "has_projects": False, "is_template": False,
-            },
-        )
-        if repository.get("private") is not True:
-            raise ProviderError("GitHub did not confirm that the new repository is private")
-        return {"created": True, "repository": repository}
+        try:
+            repository = self.client.request(
+                "POST", path,
+                payload={
+                    "name": name, "description": create_description, "private": True,
+                    "auto_init": True, "has_issues": True, "has_wiki": False,
+                    "has_projects": False, "is_template": False,
+                },
+            )
+        except ProviderOperationUnknown as original:
+            try:
+                reconciled = self.get_repository(owner, name)
+            except Exception:
+                # A failed or malformed read cannot prove that the create did
+                # not commit. Preserve the original ambiguous outcome.
+                raise original
+            if reconciled:
+                if reconciled.get("private") is True and self.repository_has_provisioning_marker(
+                    reconciled, provisioning_marker
+                ):
+                    return {"created": False, "recovered": True, "repository": reconciled}
+                raise ProviderError(
+                    "GitHub returned a repository after an ambiguous create, but its provisioning marker does not match"
+                ) from None
+            raise
+        if (
+            not isinstance(repository, dict)
+            or repository.get("private") is not True
+            or not repository.get("id")
+        ):
+            # A syntactically valid JSON body can still be an incomplete or
+            # unexpected success response. The POST may have committed, so
+            # never downgrade this to a retryable, known failure.
+            raise ProviderOperationUnknown(
+                "GitHub may have created the repository but did not return a complete private repository record; reconcile before retrying"
+            )
+        return {"created": True, "recovered": False, "repository": repository}
 
 
     @staticmethod
