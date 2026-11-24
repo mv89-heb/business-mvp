@@ -213,7 +213,7 @@ class RenderProvider:
                     marker_matches = self.service_has_provisioning_marker(
                         candidate.get("id"), provisioning_marker
                     )
-                except ProviderError:
+                except Exception:
                     raise original
                 if marker_matches:
                     if (
