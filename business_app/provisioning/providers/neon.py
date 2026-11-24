@@ -187,10 +187,14 @@ class NeonProvider:
             except ProviderError:
                 raise original
             raise
-        project = response.get("project", response)
-        if not project.get("id"):
+        if not isinstance(response, dict):
             raise ProviderOperationUnknown(
-                "Neon may have created the project but did not return its identifier; reconcile before retrying"
+                "Neon may have created the project but returned an invalid success response; reconcile before retrying"
+            )
+        project = response.get("project", response)
+        if not isinstance(project, dict) or not project.get("id"):
+            raise ProviderOperationUnknown(
+                "Neon may have created the project but did not return a complete project record; reconcile before retrying"
             )
         return {"created": True, "recovered": False, "project": project}
 
