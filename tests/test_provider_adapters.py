@@ -20,6 +20,14 @@ class FakeResponse:
         return self.payload
 
 
+class RawResponse:
+    def __init__(self, payload):
+        self.payload = payload
+
+    def read(self):
+        return self.payload
+
+
 class FakeOpener:
     def __init__(self, responses):
         self.responses = list(responses)
@@ -30,6 +38,8 @@ class FakeOpener:
         item = self.responses.pop(0)
         if isinstance(item, Exception):
             raise item
+        if isinstance(item, RawResponse):
+            return item
         return FakeResponse(item)
 
 
@@ -758,11 +768,7 @@ def test_http_write_http_500_is_classified_as_ambiguous():
 
 
 def test_http_write_invalid_json_is_classified_as_ambiguous():
-    class InvalidJsonResponse:
-        def read(self):
-            return b"not-json"
-
-    opener = FakeOpener([InvalidJsonResponse()])
+    opener = FakeOpener([RawResponse(b"not-json")])
     client = JsonApiClient(provider="test", base_url="https://example.test", token="secret", opener=opener)
     with pytest.raises(ProviderOperationUnknown):
         client.request("POST", "/resources", payload={"name": "x"})

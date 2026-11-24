@@ -806,7 +806,7 @@ def test_unknown_create_intent_is_persisted_and_never_reposted_on_retry(tmp_path
     assert state["resource_operations"]["github_repository"]["status"] == "unknown"
     assert state["resource_operations"]["github_repository"]["marker"] == marker
 
-    with pytest.raises(ProviderError, match="outcome is unknown"):
+    with pytest.raises(ProviderError, match="still unknown"):
         workflow.run(
             make_plan(),
             github_owner="developer",

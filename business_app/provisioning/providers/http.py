@@ -23,7 +23,7 @@ class ProviderHTTPError(ProviderError):
 
 
 class ProviderOperationUnknown(ProviderError):
-    """A write timed out; reconcile remote state before retrying."""
+    """A write outcome is ambiguous; reconcile remote state before retrying."""
 
 
 class JsonApiClient:
