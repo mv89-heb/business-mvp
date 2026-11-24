@@ -258,14 +258,22 @@ class RenderProvider:
             or details.get("region") != "frankfurt"
             or service.get("autoDeployTrigger") != "checksPass"
         ):
-            # Creation responses may omit fields. Refresh once, then fail closed if
-            # Render still cannot confirm the exact no-paid, Frankfurt, CI-gated setup.
-            service = self.get_service(service["id"])
+            # Creation has already been accepted. If the response omits fields,
+            # a failed verification must remain ambiguous so a retry cannot send
+            # a second POST while the first service is still becoming visible.
+            try:
+                service = self.get_service(service["id"])
+            except Exception:
+                raise ProviderOperationUnknown(
+                    "Render accepted service creation but its Free / Frankfurt / CI-gated configuration could not be verified; reconcile before retrying"
+                ) from None
             details = service.get("serviceDetails") or {}
-        if details.get("plan") != "free":
-            raise ProviderError("Render did not confirm the Free plan; refusing to report a verified service")
-        if details.get("region") != "frankfurt":
-            raise ProviderError("Render did not confirm the Frankfurt region; refusing to report a verified service")
-        if service.get("autoDeployTrigger") != "checksPass":
-            raise ProviderError("Render did not confirm CI-gated auto-deploy; refusing to report a verified service")
+        if (
+            details.get("plan") != "free"
+            or details.get("region") != "frankfurt"
+            or service.get("autoDeployTrigger") != "checksPass"
+        ):
+            raise ProviderOperationUnknown(
+                "Render created a service but did not confirm the required Free / Frankfurt / CI-gated configuration; manual reconciliation is required and no second create will be sent"
+            )
         return {"created": True, "recovered": False, "service": service}
