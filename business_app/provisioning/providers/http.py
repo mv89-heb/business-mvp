@@ -55,6 +55,10 @@ class JsonApiClient:
                 return {}
             return json.loads(raw.decode("utf-8"))
         except HTTPError as exc:
+            if method.upper() not in {"GET", "HEAD", "OPTIONS"} and exc.code >= 500:
+                raise ProviderOperationUnknown(
+                    f"{self.provider} write outcome is unknown after HTTP {exc.code}; reconcile before retrying"
+                ) from None
             raise ProviderHTTPError(self.provider, exc.code) from None
         except (URLError, TimeoutError, OSError):
             if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
@@ -63,4 +67,8 @@ class JsonApiClient:
                 ) from None
             raise ProviderError(f"{self.provider} connection failed") from None
         except (UnicodeDecodeError, json.JSONDecodeError):
+            if method.upper() not in {"GET", "HEAD", "OPTIONS"}:
+                raise ProviderOperationUnknown(
+                    f"{self.provider} write response was invalid; reconcile remote state before retrying"
+                ) from None
             raise ProviderError(f"{self.provider} returned an invalid JSON response") from None

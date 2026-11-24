@@ -615,3 +615,134 @@ def test_github_checks_still_wait_for_existing_pending_status_contexts():
     result = GitHubProvider("token", opener=opener).get_pull_request_checks("owner", "repo", 12)
     assert result["ready"] is False
     assert result["reason"] == "checks_running"
+
+
+
+def test_github_reconciles_ambiguous_repository_create_only_with_exact_marker():
+    marker = "a" * 32
+    repository = {
+        "id": 42,
+        "private": True,
+        "full_name": "mv89-heb/recovered-app",
+        "description": GitHubProvider.provisioning_description(marker),
+    }
+    opener = FakeOpener([
+        HTTPError("https://api.github.com/repos/mv89-heb/recovered-app", 404, "not found", {}, BytesIO(b"{}")),
+        {"login": "mv89-heb"},
+        URLError("timeout after GitHub accepted repository creation"),
+        repository,
+    ])
+    result = GitHubProvider("token", opener=opener).ensure_private_repository(
+        "mv89-heb", "recovered-app", provisioning_marker=marker
+    )
+    assert result["created"] is False
+    assert result["recovered"] is True
+    assert result["repository"]["id"] == 42
+    assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
+    create_payload = json.loads(opener.requests[2][0].data)
+    assert create_payload["description"] == GitHubProvider.provisioning_description(marker)
+
+
+def test_github_does_not_retry_repository_create_when_prior_outcome_is_unknown():
+    opener = FakeOpener([HTTPError(
+        "https://api.github.com/repos/mv89-heb/app", 404, "not found", {}, BytesIO(b"{}")
+    )])
+    provider = GitHubProvider("token", opener=opener)
+    with pytest.raises(ProviderOperationUnknown):
+        provider.ensure_private_repository(
+            "mv89-heb", "app", provisioning_marker="b" * 32, allow_create=False
+        )
+    assert len(opener.requests) == 1
+
+
+def test_neon_reconciles_ambiguous_project_create_using_default_branch_marker():
+    marker = "c" * 32
+    project = {
+        "id": "recovered-project",
+        "name": "recovered-app",
+        "region_id": "aws-eu-central-1",
+        "org_id": "org-1",
+    }
+    opener = FakeOpener([
+        {"projects": []},
+        URLError("timeout after Neon accepted project creation"),
+        {"projects": [project]},
+        {"branches": [{
+            "id": "br-1",
+            "name": NeonProvider.provisioning_branch_name(marker),
+            "default": True,
+        }]},
+    ])
+    result = NeonProvider("token", org_id="org-1", opener=opener).ensure_project(
+        "recovered-app", free_tier_verified=True, provisioning_marker=marker
+    )
+    assert result["created"] is False
+    assert result["recovered"] is True
+    assert result["project"]["id"] == "recovered-project"
+    assert opener.requests[1][0].get_method() == "POST"
+    assert opener.requests[-1][0].full_url.endswith("/projects/recovered-project/branches?limit=100")
+
+
+def test_neon_does_not_repeat_unknown_project_create_when_resource_is_not_visible():
+    opener = FakeOpener([
+        {"projects": []},
+        URLError("timeout after Neon accepted project creation"),
+        {"projects": []},
+        {"projects": []},
+    ])
+    provider = NeonProvider("token", org_id="org-1", opener=opener)
+    with pytest.raises(ProviderOperationUnknown):
+        provider.ensure_project(
+            "unknown-app", free_tier_verified=True,
+            provisioning_marker="d" * 32,
+        )
+    with pytest.raises(ProviderOperationUnknown):
+        provider.ensure_project(
+            "unknown-app", free_tier_verified=True,
+            provisioning_marker="d" * 32, allow_create=False,
+        )
+    assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
+
+
+def test_render_reconciles_ambiguous_service_create_using_environment_marker():
+    marker = "e" * 32
+    service = {
+        "id": "srv-recovered",
+        "name": "recovered-app",
+        "repo": "https://github.com/a/recovered-app",
+        "type": "web_service",
+        "branch": "main",
+        "autoDeployTrigger": "checksPass",
+        "serviceDetails": {"plan": "free", "region": "frankfurt"},
+    }
+    opener = FakeOpener([
+        [],
+        URLError("timeout after Render accepted service creation"),
+        [{"service": service, "cursor": "last"}],
+        [{"envVar": {"key": "BUSINESS_STUDIO_PROVISIONING_ID", "value": marker}, "cursor": "last"}],
+    ])
+    result = RenderProvider("token", workspace_id="tea-1", opener=opener).ensure_web_service(
+        name="recovered-app",
+        repository_url="https://github.com/a/recovered-app",
+        env_vars={},
+        provisioning_marker=marker,
+    )
+    assert result["created"] is False
+    assert result["recovered"] is True
+    assert result["service"]["id"] == "srv-recovered"
+    assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
+    payload = json.loads(opener.requests[1][0].data)
+    assert {"key": "BUSINESS_STUDIO_PROVISIONING_ID", "value": marker} in payload["envVars"]
+
+
+def test_render_does_not_repeat_unknown_service_create_when_resource_is_not_visible():
+    opener = FakeOpener([[]])
+    provider = RenderProvider("token", workspace_id="tea-1", opener=opener)
+    with pytest.raises(ProviderOperationUnknown):
+        provider.ensure_web_service(
+            name="unknown-app",
+            repository_url="https://github.com/a/unknown-app",
+            provisioning_marker="f" * 32,
+            allow_create=False,
+        )
+    assert len(opener.requests) == 1

@@ -19,7 +19,7 @@ from werkzeug.security import generate_password_hash
 
 from business_app.export_starter import export_starter
 from .providers import GitHubProvider, NeonProvider, RenderProvider
-from .providers.http import ProviderError
+from .providers.http import ProviderError, ProviderHTTPError, ProviderOperationUnknown
 
 
 def _utc_now():
@@ -148,6 +148,8 @@ class WorkflowStateStore:
             "modules": [str(item)[:80] for item in state.get("modules", []) if isinstance(item, str)][:20],
             "status": state.get("status"),
             "step": state.get("step"), "resources": state.get("resources", {}),
+            "resource_operations": state.get("resource_operations", {}),
+            "provisioning_marker": state.get("provisioning_marker"),
             "history": state.get("history", []), "updated_at": _utc_now(),
             "error": state.get("error"),
         }
@@ -298,7 +300,8 @@ class ProvisioningWorkflow:
             raise ProviderError("GitHub authenticated account does not match the customer-owned repository target")
         return connections
 
-    def preflight(self, plan, *, github_owner, known_resources=None):
+    def preflight(self, plan, *, github_owner, known_resources=None,
+                  provisioning_marker=None, pending_operations=None):
         """Inspect provider access and require identity matches for previously created resources."""
         if not isinstance(plan, dict) or plan.get("mode") != "dry_run":
             raise ProviderError("Preflight requires a dry-run provisioning plan")
@@ -331,12 +334,31 @@ class ProvisioningWorkflow:
                     if not isinstance(saved_state, dict) or saved_state.get("plan_id") != plan_id or saved_state.get("business_slug") != slug:
                         raise ProviderError("Saved provisioning state does not match this business plan")
                     known_resources = saved_state.get("resources") or {}
+                    if provisioning_marker is None:
+                        provisioning_marker = saved_state.get("provisioning_marker")
+                    if pending_operations is None:
+                        pending_operations = saved_state.get("resource_operations") or {}
                     if not isinstance(known_resources, dict):
                         raise ProviderError("Provisioning resource ownership state is invalid")
         if not isinstance(known_resources, dict):
-                        raise ProviderError("Local provisioning resource ownership state is invalid")
-        if not isinstance(known_resources, dict):
             raise ProviderError("Provisioning resource ownership state is invalid")
+        pending_operations = pending_operations or {}
+        if not isinstance(pending_operations, dict):
+            raise ProviderError("Provisioning recovery operation state is invalid")
+
+        def operation_is_pending(step):
+            operation = pending_operations.get(step)
+            return isinstance(operation, dict) and operation.get("status") in {
+                "intent", "unknown", "reconciling"
+            }
+
+        if any(operation_is_pending(step) for step in (
+            "github_repository", "neon_project", "render_service"
+        )):
+            if not isinstance(provisioning_marker, str) or not re.fullmatch(r"[a-f0-9]{32}", provisioning_marker):
+                raise ProviderError(
+                    "A previous cloud create has no valid recovery marker; manual reconciliation is required"
+                )
         if not github_owner or not isinstance(github_owner, str):
             raise ProviderError("GITHUB_OWNER is required")
         if not getattr(self.render, "workspace_id", None):
@@ -365,8 +387,24 @@ class ProvisioningWorkflow:
             raise ProviderError("A repository with this name already exists but is not private")
         if repository:
             recorded_repository = known_resources.get("github") or {}
-            if not repository.get("id") or str(recorded_repository.get("repository_id")) != str(repository.get("id")):
+            id_matches = (
+                repository.get("id")
+                and str(recorded_repository.get("repository_id")) == str(repository.get("id"))
+            )
+            marker_matches = bool(
+                provisioning_marker
+                and self.github.repository_has_provisioning_marker(repository, provisioning_marker)
+            )
+            if not (id_matches or marker_matches):
+                if operation_is_pending("github_repository"):
+                    raise ProviderOperationUnknown(
+                        "GitHub repository is visible but its ownership marker cannot yet be verified"
+                    )
                 raise ProviderError("A GitHub repository with this name already exists but is not registered to this provisioning workflow")
+        elif operation_is_pending("github_repository"):
+            raise ProviderOperationUnknown(
+                "GitHub repository create outcome is still unknown; no second create request will be sent"
+            )
         repository_url = (
             (repository or {}).get("html_url")
             or f"https://github.com/{github_owner}/{slug}"
@@ -390,8 +428,32 @@ class ProvisioningWorkflow:
             raise ProviderError("A Neon project with this name belongs to a different organization")
         if project:
             recorded_project = known_resources.get("neon") or {}
-            if not project.get("id") or str(recorded_project.get("project_id")) != str(project.get("id")):
+            id_matches = (
+                project.get("id")
+                and str(recorded_project.get("project_id")) == str(project.get("id"))
+            )
+            marker_matches = False
+            if not id_matches and provisioning_marker:
+                try:
+                    marker_matches = self.neon.project_has_provisioning_marker(
+                        project.get("id"), provisioning_marker
+                    )
+                except ProviderError:
+                    if operation_is_pending("neon_project"):
+                        raise ProviderOperationUnknown(
+                            "Neon project is visible but its recovery branch cannot yet be verified"
+                        ) from None
+                    raise
+            if not (id_matches or marker_matches):
+                if operation_is_pending("neon_project"):
+                    raise ProviderOperationUnknown(
+                        "Neon project is visible but its default-branch ownership marker is not yet verifiable"
+                    )
                 raise ProviderError("A Neon project with this name already exists but is not registered to this provisioning workflow")
+        elif operation_is_pending("neon_project"):
+            raise ProviderOperationUnknown(
+                "Neon project create outcome is still unknown; no second create request will be sent"
+            )
 
         services = [
             item for item in self.render.list_services()
@@ -402,7 +464,27 @@ class ProvisioningWorkflow:
         service = services[0] if services else None
         if service:
             recorded_service = known_resources.get("render") or {}
-            if not service.get("id") or str(recorded_service.get("service_id")) != str(service.get("id")):
+            id_matches = (
+                service.get("id")
+                and str(recorded_service.get("service_id")) == str(service.get("id"))
+            )
+            marker_matches = False
+            if not id_matches and provisioning_marker:
+                try:
+                    marker_matches = self.render.service_has_provisioning_marker(
+                        service.get("id"), provisioning_marker
+                    )
+                except ProviderError:
+                    if operation_is_pending("render_service"):
+                        raise ProviderOperationUnknown(
+                            "Render service is visible but its environment ownership marker cannot yet be verified"
+                        ) from None
+                    raise
+            if not (id_matches or marker_matches):
+                if operation_is_pending("render_service"):
+                    raise ProviderOperationUnknown(
+                        "Render service is visible but its environment ownership marker is not yet verifiable"
+                    )
                 raise ProviderError("A Render service with this name already exists but is not registered to this provisioning workflow")
             details = service.get("serviceDetails") or {}
             if self._normalize_repository_url(service.get("repo")) != self._normalize_repository_url(repository_url):
@@ -413,6 +495,10 @@ class ProvisioningWorkflow:
                 raise ProviderError("Existing Render service is not configured for the requested Free Frankfurt target")
             if service.get("autoDeployTrigger") != "checksPass":
                 raise ProviderError("Existing Render service does not use CI-gated auto-deploy")
+        elif operation_is_pending("render_service"):
+            raise ProviderOperationUnknown(
+                "Render service create outcome is still unknown; no second create request will be sent"
+            )
 
         return {
             "mode": "read_only_preflight",
@@ -508,9 +594,26 @@ class ProvisioningWorkflow:
             "status": "not_started",
             "step": "not_started",
             "resources": {},
+            "resource_operations": {},
+            "provisioning_marker": secrets.token_hex(16),
             "history": [],
             "error": None,
         }
+        if not isinstance(state.get("resource_operations", {}), dict):
+            raise ProviderError("Saved provisioning recovery operation state is invalid")
+        state.setdefault("resource_operations", {})
+        if not state.get("provisioning_marker"):
+            if any(
+                isinstance(operation, dict)
+                and operation.get("status") in {"intent", "unknown", "reconciling"}
+                for operation in state["resource_operations"].values()
+            ):
+                raise ProviderError(
+                    "Saved provisioning state has an unresolved create without a recovery marker; manual reconciliation is required"
+                )
+            state["provisioning_marker"] = secrets.token_hex(16)
+        if not re.fullmatch(r"[a-f0-9]{32}", str(state.get("provisioning_marker", ""))):
+            raise ProviderError("Saved provisioning recovery marker is invalid")
 
         def record(step, status, details=None, error=None):
             state["step"] = step
@@ -522,9 +625,38 @@ class ProvisioningWorkflow:
             state.setdefault("history", []).append(entry)
             self.state_store.save(workflow_id, state)
 
+        def begin_resource_operation(step, provider, resource_name):
+            operations = state.setdefault("resource_operations", {})
+            previous = operations.get(step)
+            allow_create = previous is None or previous.get("status") == "failed"
+            operations[step] = {
+                "provider": provider,
+                "resource_name": str(resource_name)[:200],
+                "marker": state["provisioning_marker"],
+                "status": "intent" if allow_create else "reconciling",
+                "updated_at": _utc_now(),
+            }
+            record(step, "running", {
+                "resource_name": str(resource_name)[:200],
+                "recovery_mode": "create" if allow_create else "reconcile_only",
+            })
+            return allow_create
+
+        def complete_resource_operation(step, resource_id):
+            operation = state.setdefault("resource_operations", {}).setdefault(step, {})
+            operation["status"] = "completed"
+            operation["resource_id"] = str(resource_id)[:200] if resource_id is not None else None
+            operation["updated_at"] = _utc_now()
+
         try:
             record("preflight", "running")
-            preflight_report = self.preflight(plan, github_owner=github_owner, known_resources=state.get("resources", {}))
+            preflight_report = self.preflight(
+                plan,
+                github_owner=github_owner,
+                known_resources=state.get("resources", {}),
+                provisioning_marker=state["provisioning_marker"],
+                pending_operations=state.get("resource_operations", {}),
+            )
             record("preflight", "completed", {
                 "read_only": preflight_report["read_only"],
                 "writes_performed": preflight_report["writes_performed"],
@@ -542,10 +674,14 @@ class ProvisioningWorkflow:
                     business_profile=business,
                 )
 
-                record("github_repository", "running")
+                allow_create = begin_resource_operation(
+                    "github_repository", "github", f"{github_owner}/{slug}"
+                )
                 repo_result = self.github.ensure_private_repository(
                     github_owner, slug,
                     expected_repository_id=(state.get("resources", {}).get("github") or {}).get("repository_id"),
+                    provisioning_marker=state["provisioning_marker"],
+                    allow_create=allow_create,
                 )
                 repository = repo_result["repository"]
                 if repository.get("private") is not True:
@@ -556,6 +692,7 @@ class ProvisioningWorkflow:
                     "url": repository.get("html_url"),
                     "created": repo_result.get("created", False),
                 }
+                complete_resource_operation("github_repository", repository.get("id"))
                 record("github_repository", "completed", state["resources"]["github"])
 
                 branch_name = f"provisioning/{plan.get('plan_id')}"
@@ -643,11 +780,13 @@ class ProvisioningWorkflow:
                         "merge_commit": pull_request.get("merge_commit_sha"),
                     })
 
-            record("neon_project", "running")
+            allow_create = begin_resource_operation("neon_project", "neon", slug)
             project_result = self.neon.ensure_project(
                 slug,
                 free_tier_verified=True,
                 expected_project_id=(state.get("resources", {}).get("neon") or {}).get("project_id"),
+                provisioning_marker=state["provisioning_marker"],
+                allow_create=allow_create,
             )
             project = project_result["project"]
             project_id = project.get("id")
@@ -660,6 +799,7 @@ class ProvisioningWorkflow:
                 "region": project.get("region_id"),
                 "created": project_result.get("created", False),
             }
+            complete_resource_operation("neon_project", project_id)
             record("neon_project", "completed", state["resources"]["neon"])
 
             record("neon_connection", "running")
@@ -668,8 +808,8 @@ class ProvisioningWorkflow:
                 raise ProviderError("Neon returned an invalid PostgreSQL connection URI")
             record("neon_connection", "completed", {"database_connection": "received; not persisted"})
 
-            record("render_service", "running")
             render_env = {
+                "BUSINESS_STUDIO_PROVISIONING_ID": state["provisioning_marker"],
                 "DATABASE_URL": database_uri,
                 "SECRET_KEY": secrets.token_urlsafe(48),
                 "ADMIN_PASSWORD_HASH": generate_password_hash(admin_password),
@@ -685,12 +825,15 @@ class ProvisioningWorkflow:
                 if secret_value:
                     render_env[secret_name] = secret_value
             repository_url = repository.get("html_url") or f"https://github.com/{github_owner}/{slug}"
+            allow_create = begin_resource_operation("render_service", "render", slug)
             service_result = self.render.ensure_web_service(
                 name=slug,
                 repository_url=repository_url,
                 branch="main",
                 env_vars=render_env,
                 expected_service_id=(state.get("resources", {}).get("render") or {}).get("service_id"),
+                provisioning_marker=state["provisioning_marker"],
+                allow_create=allow_create,
             )
             service = service_result["service"]
             service_id = service.get("id")
@@ -705,6 +848,7 @@ class ProvisioningWorkflow:
                 "plan": "free",
                 "region": "frankfurt",
             }
+            complete_resource_operation("render_service", service_id)
             record("render_service", "completed", state["resources"]["render"])
 
             # A retry may discover a service created by an earlier run whose
@@ -739,6 +883,17 @@ class ProvisioningWorkflow:
             for secret in (admin_password,):
                 if secret:
                     safe_error = safe_error.replace(secret, "[REDACTED]")
+            operation = state.get("resource_operations", {}).get(state.get("step"))
+            if isinstance(operation, dict) and operation.get("status") in {"intent", "reconciling"}:
+                outcome_unknown = (
+                    isinstance(exc, ProviderOperationUnknown)
+                    or (isinstance(exc, ProviderHTTPError) and exc.status >= 500)
+                )
+                operation["status"] = "unknown" if outcome_unknown else "failed"
+                operation["last_error_code"] = (
+                    "provider_outcome_unknown" if outcome_unknown else "operation_failed"
+                )
+                operation["updated_at"] = _utc_now()
             state["resources"] = state.get("resources", {})
             record(state.get("step", "unknown"), "failed", error=safe_error[:500])
             raise ProviderError(f"Provisioning stopped at {state.get('step')}: {safe_error}") from None
