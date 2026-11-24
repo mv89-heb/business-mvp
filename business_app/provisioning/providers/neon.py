@@ -184,7 +184,9 @@ class NeonProvider:
                         and self.project_has_provisioning_marker(project.get("id"), provisioning_marker)
                     ):
                         return {"created": False, "recovered": True, "project": project}
-            except ProviderError:
+            except Exception:
+                # A failed or malformed read cannot prove that the create did
+                # not commit. Preserve the original ambiguous outcome.
                 raise original
             raise
         if not isinstance(response, dict):
