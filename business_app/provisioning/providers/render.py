@@ -243,10 +243,14 @@ class RenderProvider:
                         raise ProviderError("Recovered Render service is not CI-gated") from None
                     return {"created": False, "recovered": True, "service": candidate}
             raise
-        service = response.get("service", response)
-        if not service.get("id"):
+        if not isinstance(response, dict):
             raise ProviderOperationUnknown(
-                "Render may have created the service but did not return its identifier; reconcile before retrying"
+                "Render may have created the service but returned an invalid success response; reconcile before retrying"
+            )
+        service = response.get("service", response)
+        if not isinstance(service, dict) or not service.get("id"):
+            raise ProviderOperationUnknown(
+                "Render may have created the service but did not return a complete service record; reconcile before retrying"
             )
         details = service.get("serviceDetails") or {}
         if (
