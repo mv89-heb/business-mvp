@@ -224,7 +224,9 @@ class RenderProvider:
                         raise ProviderOperationUnknown(
                             "Render returned a service after an ambiguous create, but its source or branch does not match; manual reconciliation is required"
                         ) from None
-                    details = candidate.get("serviceDetails") or {}
+                    details = candidate.get("serviceDetails")
+                    if not isinstance(details, dict):
+                        details = {}
                     if (
                         details.get("plan") != "free"
                         or details.get("region") != "frankfurt"
@@ -234,7 +236,9 @@ class RenderProvider:
                             candidate = self.get_service(candidate["id"])
                         except Exception:
                             raise original
-                        details = candidate.get("serviceDetails") or {}
+                        details = candidate.get("serviceDetails")
+                        if not isinstance(details, dict):
+                            details = {}
                     if details.get("plan") != "free":
                         raise ProviderOperationUnknown("Recovered Render service is not confirmed on the Free plan; manual reconciliation is required") from None
                     if details.get("region") != "frankfurt":
@@ -252,7 +256,9 @@ class RenderProvider:
             raise ProviderOperationUnknown(
                 "Render may have created the service but did not return a complete service record; reconcile before retrying"
             )
-        details = service.get("serviceDetails") or {}
+        details = service.get("serviceDetails")
+        if not isinstance(details, dict):
+            details = {}
         if (
             details.get("plan") != "free"
             or details.get("region") != "frankfurt"
