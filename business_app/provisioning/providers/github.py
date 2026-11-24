@@ -26,7 +26,10 @@ class GitHubProvider:
     def get_repository(self, owner, name):
         path = f"/repos/{quote(owner, safe='')}/{quote(name, safe='')}"
         try:
-            return self.client.request("GET", path)
+            repository = self.client.request("GET", path)
+            if not isinstance(repository, dict) or not repository.get("id"):
+                raise ProviderError("GitHub returned an invalid repository response")
+            return repository
         except ProviderHTTPError as exc:
             if exc.status == 404:
                 return None
