@@ -65,6 +65,16 @@ def test_github_creates_private_repo_only_when_missing():
     assert "secret-token" not in request.full_url
 
 
+
+@pytest.mark.parametrize("payload", [[], None, "unexpected"])
+def test_github_malformed_repository_read_fails_closed_before_create(payload):
+    opener = FakeOpener([payload])
+    provider = GitHubProvider("token", opener=opener)
+    with pytest.raises(Exception, match="invalid repository response"):
+        provider.ensure_private_repository("mv89-heb", "new-app")
+    assert [request.get_method() for request, _ in opener.requests] == ["GET"]
+
+
 def test_github_reuses_existing_private_repo_without_post():
     opener = FakeOpener([{"id": 1, "private": True, "full_name": "mv89-heb/app"}])
     result = GitHubProvider("token", opener=opener).ensure_private_repository("mv89-heb", "app", expected_repository_id=1)
