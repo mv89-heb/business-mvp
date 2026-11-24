@@ -837,7 +837,7 @@ def test_neon_malformed_create_success_response_is_ambiguous(payload):
     assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
 
 
-@pytest.mark.parametrize("payload", [[], None, "unexpected", {"service": []}])
+@pytest.mark.parametrize("payload", [[], None, "unexpected", {"service": []}, {"id": "srv-1", "serviceDetails": []}])
 def test_render_malformed_create_success_response_is_ambiguous(payload):
     opener = FakeOpener([[], payload])
     provider = RenderProvider("token", workspace_id="workspace-1", opener=opener)
