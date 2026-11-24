@@ -92,6 +92,7 @@ class FakeRender:
     def __init__(self, created=True):
         self.created = created
         self.reconciled = []
+        self.received_env = []
 
     def check_connection(self):
         return {"provider": "render", "connected": True, "workspace_selected": True}
@@ -108,8 +109,11 @@ class FakeRender:
         assert "ADMIN_PASSWORD" not in kwargs["env_vars"]
         assert kwargs["env_vars"]["FLASK_ENV"] == "production"
         assert kwargs["env_vars"]["TRUST_PROXY_HEADERS"] == "true"
-        assert check_password_hash(kwargs["env_vars"]["ADMIN_PASSWORD_HASH"], "a-very-long-test-password")
-        assert len(kwargs["env_vars"]["SECRET_KEY"]) >= 40
+        self.received_env.append(dict(kwargs["env_vars"]))
+        if "ADMIN_PASSWORD_HASH" in kwargs["env_vars"]:
+            assert check_password_hash(kwargs["env_vars"]["ADMIN_PASSWORD_HASH"], "a-very-long-test-password")
+        if "SECRET_KEY" in kwargs["env_vars"]:
+            assert len(kwargs["env_vars"]["SECRET_KEY"]) >= 40
         return {"created": self.created, "service": {
             "id": "srv-123", "name": "test-business",
             "serviceDetails": {"url": "https://test-business.onrender.com"},
@@ -323,6 +327,58 @@ def test_retry_reconciles_existing_render_service_environment_before_health_chec
     assert "render_environment" in steps
     assert state["status"] == "completed"
 
+
+
+
+def test_recovery_retry_does_not_rotate_existing_render_secrets(tmp_path, monkeypatch):
+    workflow, _ = make_workflow(tmp_path, monkeypatch, render_created=False)
+    marker = "d" * 32
+    workflow.state_store.save("plan-123456", {
+        "plan_id": "plan-123456",
+        "business_slug": "test-business",
+        "status": "failed",
+        "step": "health_check",
+        "resources": {"render": {"service_id": "srv-123"}},
+        "resource_operations": {
+            "render_service": {
+                "provider": "render",
+                "resource_name": "test-business",
+                "marker": marker,
+                "status": "completed",
+                "resource_id": "srv-123",
+            }
+        },
+        "provisioning_marker": marker,
+        "history": [],
+        "error": "previous health check did not finish",
+    })
+    monkeypatch.setattr(
+        workflow,
+        "preflight",
+        lambda *args, **kwargs: {
+            "read_only": True,
+            "writes_performed": False,
+            "resources": {},
+        },
+    )
+
+    result = workflow.run(
+        make_plan(),
+        github_owner="developer",
+        admin_password="a-very-long-test-password",
+        approval="CREATE",
+        neon_free_tier_verified=True,
+    )
+
+    assert result["status"] == "completed"
+    env_vars = workflow.render.received_env[-1]
+    assert "SECRET_KEY" not in env_vars
+    assert "ADMIN_PASSWORD_HASH" not in env_vars
+    assert "WHATSAPP_APP_SECRET" not in env_vars
+    assert "DATABASE_URL" in env_vars
+    assert "BUSINESS_STUDIO_PROVISIONING_ID" in env_vars
+    assert "SECRET_KEY" not in workflow.render.reconciled[-1][1]
+    assert "ADMIN_PASSWORD_HASH" not in workflow.render.reconciled[-1][1]
 
 def test_preflight_is_read_only_and_reports_planned_resources(tmp_path, monkeypatch):
     workflow, github = make_workflow(tmp_path, monkeypatch)
