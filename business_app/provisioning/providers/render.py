@@ -273,7 +273,9 @@ class RenderProvider:
                 raise ProviderOperationUnknown(
                     "Render accepted service creation but its Free / Frankfurt / CI-gated configuration could not be verified; reconcile before retrying"
                 ) from None
-            details = service.get("serviceDetails") or {}
+            details = service.get("serviceDetails")
+            if not isinstance(details, dict):
+                details = {}
         if (
             details.get("plan") != "free"
             or details.get("region") != "frankfurt"
