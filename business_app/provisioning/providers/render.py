@@ -282,6 +282,6 @@ class RenderProvider:
             or service.get("autoDeployTrigger") != "checksPass"
         ):
             raise ProviderOperationUnknown(
-                "Render created a service but did not confirm the required Free / Frankfurt / CI-gated configuration; manual reconciliation is required and no second create will be sent"
+                "Render created a service but did not confirm the Free plan / Frankfurt / CI-gated configuration; manual reconciliation is required and no second create will be sent"
             )
         return {"created": True, "recovered": False, "service": service}
