@@ -746,3 +746,51 @@ def test_render_does_not_repeat_unknown_service_create_when_resource_is_not_visi
             allow_create=False,
         )
     assert len(opener.requests) == 1
+
+
+
+def test_http_write_http_500_is_classified_as_ambiguous():
+    error = HTTPError("https://example.test/resources", 500, "server error", {}, BytesIO(b"{}"))
+    opener = FakeOpener([error])
+    client = JsonApiClient(provider="test", base_url="https://example.test", token="secret", opener=opener)
+    with pytest.raises(ProviderOperationUnknown):
+        client.request("POST", "/resources", payload={"name": "x"})
+
+
+def test_http_write_invalid_json_is_classified_as_ambiguous():
+    class InvalidJsonResponse:
+        def read(self):
+            return b"not-json"
+
+    opener = FakeOpener([InvalidJsonResponse()])
+    client = JsonApiClient(provider="test", base_url="https://example.test", token="secret", opener=opener)
+    with pytest.raises(ProviderOperationUnknown):
+        client.request("POST", "/resources", payload={"name": "x"})
+
+
+def test_render_refuses_recovered_service_without_free_ci_gated_configuration():
+    marker = "1" * 32
+    service = {
+        "id": "srv-paid",
+        "name": "recovered-app",
+        "repo": "https://github.com/a/recovered-app",
+        "type": "web_service",
+        "branch": "main",
+        "autoDeployTrigger": "checksPass",
+        "serviceDetails": {"plan": "starter", "region": "frankfurt"},
+    }
+    opener = FakeOpener([
+        [],
+        URLError("timeout after Render accepted service creation"),
+        [{"service": service, "cursor": "last"}],
+        [{"envVar": {"key": "BUSINESS_STUDIO_PROVISIONING_ID", "value": marker}, "cursor": "last"}],
+        service,
+    ])
+    provider = RenderProvider("token", workspace_id="tea-1", opener=opener)
+    with pytest.raises(Exception, match="Free plan"):
+        provider.ensure_web_service(
+            name="recovered-app",
+            repository_url="https://github.com/a/recovered-app",
+            provisioning_marker=marker,
+        )
+    assert [request.get_method() for request, _ in opener.requests].count("POST") == 1

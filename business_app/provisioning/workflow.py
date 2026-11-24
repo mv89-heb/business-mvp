@@ -141,6 +141,32 @@ class WorkflowStateStore:
 
     @staticmethod
     def _safe_state(workflow_id, state):
+        provisioning_marker = state.get("provisioning_marker")
+        if provisioning_marker is not None and not re.fullmatch(r"[a-f0-9]{32}", str(provisioning_marker)):
+            raise ValueError("Refusing to persist an invalid provisioning recovery marker")
+        resource_operations = state.get("resource_operations", {})
+        if not isinstance(resource_operations, dict):
+            raise ValueError("Refusing to persist invalid provisioning recovery operations")
+        safe_operations = {}
+        allowed_steps = {"github_repository", "neon_project", "render_service"}
+        allowed_statuses = {"intent", "unknown", "reconciling", "completed", "failed"}
+        for step, operation in resource_operations.items():
+            if step not in allowed_steps or not isinstance(operation, dict):
+                raise ValueError("Refusing to persist invalid provisioning recovery operations")
+            if operation.get("status") not in allowed_statuses:
+                raise ValueError("Refusing to persist invalid provisioning recovery operation status")
+            marker = operation.get("marker")
+            if marker is not None and not re.fullmatch(r"[a-f0-9]{32}", str(marker)):
+                raise ValueError("Refusing to persist an invalid operation recovery marker")
+            safe_operation = {
+                key: operation[key]
+                for key in (
+                    "provider", "resource_name", "marker", "status",
+                    "updated_at", "resource_id", "last_error_code",
+                )
+                if key in operation
+            }
+            safe_operations[step] = safe_operation
         safe_state = {
             "workflow_id": workflow_id, "plan_id": state.get("plan_id"),
             "business_slug": state.get("business_slug"),
@@ -148,8 +174,8 @@ class WorkflowStateStore:
             "modules": [str(item)[:80] for item in state.get("modules", []) if isinstance(item, str)][:20],
             "status": state.get("status"),
             "step": state.get("step"), "resources": state.get("resources", {}),
-            "resource_operations": state.get("resource_operations", {}),
-            "provisioning_marker": state.get("provisioning_marker"),
+            "resource_operations": safe_operations,
+            "provisioning_marker": provisioning_marker,
             "history": state.get("history", []), "updated_at": _utc_now(),
             "error": state.get("error"),
         }
@@ -435,8 +461,11 @@ class ProvisioningWorkflow:
             marker_matches = False
             if not id_matches and provisioning_marker:
                 try:
-                    marker_matches = self.neon.project_has_provisioning_marker(
-                        project.get("id"), provisioning_marker
+                    marker_matches = bool(
+                        project.get("id")
+                        and self.neon.project_has_provisioning_marker(
+                            project.get("id"), provisioning_marker
+                        )
                     )
                 except ProviderError:
                     if operation_is_pending("neon_project"):
@@ -471,8 +500,11 @@ class ProvisioningWorkflow:
             marker_matches = False
             if not id_matches and provisioning_marker:
                 try:
-                    marker_matches = self.render.service_has_provisioning_marker(
-                        service.get("id"), provisioning_marker
+                    marker_matches = bool(
+                        service.get("id")
+                        and self.render.service_has_provisioning_marker(
+                            service.get("id"), provisioning_marker
+                        )
                     )
                 except ProviderError:
                     if operation_is_pending("render_service"):
@@ -628,7 +660,8 @@ class ProvisioningWorkflow:
         def begin_resource_operation(step, provider, resource_name):
             operations = state.setdefault("resource_operations", {})
             previous = operations.get(step)
-            allow_create = previous is None or previous.get("status") == "failed"
+            previous_status = previous.get("status") if isinstance(previous, dict) else None
+            allow_create = previous is None or previous_status == "failed"
             operations[step] = {
                 "provider": provider,
                 "resource_name": str(resource_name)[:200],

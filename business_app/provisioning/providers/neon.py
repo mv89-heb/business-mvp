@@ -86,7 +86,7 @@ class NeonProvider:
         return branches
 
     def project_has_provisioning_marker(self, project_id, marker):
-        if not self._valid_provisioning_marker(marker):
+        if not project_id or not self._valid_provisioning_marker(marker):
             return False
         expected_branch = self.provisioning_branch_name(marker)
         return any(
