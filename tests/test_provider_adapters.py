@@ -800,3 +800,42 @@ def test_render_refuses_recovered_service_without_free_ci_gated_configuration():
             provisioning_marker=marker,
         )
     assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
+
+@pytest.mark.parametrize("payload", [[], None, "unexpected"])
+def test_github_malformed_create_success_response_is_ambiguous(payload):
+    opener = FakeOpener([
+        HTTPError("https://api.github.com/repos/mv89-heb/new-app", 404, "not found", {}, BytesIO(b"{}")),
+        {"login": "mv89-heb"},
+        payload,
+    ])
+    provider = GitHubProvider("token", opener=opener)
+    with pytest.raises(ProviderOperationUnknown, match="complete private repository record"):
+        provider.ensure_private_repository(
+            "mv89-heb", "new-app", provisioning_marker="a" * 32
+        )
+    assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
+
+
+@pytest.mark.parametrize("payload", [[], None, "unexpected", {"id": "repo-1"}])
+def test_neon_malformed_create_success_response_is_ambiguous(payload):
+    opener = FakeOpener([{"projects": []}, payload])
+    provider = NeonProvider("token", org_id="org-1", opener=opener)
+    with pytest.raises(ProviderOperationUnknown):
+        provider.ensure_project(
+            "new-app", free_tier_verified=True, provisioning_marker="b" * 32
+        )
+    assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
+
+
+@pytest.mark.parametrize("payload", [[], None, "unexpected", {"service": []}])
+def test_render_malformed_create_success_response_is_ambiguous(payload):
+    opener = FakeOpener([[], payload])
+    provider = RenderProvider("token", workspace_id="workspace-1", opener=opener)
+    with pytest.raises(ProviderOperationUnknown):
+        provider.ensure_web_service(
+            name="new-app",
+            repository_url="https://github.com/mv89-heb/new-app",
+            env_vars={"BUSINESS_STUDIO_PROVISIONING_ID": "c" * 32},
+            provisioning_marker="c" * 32,
+        )
+    assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
