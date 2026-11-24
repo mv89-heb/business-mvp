@@ -841,22 +841,34 @@ class ProvisioningWorkflow:
                 raise ProviderError("Neon returned an invalid PostgreSQL connection URI")
             record("neon_connection", "completed", {"database_connection": "received; not persisted"})
 
+            previous_render_operation = (state.get("resource_operations") or {}).get("render_service")
+            preserve_existing_render_secrets = (
+                isinstance(previous_render_operation, dict)
+                and previous_render_operation.get("status") in {
+                    "intent", "unknown", "reconciling", "completed"
+                }
+            )
             render_env = {
                 "BUSINESS_STUDIO_PROVISIONING_ID": state["provisioning_marker"],
                 "DATABASE_URL": database_uri,
-                "SECRET_KEY": secrets.token_urlsafe(48),
-                "ADMIN_PASSWORD_HASH": generate_password_hash(admin_password),
                 "PYTHON_VERSION": "3.11.9",
                 "FLASK_ENV": "production",
                 "TRUST_PROXY_HEADERS": "true",
             }
-            for secret_name in (
-                "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN",
-                "AUTOMATION_WEBHOOK_SECRET",
-            ):
-                secret_value = os.getenv(secret_name, "").strip()
-                if secret_value:
-                    render_env[secret_name] = secret_value
+            if not preserve_existing_render_secrets:
+                render_env["SECRET_KEY"] = secrets.token_urlsafe(48)
+                render_env["ADMIN_PASSWORD_HASH"] = generate_password_hash(admin_password)
+                for secret_name in (
+                    "WHATSAPP_APP_SECRET", "WHATSAPP_VERIFY_TOKEN",
+                    "AUTOMATION_WEBHOOK_SECRET",
+                ):
+                    secret_value = os.getenv(secret_name, "").strip()
+                    if secret_value:
+                        render_env[secret_name] = secret_value
+            # A retry must not silently rotate an already-created app's Flask
+            # session key, admin password hash, or integration credentials.
+            # Those values were sent in the original Render create request and
+            # remain managed by Render; intentional rotation is a separate action.
             repository_url = repository.get("html_url") or f"https://github.com/{github_owner}/{slug}"
             allow_create = begin_resource_operation("render_service", "render", slug)
             service_result = self.render.ensure_web_service(
