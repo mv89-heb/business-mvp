@@ -203,38 +203,45 @@ class RenderProvider:
                     item for item in self.list_services()
                     if item.get("name", "").casefold() == name.casefold()
                 ]
-                if len(reconciled) == 1 and provisioning_marker:
-                    candidate = reconciled[0]
-                    if self.service_has_provisioning_marker(candidate.get("id"), provisioning_marker):
-                        if (
-                            candidate.get("repo") != repository_url
-                            or candidate.get("type") != "web_service"
-                            or candidate.get("branch") != branch
-                        ):
-                            raise ProviderError(
-                                "Render returned a service after an ambiguous create, but its source or branch does not match"
-                            ) from None
-                        details = candidate.get("serviceDetails") or {}
-                        if (
-                            details.get("plan") != "free"
-                            or details.get("region") != "frankfurt"
-                            or candidate.get("autoDeployTrigger") != "checksPass"
-                        ):
-                            candidate = self.get_service(candidate["id"])
-                            details = candidate.get("serviceDetails") or {}
-                        if details.get("plan") != "free":
-                            raise ProviderError("Recovered Render service is not confirmed on the Free plan") from None
-                        if details.get("region") != "frankfurt":
-                            raise ProviderError("Recovered Render service is not confirmed in Frankfurt") from None
-                        if candidate.get("autoDeployTrigger") != "checksPass":
-                            raise ProviderError("Recovered Render service is not CI-gated") from None
-                        return {"created": False, "recovered": True, "service": candidate}
-                if len(reconciled) > 1:
-                    raise ProviderError("Multiple Render services have this name; refusing ambiguous recovery") from None
-            except ProviderError as recovery_error:
-                if isinstance(recovery_error, ProviderOperationUnknown):
-                    raise
+            except ProviderError:
                 raise original
+            if len(reconciled) > 1:
+                raise ProviderError("Multiple Render services have this name; refusing ambiguous recovery") from None
+            if len(reconciled) == 1 and provisioning_marker:
+                candidate = reconciled[0]
+                try:
+                    marker_matches = self.service_has_provisioning_marker(
+                        candidate.get("id"), provisioning_marker
+                    )
+                except ProviderError:
+                    raise original
+                if marker_matches:
+                    if (
+                        candidate.get("repo") != repository_url
+                        or candidate.get("type") != "web_service"
+                        or candidate.get("branch") != branch
+                    ):
+                        raise ProviderError(
+                            "Render returned a service after an ambiguous create, but its source or branch does not match"
+                        ) from None
+                    details = candidate.get("serviceDetails") or {}
+                    if (
+                        details.get("plan") != "free"
+                        or details.get("region") != "frankfurt"
+                        or candidate.get("autoDeployTrigger") != "checksPass"
+                    ):
+                        try:
+                            candidate = self.get_service(candidate["id"])
+                        except ProviderError:
+                            raise original
+                        details = candidate.get("serviceDetails") or {}
+                    if details.get("plan") != "free":
+                        raise ProviderError("Recovered Render service is not confirmed on the Free plan") from None
+                    if details.get("region") != "frankfurt":
+                        raise ProviderError("Recovered Render service is not confirmed in Frankfurt") from None
+                    if candidate.get("autoDeployTrigger") != "checksPass":
+                        raise ProviderError("Recovered Render service is not CI-gated") from None
+                    return {"created": False, "recovered": True, "service": candidate}
             raise
         service = response.get("service", response)
         if not service.get("id"):
