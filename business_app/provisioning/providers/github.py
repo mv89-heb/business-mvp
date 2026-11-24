@@ -119,11 +119,16 @@ class GitHubProvider:
                     "GitHub returned a repository after an ambiguous create, but its provisioning marker does not match"
                 ) from None
             raise
-        if repository.get("private") is not True:
-            raise ProviderError("GitHub did not confirm that the new repository is private")
-        if not repository.get("id"):
+        if (
+            not isinstance(repository, dict)
+            or repository.get("private") is not True
+            or not repository.get("id")
+        ):
+            # A syntactically valid JSON body can still be an incomplete or
+            # unexpected success response. The POST may have committed, so
+            # never downgrade this to a retryable, known failure.
             raise ProviderOperationUnknown(
-                "GitHub may have created the repository but did not return its identifier; reconcile before retrying"
+                "GitHub may have created the repository but did not return a complete private repository record; reconcile before retrying"
             )
         return {"created": True, "recovered": False, "repository": repository}
 
