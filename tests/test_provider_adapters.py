@@ -801,7 +801,7 @@ def test_render_refuses_recovered_service_without_free_ci_gated_configuration():
         )
     assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
 
-@pytest.mark.parametrize("payload", [[], None, "unexpected"])
+@pytest.mark.parametrize("payload", [[], None, "unexpected", {"id": 42}, {"id": 42, "private": False}])
 def test_github_malformed_create_success_response_is_ambiguous(payload):
     opener = FakeOpener([
         HTTPError("https://api.github.com/repos/mv89-heb/new-app", 404, "not found", {}, BytesIO(b"{}")),
@@ -839,3 +839,36 @@ def test_render_malformed_create_success_response_is_ambiguous(payload):
             provisioning_marker="c" * 32,
         )
     assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
+
+
+def test_render_successful_create_with_unverifiable_configuration_stays_unknown():
+    service = {
+        "id": "srv-ambiguous",
+        "name": "new-app",
+        "repo": "https://github.com/mv89-heb/new-app",
+        "type": "web_service",
+        "branch": "main",
+        "serviceDetails": {},
+    }
+    opener = FakeOpener([[], service, URLError("Render service read timed out")])
+    provider = RenderProvider("token", workspace_id="workspace-1", opener=opener)
+    with pytest.raises(ProviderOperationUnknown, match="could not be verified"):
+        provider.ensure_web_service(
+            name="new-app",
+            repository_url="https://github.com/mv89-heb/new-app",
+            env_vars={"BUSINESS_STUDIO_PROVISIONING_ID": "d" * 32},
+            provisioning_marker="d" * 32,
+        )
+    assert [request.get_method() for request, _ in opener.requests].count("POST") == 1
+
+    retry_opener = FakeOpener([[]])
+    retry_provider = RenderProvider("token", workspace_id="workspace-1", opener=retry_opener)
+    with pytest.raises(ProviderOperationUnknown):
+        retry_provider.ensure_web_service(
+            name="new-app",
+            repository_url="https://github.com/mv89-heb/new-app",
+            env_vars={"BUSINESS_STUDIO_PROVISIONING_ID": "d" * 32},
+            provisioning_marker="d" * 32,
+            allow_create=False,
+        )
+    assert all(request.get_method() != "POST" for request, _ in retry_opener.requests)
