@@ -958,7 +958,8 @@ def test_postgres_workflow_claim_uses_session_advisory_lock_and_unlocks():
         def execute(self, query, params):
             self.calls.append((query, params))
             if "pg_try_advisory_lock" in query:
-                return type("Row", (), {"fetchone": lambda self: (self_owner.acquired,)})()
+                acquired = self.acquired
+                return type("Row", (), {"fetchone": lambda self: (acquired,)})()
             return type("Result", (), {"fetchone": lambda self: (True,)})()
 
         def close(self):
