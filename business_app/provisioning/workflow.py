@@ -151,6 +151,7 @@ class WorkflowStateStore:
 
         if self.database_url:
             connection = self._connect()
+            connection.autocommit = True
             acquired = False
             try:
                 row = connection.execute(
