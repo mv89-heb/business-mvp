@@ -981,3 +981,37 @@ def test_postgres_workflow_claim_uses_session_advisory_lock_and_unlocks():
         with store.claim("plan-db-lock"):
             pytest.fail("busy PostgreSQL claim was unexpectedly acquired")
     assert busy.closed is True
+
+
+
+def test_execute_claim_is_scoped_to_business_slug_not_ephemeral_plan_id():
+    class CapturedClaim:
+        def __init__(self, key):
+            self.key = key
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, exc_type, exc, tb):
+            return False
+
+    workflow = ProvisioningWorkflow.__new__(ProvisioningWorkflow)
+    claims = []
+    workflow.state_store = type(
+        "Store", (), {"claim": lambda self, key: (claims.append(key) or CapturedClaim(key))}
+    )()
+    workflow._run_claimed = lambda *args, **kwargs: "executed"
+
+    plan = {
+        "plan_id": "a" * 20,
+        "business": {"slug": "customer-acme"},
+    }
+    result = workflow.run(
+        plan,
+        github_owner="developer",
+        admin_password="not-used-in-this-test",
+        approval="CREATE",
+    )
+
+    assert result == "executed"
+    assert claims == ["customer-acme"]
