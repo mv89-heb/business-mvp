@@ -654,7 +654,10 @@ class ProvisioningWorkflow:
         if not isinstance(plan, dict):
             raise ProviderError("Only a valid dry-run provisioning plan can be executed")
         business = plan.get("business") or {}
-        workflow_id = plan.get("plan_id") or business.get("slug")
+        # Serialize by the durable business identity, not the ephemeral plan id.
+        # A user can generate multiple plans for the same business slug; those
+        # plans must not race to create the same provider resources.
+        workflow_id = business.get("slug") or plan.get("plan_id")
         if not isinstance(workflow_id, str) or not workflow_id:
             raise ProviderError("Provisioning plan is missing a workflow identifier")
         if self.state_store is None:
